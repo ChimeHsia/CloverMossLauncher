@@ -5,7 +5,7 @@ import { ensureDirs } from './lib/paths'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, listInstances } from './services/instances'
 import { installDeps } from './services/runtimes'
-import { cancelJob, getJob, getJobLogs, startJob } from './services/supervisor'
+import { cancelJob, getJob, getJobLogs, startJob, startTrainingJob } from './services/supervisor'
 import { createTrainerVersion, listTrainerVersions } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 import { matchRule, parseTqdm } from './services/parsers'
@@ -309,6 +309,37 @@ app.whenReady().then(async () => {
     return
   }
 
+  if (scenario === 'trainer-job') {
+    try {
+      const version = (await listTrainerVersions(getSettings()))[0]
+      const job = await startTrainingJob({
+        versionId: version?.id ?? 'sim-trainer',
+        name: 'Kohaku 训练（模拟）',
+        cwd: process.cwd(),
+        command: process.platform === 'win32' ? 'python' : 'python3',
+        args: [
+          '-u',
+          '-c',
+          'import time\nfor i in range(1,6):\n print(f"step {i} loss={0.5/i:.4f} lr=1e-4", flush=True)\n time.sleep(0.15)',
+        ],
+        totalSteps: 5,
+      })
+      const deadline = Date.now() + 20_000
+      let current = job
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        current = (await getJob(job.id)) ?? current
+        if (current.state !== 'running' && current.state !== 'starting') break
+      }
+      console.log(JSON.stringify({ scenario: 'trainer-job', state: current.state, metrics: current.metrics, progress: current.progress, logLines: (await getJobLogs(job.id)).length }, null, 2))
+      app.exit(current.state === 'succeeded' ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
   if (scenario === 'trainer-deploy') {
     try {
       const settings = getSettings()
@@ -395,13 +426,13 @@ app.whenReady().then(async () => {
 
     const terminal = createAppWindow('terminal', false)
     await new Promise<void>((resolve) => terminal.webContents.once('did-finish-load', () => resolve()))
-    await new Promise((resolve) => setTimeout(resolve, 2200))
+    await new Promise((resolve) => setTimeout(resolve, 5000))
     const terminalShot = await terminal.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-terminal.png'), terminalShot.toPNG())
 
     const trainer = createAppWindow('trainer', false)
     await new Promise<void>((resolve) => trainer.webContents.once('did-finish-load', () => resolve()))
-    await new Promise((resolve) => setTimeout(resolve, 2200))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
     const trainerShot = await trainer.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-trainer.png'), trainerShot.toPNG())
 

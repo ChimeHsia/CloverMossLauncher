@@ -75,6 +75,22 @@ export const schemas = {
     limit: z.number().int().min(1).max(200).default(80),
   }),
 
+  trainerRun: z.object({
+    versionId: z.string().min(1).max(120),
+    action: z.enum(['train', 'inspect_data', 'cache_text', 'cache_latents', 'export', 'sample']),
+    runName: z.string().min(1).max(120),
+    weights: z.string().min(1).max(4096),
+    dataset: z.string().min(1).max(4096),
+    algo: z.string().min(1).max(80),
+    steps: z.number().int().min(1).max(1_000_000),
+    lr: z.string().max(40),
+    dim: z.string().max(20),
+    alpha: z.string().max(20),
+    batch: z.string().max(20),
+    resolution: z.number().int().min(64).max(4096),
+    overrides: z.string().max(8000),
+  }),
+
   trainerCreate: z.object({
     branch: z.string().min(1).max(120),
     commit: z.string().min(7).max(64),

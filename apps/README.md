@@ -10,17 +10,17 @@ apps/desktop/
   electron.vite.config.ts
   src/main/
     index.ts                生命周期、smoke / screenshot / scenario
-    windows.ts              启动器 / 创作 / 终端三窗口
+    windows.ts              启动器 / 创作 / 终端 / Kohaku Trainer 四窗口
     ipc.ts                  ipcMain.handle + zod 校验 + 事件
     lib/                    paths / run / events
     services/               env / network / git / runtimes / instances / models /
                             updates / settings / gallery / supervisor / parsers /
-                            diagnostics / devices / cases / onboarding
+                            diagnostics / devices / cases / onboarding / trainerGit / trainers
   src/preload/index.ts      contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx             按 windowKind 分流 Launcher / Creator / Terminal
-    src/pages/              Home / Studio / Gallery / Terminal / Diagnostics /
-                            Instances / InstanceDetail / Models / Settings
+    src/pages/              Home / Studio / Gallery / Terminal / Training / TrainerWindow /
+                            Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/         AppTitlebar / layout / NotificationPanel / Oobe / ui
     src/store.ts            Zustand（通知、启动栈、任务、画廊）
     src/lib/                layout.ts / clover.ts / windows.ts / api
@@ -43,13 +43,14 @@ pnpm typecheck
 env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smoke
 ```
 
-## 三窗口
+## 四窗口
 
 | 窗口 | 路由 | 尺寸 | 内容 |
 | --- | --- | --- | --- |
 | 启动器 | `/` | 1180×760 | 首页启动条/运行栈、实例、模型、诊断、设置、OOBE |
 | 创作 | `/studio` | 1320×860 | Studio、layout JSON、画廊 |
 | 终端 | `/terminal` | 1120×720 | Cases 列表 + xterm |
+| Kohaku Trainer | `/trainer` | 1280×840 | 外部 trainer 配置、命令预览、doctor、训练运行 |
 
 `src/main/windows.ts` 负责创建/单例/聚焦；preload 通过
 `--clover-window=<kind>` 提供 `windowKind`，渲染层只加载对应 shell。

@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Settings, TrainerRuntimeInfo, TrainerRuntimeState, TrainerVersion } from '@shared/types'
+import type { JobRecord, Settings, TrainerRunInput, TrainerRuntimeInfo, TrainerRuntimeState, TrainerVersion } from '@shared/types'
 import { paths } from '../lib/paths'
 import { run } from '../lib/run'
+import { startTrainingJob } from './supervisor'
 import { hasUv, parseDepsFromPyproject, pickPython, venvPython } from './runtimes'
 import {
   createTrainerWorktree,
@@ -240,4 +241,91 @@ export async function trainerRuntimeSummary(settings: Settings, versionId: strin
   const version = await readVersion(settings, versionId)
   if (!version?.runtimeId) return null
   return readRuntime(settings, version.runtimeId)
+}
+
+
+function quote(value: string): string {
+  return process.platform === 'win32' ? `"${value.replace(/"/g, '""')}"` : `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+export async function startTrainerRun(settings: Settings, input: TrainerRunInput): Promise<JobRecord> {
+  if (process.platform === 'darwin') {
+    throw new Error('KohakuMossTrainer 不支持 macOS/MPS；请使用 Linux/Windows + NVIDIA，或下一阶段的 SSH 训练主机')
+  }
+  const cuda = await run('nvidia-smi', ['-L'], { timeoutMs: 8000 })
+  if (cuda.code !== 0) throw new Error('未检测到 NVIDIA CUDA 设备，KohakuMossTrainer 无法在本机启动')
+  const version = await readVersion(settings, input.versionId)
+  if (!version) throw new Error('训练版本不存在')
+  const runtime = version.runtimeId ? await readRuntime(settings, version.runtimeId) : null
+  if (!runtime || runtime.state !== 'ready' || !existsSync(runtime.python)) {
+    throw new Error('训练环境尚未就绪，请先在训练页安装环境')
+  }
+  if (input.action === 'export' || input.action === 'sample') {
+    throw new Error('导出/采样入口将在训练完成后接入')
+  }
+  const bin = process.platform === 'win32' ? join(runtime.path, 'Scripts') : join(runtime.path, 'bin')
+  const configBin = join(bin, process.platform === 'win32' ? 'kohakumoss-config.exe' : 'kohakumoss-config')
+  const kogine = join(bin, process.platform === 'win32' ? 'kogine.exe' : 'kogine')
+  if (!existsSync(configBin) || !existsSync(kogine)) throw new Error('训练环境缺少 kohakumoss-config / kogine，请重装环境')
+
+  const runName = input.runName.replace(/[^A-Za-z0-9_-]/g, '-')
+  const configPath = `configs/user/${runName}.py`
+  const dataConfigPath = `configs/user/${runName}_data.py`
+  const overrides = input.overrides
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.includes('=') && !line.startsWith('#'))
+    .flatMap((line) => ['--set', line])
+
+  const setup = [
+    quote(configBin),
+    'new',
+    'train',
+    '--weights',
+    quote(input.weights),
+    '--data',
+    quote(input.dataset),
+    '--source',
+    'kohya',
+    '--algo',
+    quote(input.algo),
+    '--name',
+    quote(runName),
+    '--steps',
+    String(input.steps),
+    '--force',
+  ].join(' ')
+
+  const setArgs = [
+    `--set LR=${input.lr || '1e-4'}`,
+    `--set DIM=${input.dim || '32'}`,
+    `--set ALPHA=${input.alpha || '32'}`,
+    `--set MICROBATCHES=${input.batch || '1'}`,
+    `--set TARGET_AREA=${input.resolution * input.resolution}`,
+    ...overrides,
+  ]
+  const runArgs = {
+    train: ['run', 'scripts/train/moss.py', '--config', configPath, ...setArgs],
+    inspect_data: ['run', 'scripts/data/inspect_data.py', '--config', dataConfigPath],
+    cache_text: ['run', 'scripts/data/cache_text.py', '--config', dataConfigPath],
+    cache_latents: ['run', 'scripts/data/cache_latents.py', '--config', dataConfigPath],
+    export: [],
+    sample: [],
+  }[input.action]
+  if (!runArgs.length) throw new Error('该训练动作尚未接入')
+
+  const win = process.platform === 'win32'
+  const lines = win
+    ? ['@echo off', 'setlocal', setup, 'if errorlevel 1 exit /b 1', [quote(kogine), ...runArgs.map(quote)].join(' ')]
+    : ['#!/usr/bin/env bash', 'set -euo pipefail', setup, [quote(kogine), ...runArgs.map(quote)].join(' ')]
+  const script = join(version.path, `.clover-${input.action}.${win ? 'cmd' : 'sh'}`)
+  await writeFile(script, `${lines.join(win ? '\r\n' : '\n')}${win ? '\r\n' : '\n'}`, { encoding: 'utf8', mode: 0o755 })
+  return startTrainingJob({
+    versionId: version.id,
+    name: `Kohaku ${input.action === 'train' ? '训练' : input.action}`,
+    cwd: version.path,
+    command: win ? 'cmd' : 'bash',
+    args: win ? ['/d', '/s', '/c', script] : [script],
+    totalSteps: input.action === 'train' ? input.steps : 0,
+  })
 }

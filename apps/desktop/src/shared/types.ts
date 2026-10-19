@@ -310,6 +310,22 @@ export interface TrainerVersion {
   status: 'ok' | 'missing'
 }
 
+export interface TrainerRunInput {
+  versionId: string
+  action: 'train' | 'inspect_data' | 'cache_text' | 'cache_latents' | 'export' | 'sample'
+  runName: string
+  weights: string
+  dataset: string
+  algo: string
+  steps: number
+  lr: string
+  dim: string
+  alpha: string
+  batch: string
+  resolution: number
+  overrides: string
+}
+
 export interface TrainerRuntimeInfo {
   id: string
   versionId: string
@@ -361,7 +377,7 @@ export interface OnboardingStatus {
   checkedAt: string
 }
 
-export type JobMode = 'runner' | 'gradio' | 'simulate'
+export type JobMode = 'runner' | 'gradio' | 'simulate' | 'training'
 export type JobState = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'canceled'
 export type JobStage = 'load' | 'text' | 'denoise' | 'decode' | 'save' | 'ready' | 'idle'
 
@@ -451,6 +467,7 @@ export interface JobRecord {
   stage: JobStage
   params: JobParams
   progress: JobProgress
+  metrics?: { step?: number; loss?: number; lr?: number; gradNorm?: number }
   startedAt: string
   endedAt?: string
   pid?: number

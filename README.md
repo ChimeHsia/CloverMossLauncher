@@ -61,7 +61,8 @@
 - bare mirror + per-commit worktree；环境按 lock hash 创建/复用；
 - 训练窗口表单生成 `kohakumoss-config` / `kogine` 命令，可预览/复制；
 - 页面提供版本、环境安装与 `kohakumoss-doctor`；
-- 当前 macOS 无 CUDA：可部署/管理/编辑，真实训练与 SSH host 下一阶段；
+- CUDA 主机上可启动训练并解析 step/loss；macOS 无 CUDA，只能部署/管理/编辑；
+- 数据检查/文本缓存/潜变量缓存有入口；导出/采样与 SSH host 下一阶段；
 - 训练窗口标题明确为 `Kohaku Trainer · External`，展示 KohakuMoss License 1.0。
 
 ## OOBE
@@ -136,7 +137,7 @@ docs/                   产品、架构、状态、layout 规范、截图
 
 ## 已知限制
 
-- 训练执行、loss/终端训练 Case、SSH 训练主机在下一阶段；
+- 训练执行只在 CUDA 主机验证；SSH 训练主机、导出/采样下一阶段；
 - Clover 常驻后端、Project 持久化、图层系统在后续；
 - 创作窗口的“开始生成”目前提示下一轮，不直接起任务；
 - Cases 与排队只在本次启动器会话内保存，重启丢失；

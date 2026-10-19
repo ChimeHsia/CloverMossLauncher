@@ -35,6 +35,7 @@ import {
   removeTrainerVersion,
   trainerDoctor,
   trainerMirrorInfo,
+  startTrainerRun,
 } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 
@@ -117,6 +118,8 @@ export function registerIpc(): void {
   handle(Ipc.trainerInstall, schemas.trainerId, ({ id }) => installTrainerRuntime(getSettings(), id))
 
   handle(Ipc.trainerDoctor, schemas.trainerId, ({ id }) => trainerDoctor(getSettings(), id))
+
+  handle(Ipc.trainerRun, schemas.trainerRun, (input) => startTrainerRun(getSettings(), input))
 
   handle(Ipc.settingsGet, null, () => getSettings())
 

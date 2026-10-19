@@ -196,6 +196,17 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
     return
   }
 
+  if (exitCode === 0 && job.kind === 'training') {
+    update(job, {
+      state: 'succeeded',
+      stage: 'save',
+      progress: { ...job.progress, stage: 'save', percent: 100 },
+      endedAt: new Date().toISOString(),
+      exitCode,
+    })
+    return
+  }
+
   if (exitCode === 0) {
     update(job, {
       state: 'failed',
@@ -585,6 +596,118 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   })
   child.on('close', (code) => finish(job, runningJob, code))
 
+  return snapshot(job)
+}
+
+
+export interface StartTrainingJobInput {
+  versionId: string
+  name: string
+  cwd: string
+  command: string
+  args: string[]
+  env?: NodeJS.ProcessEnv
+  totalSteps?: number
+}
+
+function trainerMetrics(line: string): { step?: number; loss?: number; gradNorm?: number; lr?: number } | null {
+  const stepMatch = line.match(/\bstep\s+([\d,]+)/i)
+  const lossMatch = line.match(/\bloss\s*[=:]\s*([-+0-9.eE]+)/i)
+  const gradMatch = line.match(/\bgrad(?:_norm|ient_norm)?\s*[=:]\s*([-+0-9.eE]+)/i)
+  const lrMatch = line.match(/\blr\s*[=:]\s*([-+0-9.eE]+)/i)
+  if (!stepMatch && !lossMatch) return null
+  return {
+    step: stepMatch ? Number.parseInt(stepMatch[1]!.replace(/,/g, ''), 10) : undefined,
+    loss: lossMatch ? Number.parseFloat(lossMatch[1]!) : undefined,
+    gradNorm: gradMatch ? Number.parseFloat(gradMatch[1]!) : undefined,
+    lr: lrMatch ? Number.parseFloat(lrMatch[1]!) : undefined,
+  }
+}
+
+export async function startTrainingJob(input: StartTrainingJobInput): Promise<JobRecord> {
+  await loadJobs()
+  const job: JobRecord = {
+    id: `train-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
+    instanceId: input.versionId,
+    instanceName: input.name,
+    kind: 'training',
+    mode: 'training',
+    state: 'starting',
+    stage: 'denoise',
+    params: { prompt: '', negativePrompt: '', width: 0, height: 0, steps: input.totalSteps ?? 0, cfg: 0, seed: 0, profile: 'base' },
+    progress: { stage: 'denoise', current: 0, total: input.totalSteps ?? 0, percent: 0 },
+    startedAt: new Date().toISOString(),
+  }
+  job.logPath = logPath(job.id)
+  jobs.set(job.id, job)
+  logs.set(job.id, [])
+  seqs.set(job.id, 0)
+  emit(Events.job, snapshot(job))
+
+  let child: ChildProcessWithoutNullStreams
+  try {
+    child = spawn(input.command, input.args, {
+      cwd: input.cwd,
+      env: { ...process.env, ...envFor(job), ...input.env },
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    update(job, { state: 'failed', error: { code: 'E_SPAWN', message: String(error) } })
+    throw error
+  }
+
+  const runningJob: RunningJob = {
+    child,
+    out: new LineSplitter(),
+    err: new LineSplitter(),
+    readyTimer: setTimeout(() => undefined, 0),
+    lastLines: [],
+    cancelRequested: false,
+  }
+  clearTimeout(runningJob.readyTimer)
+  running.set(job.id, runningJob)
+  update(job, { pid: child.pid ?? undefined, state: 'running' })
+
+  const handle = (stream: 'stdout' | 'stderr', raw: string): void => {
+    const line = stripAnsi(raw).trimEnd()
+    if (!line.trim()) return
+    appendLog(job, stream, line, runningJob)
+    const metrics = trainerMetrics(line)
+    if (metrics) {
+      const nextMetrics = { ...job.metrics, ...Object.fromEntries(Object.entries(metrics).filter(([, value]) => value !== undefined)) }
+      const current = metrics.step ?? job.progress.current
+      const total = job.progress.total
+      update(job, {
+        metrics: nextMetrics as JobRecord['metrics'],
+        progress: {
+          stage: 'denoise',
+          current,
+          total,
+          percent: total > 0 ? Math.max(job.progress.percent, Math.min(100, (current / total) * 100)) : job.progress.percent,
+          message: metrics.loss !== undefined ? `loss ${metrics.loss.toFixed(4)}` : job.progress.message,
+        },
+      })
+      return
+    }
+    if (stream === 'stderr' || /error|traceback|exception/i.test(line)) recordError(job, line)
+  }
+
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => {
+    for (const line of runningJob.out.push(chunk)) handle('stdout', line)
+  })
+  child.stderr.on('data', (chunk: string) => {
+    for (const line of runningJob.err.push(chunk)) handle('stderr', line)
+  })
+  child.on('error', (error) => {
+    appendLog(job, 'system', String(error), runningJob)
+    update(job, { state: 'failed', error: { code: 'E_SPAWN', message: String(error) } })
+    finish(job, runningJob, -1)
+  })
+  child.on('close', (code) => finish(job, runningJob, code))
   return snapshot(job)
 }
 

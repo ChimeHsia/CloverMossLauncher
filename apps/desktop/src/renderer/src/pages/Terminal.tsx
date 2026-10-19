@@ -139,7 +139,13 @@ export function TerminalPage(): React.JSX.Element {
     if (writtenRef.current === 0) {
       term.clear()
       term.write(`\x1b[38;2;138;182;255mCloverMoss terminal\x1b[0m  ${active.instanceName}\r\n`)
-      term.write(`\x1b[38;2;113;123;138m${active.caseName ?? active.mode} · ${active.params.width}×${active.params.height}\x1b[0m\r\n\r\n`)
+      const subtitle =
+        active.kind === 'training'
+          ? `training · step ${active.metrics?.step ?? active.progress.current}/${active.progress.total || '—'}${
+              active.metrics?.loss !== undefined ? ` · loss ${active.metrics.loss.toFixed(4)}` : ''
+            }`
+          : `${active.caseName ?? active.mode} · ${active.params.width}×${active.params.height}`
+      term.write(`\x1b[38;2;113;123;138m${subtitle}\x1b[0m\r\n\r\n`)
     }
     for (let index = writtenRef.current; index < logs.length; index += 1) {
       const line = logs[index]!

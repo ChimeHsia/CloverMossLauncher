@@ -581,5 +581,5 @@ window.clover = {
 | UI v0.3 | 三窗口 + 启动条/运行栈 + OOBE + 终端 + Fluent 深灰 | ✅ 已实现；Clover 后端下一轮 |
 | M4 | Supervisor + runner + 解析 + 诊断 | ✅ 基础完成（simulate/取消/解析实测；真实权重待验收） |
 | M5 | Gradio + WebUI + 更新/公告 | 计划 |
-| Trainer v0.4 | Kohaku Trainer 外部窗口 / 版本 / 环境 / 配置预览 | ✅ 基座；执行/SSH 下一阶段 |
+| Trainer v0.4 | Kohaku Trainer 外部窗口 / 版本 / 环境 / 配置预览 / 本机 CUDA 执行 | ✅ 基座；SSH/导出采样下一阶段 |
 | M6 | 打包、公证、Windows、Beta | 计划 |

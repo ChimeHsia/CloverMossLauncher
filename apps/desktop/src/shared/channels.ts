@@ -14,6 +14,7 @@ export const Ipc = {
   trainerRemove: 'trainer:remove',
   trainerInstall: 'trainer:install',
   trainerDoctor: 'trainer:doctor',
+  trainerRun: 'trainer:run',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   envScan: 'env:scan',

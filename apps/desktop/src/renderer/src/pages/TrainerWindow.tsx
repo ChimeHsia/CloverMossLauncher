@@ -1,11 +1,11 @@
 import { AlertTriangle, CheckCircle2, FolderOpen, GraduationCap, Play, Stethoscope, Terminal } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Ipc } from '@shared/channels'
-import type { TrainerVersion } from '@shared/types'
+import type { JobRecord, TrainerVersion } from '@shared/types'
 import { call } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, Spinner, cn, useToast } from '../components/ui'
+import { Button, Card, EmptyState, Pill, ProgressBar, Spinner, useToast } from '../components/ui'
 
 const ALGOS = ['lora', 'locon', 'loha', 'lokr', 'dora', 'oft', 'boft', 'ia3', 'full']
 
@@ -26,6 +26,7 @@ const inputClass =
 export function TrainerWindow(): React.JSX.Element {
   const toast = useToast()
   const env = useApp((state) => state.env)
+  const jobs = useApp((state) => state.jobs)
   const [versions, setVersions] = useState<TrainerVersion[]>([])
   const [versionId, setVersionId] = useState('')
   const [weights, setWeights] = useState('')
@@ -41,6 +42,7 @@ export function TrainerWindow(): React.JSX.Element {
   const [overrides, setOverrides] = useState('')
   const [doctor, setDoctor] = useState<{ ok: boolean; output: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [starting, setStarting] = useState<string | null>(null)
 
   useEffect(() => {
     void call<TrainerVersion[]>(Ipc.trainerVersions)
@@ -54,6 +56,7 @@ export function TrainerWindow(): React.JSX.Element {
   const version = versions.find((item) => item.id === versionId)
   const hasCuda = env?.gpu.kind === 'nvidia'
   const ready = version?.runtimeState === 'ready'
+  const trainingJob = jobs.find((job) => job.kind === 'training') ?? null
 
   const configPath = `configs/user/${runName || 'moss-lora'}.py`
   const overrideArgs = overrides
@@ -95,12 +98,47 @@ export function TrainerWindow(): React.JSX.Element {
     }
   }
 
-  function start(): void {
-    if (!hasCuda) {
-      toast.push('本机没有 CUDA；请连接 SSH 训练主机（下一阶段）或使用 NVIDIA 机器', 'info')
+  async function runAction(action: 'train' | 'inspect_data' | 'cache_text' | 'cache_latents'): Promise<void> {
+    if (!version) {
+      toast.push('先选择一个训练版本', 'error')
       return
     }
-    toast.push('训练执行接入将在下一阶段完成；当前可以复制命令到共享终端运行', 'info')
+    if (!hasCuda) {
+      toast.push('本机没有 CUDA；请使用 NVIDIA 机器，或下一阶段的 SSH 训练主机', 'info')
+      return
+    }
+    if (!ready) {
+      toast.push('先在训练页安装环境', 'error')
+      return
+    }
+    if (!weights || !dataset) {
+      toast.push('先选择 MOSS 权重目录和数据集目录', 'error')
+      return
+    }
+    setStarting(action)
+    try {
+      const job = await call<JobRecord>(Ipc.trainerRun, {
+        versionId: version.id,
+        action,
+        runName: runName || 'moss-lora',
+        weights,
+        dataset,
+        algo,
+        steps: Number(steps) || 4000,
+        lr,
+        dim,
+        alpha,
+        batch,
+        resolution: Number(resolution) || 1024,
+        overrides,
+      })
+      toast.push(`${action === 'train' ? '训练' : action} 已启动`, 'success')
+      void job
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setStarting(null)
+    }
   }
 
   return (
@@ -217,16 +255,23 @@ export function TrainerWindow(): React.JSX.Element {
             </Field>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Button tone="primary" onClick={start} disabled={!version || !ready}>
+              <Button tone="primary" onClick={() => void runAction('train')} disabled={!version || !ready || !hasCuda || starting !== null}>
                 <span className="inline-flex items-center gap-1.5">
-                  <Play className="size-3" /> 开始训练
+                  {starting === 'train' ? <Spinner className="size-3" /> : <Play className="size-3" />}
+                  开始训练
                 </span>
               </Button>
               <Button tone="secondary" onClick={() => void check()} disabled={!ready || busy}>
                 环境体检
               </Button>
-              <Button tone="ghost" disabled>
-                数据检查 · 下一阶段
+              <Button tone="ghost" onClick={() => void runAction('inspect_data')} disabled={!ready || !hasCuda || starting !== null}>
+                检查数据
+              </Button>
+              <Button tone="ghost" onClick={() => void runAction('cache_text')} disabled={!ready || !hasCuda || starting !== null}>
+                缓存文本
+              </Button>
+              <Button tone="ghost" onClick={() => void runAction('cache_latents')} disabled={!ready || !hasCuda || starting !== null}>
+                缓存潜变量
               </Button>
               <Button tone="ghost" disabled>
                 导出 / 采样 · 下一阶段
@@ -235,6 +280,30 @@ export function TrainerWindow(): React.JSX.Element {
           </Card>
 
           <div className="space-y-4">
+            {trainingJob ? (
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[12.5px] font-medium">训练状态</h2>
+                  <Pill tone={trainingJob.state === 'failed' ? 'red' : trainingJob.state === 'succeeded' ? 'accent' : 'amber'}>
+                    {trainingJob.state}
+                  </Pill>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-secondary)]">
+                  <span>step {trainingJob.metrics?.step ?? trainingJob.progress.current} / {trainingJob.progress.total || '—'}</span>
+                  <span>loss {trainingJob.metrics?.loss !== undefined ? trainingJob.metrics.loss.toFixed(4) : '—'}</span>
+                </div>
+                <ProgressBar value={trainingJob.progress.percent} className="mt-1.5" />
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
+                    {trainingJob.error?.message ?? (trainingJob.state === 'running' ? '训练中，日志在共享终端' : '')}
+                  </span>
+                  <Button tone="ghost" onClick={() => openWindow('terminal')}>
+                    <span className="inline-flex items-center gap-1"><Terminal className="size-3" /> 终端</span>
+                  </Button>
+                </div>
+              </Card>
+            ) : null}
+
             <Card className="p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[12.5px] font-medium">命令预览</h2>

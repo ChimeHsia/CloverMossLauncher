@@ -12,6 +12,7 @@
 - 允许启动器在用户配置的 `trainerRoot` 里 **runtime clone** 上游仓库，建 bare mirror + per-commit worktree；
 - 训练器以 **独立的 Kohaku Trainer（External）窗口** 出现，主产品仍叫 CloverMoss；
 - 环境按 lock hash 管理，但只安装到 trainerRoot 下；推理与训练环境隔离；
+- 本机 CUDA 训练通过 `startTrainingJob` 进入共享终端，解析 step/loss；
 - SSH 训练主机在下一阶段接入，同一 host 模型。
 
 这不改变“训练内核不进入主仓库”的核心结论；它只是把“用户手动 clone”变成“启动器代为 clone + 管理版本/环境”。
