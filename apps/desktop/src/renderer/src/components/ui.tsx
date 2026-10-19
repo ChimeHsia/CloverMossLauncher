@@ -252,6 +252,68 @@ export function Modal({
   )
 }
 
+export function Sheet({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  width = 'max-w-[520px]',
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  description?: string
+  children: ReactNode
+  footer?: ReactNode
+  width?: string
+}): React.JSX.Element | null {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-[2px]"
+      onMouseDown={onClose}
+    >
+      <div
+        className={cn(
+          'glass-strong flex h-full w-full flex-col border-l border-[var(--color-border-subtle)] shadow-2xl',
+          width,
+        )}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
+          <div>
+            <h2 className="text-[15px] font-semibold">{title}</h2>
+            {description ? (
+              <p className="mt-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
+            ) : null}
+          </div>
+          <IconButton label="关闭" onClick={onClose}>
+            <X className="size-4" />
+          </IconButton>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer ? (
+          <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
+            {footer}
+          </footer>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 type ToastTone = 'info' | 'success' | 'error'
 
 interface ToastItem {

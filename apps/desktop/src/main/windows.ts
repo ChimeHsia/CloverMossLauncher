@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 
-export type WindowKind = 'launcher' | 'creator' | 'terminal' | 'trainer'
+export type WindowKind = 'launcher' | 'creator' | 'terminal' | 'trainer' | 'devices'
 
 const windows = new Map<WindowKind, BrowserWindow>()
 const isDev = !app.isPackaged
@@ -12,6 +12,7 @@ const config: Record<WindowKind, { width: number; height: number; minWidth: numb
   creator: { width: 1320, height: 860, minWidth: 1040, minHeight: 680, route: '/studio', title: 'CloverMoss Creator' },
   terminal: { width: 1120, height: 720, minWidth: 900, minHeight: 560, route: '/terminal', title: 'CloverMoss Terminal' },
   trainer: { width: 1280, height: 840, minWidth: 980, minHeight: 640, route: '/trainer', title: 'Kohaku Trainer' },
+  devices: { width: 1180, height: 780, minWidth: 960, minHeight: 640, route: '/devices', title: 'CloverMoss Devices' },
 }
 
 export function createAppWindow(kind: WindowKind, show = true): BrowserWindow {
@@ -114,4 +115,54 @@ export function openWindow(kind: WindowKind, route?: string): BrowserWindow {
 export function getWindow(kind: WindowKind): BrowserWindow | undefined {
   const win = windows.get(kind)
   return win && !win.isDestroyed() ? win : undefined
+}
+
+const gradioWindows = new Map<string, BrowserWindow>()
+
+/**
+ * Opens the official Gradio UI in its own native window.
+ * This is intentionally not a `WindowKind`: it is an external URL surface, not
+ * another instance of the Clover renderer bundle.
+ */
+export function openGradioWindow(url: string, title = 'MOSS-Image'): BrowserWindow {
+  const existing = gradioWindows.get(url)
+  if (existing && !existing.isDestroyed()) {
+    existing.show()
+    existing.focus()
+    return existing
+  }
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 900,
+    minHeight: 600,
+    title,
+    backgroundColor: '#191b1f',
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  })
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    if (target.startsWith('https://') || target.startsWith('http://')) void shell.openExternal(target)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, target) => {
+    try {
+      const current = new URL(url)
+      const next = new URL(target)
+      if (next.origin === current.origin) return
+    } catch {
+      // fall through to deny
+    }
+    event.preventDefault()
+    if (target.startsWith('https://')) void shell.openExternal(target)
+  })
+  void win.loadURL(url)
+  gradioWindows.set(url, win)
+  win.on('closed', () => {
+    if (gradioWindows.get(url) === win) gradioWindows.delete(url)
+  })
+  return win
 }

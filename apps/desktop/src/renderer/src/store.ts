@@ -20,6 +20,7 @@ import type {
   UpdateState,
 } from '@shared/types'
 import type { LayoutDraft } from './lib/layout'
+import type { UpdateDownloadState } from '@shared/release'
 import { call, onEvent } from './lib/api'
 
 function applyTheme(_theme?: Settings['theme']): void {
@@ -42,6 +43,8 @@ interface AppStore {
   settings: Settings | null
   env: EnvReport | null
   updates: UpdateState | null
+  updateDialogOpen: boolean
+  updateDownload: UpdateDownloadState | null
   instances: InstanceInfo[]
   catalog: Catalog | null
   downloads: DownloadTask[]
@@ -68,6 +71,10 @@ interface AppStore {
   refreshInstances: () => Promise<void>
   refreshCatalog: () => Promise<void>
   refreshUpdates: () => Promise<void>
+  checkForUpdates: () => Promise<UpdateState | null>
+  setUpdateDialogOpen: (open: boolean) => void
+  startUpdateDownload: () => Promise<void>
+  cancelUpdateDownload: () => Promise<void>
   saveSettings: (patch: Partial<Settings>) => Promise<void>
   toggleSidebar: () => Promise<void>
   toggleNotifications: () => void
@@ -110,11 +117,14 @@ function persistLaunchRow(row: LaunchRow): void {
 }
 
 async function startOfficialJob(row: LaunchRow): Promise<JobRecord> {
+  if (row.workspace !== 'official') {
+    throw new Error('Clover 工作台尚未接入；当前只能启动官方 Gradio')
+  }
   return call<JobRecord>(Ipc.jobStart, {
     instanceId: row.instanceId,
     caseId: row.caseId,
     caseName: row.caseName,
-    backend: row.backend,
+    workspace: row.workspace,
     deviceId: row.deviceId,
     prompt: '',
     negativePrompt: '',
@@ -124,8 +134,7 @@ async function startOfficialJob(row: LaunchRow): Promise<JobRecord> {
     cfg: row.profile === 'dmd8' ? 1 : 3,
     seed: Math.floor(Math.random() * 4294967295),
     profile: row.profile,
-    port: row.port,
-    extraArgs: row.extraArgs,
+    gradio: row.gradio,
     mode: 'gradio',
   })
 }
@@ -232,6 +241,22 @@ export const useApp = create<AppStore>((set, get) => {
       applyTheme(settings.theme)
       set({ settings })
     })
+    onEvent<UpdateDownloadState>(Events.updateDownload, (state) => {
+      set({ updateDownload: state })
+      if (state.phase === 'opened' || (state.phase === 'ready' && !state.error)) {
+        get().pushNotification({
+          tone: 'success',
+          title: '更新已下载',
+          message: `CloverMoss ${state.version} 安装程序已打开`,
+        })
+      } else if (state.phase === 'error') {
+        get().pushNotification({
+          tone: 'error',
+          title: '更新下载失败',
+          message: state.error ?? '安装包下载失败',
+        })
+      }
+    })
     onEvent<{ section: string }>(Events.envProgress, (event) => {
       set({ scanSection: event.section })
     })
@@ -263,6 +288,8 @@ export const useApp = create<AppStore>((set, get) => {
     settings: null,
     env: null,
     updates: null,
+    updateDialogOpen: false,
+    updateDownload: null,
     instances: [],
     catalog: null,
     downloads: [],
@@ -333,12 +360,18 @@ export const useApp = create<AppStore>((set, get) => {
             void get().startNextQueued(deviceId)
           }, 800)
         }
-        if (updates.status === 'fulfilled' && updates.value.updateAvailable) {
+        if (settings.autoCheckUpdates && updates.status === 'fulfilled' && updates.value.updateAvailable) {
           get().pushNotification({
             tone: 'info',
             title: '发现新版本',
             message: `CloverMoss ${updates.value.latestVersion} 可用`,
           })
+          if (
+            updates.value.latestVersion &&
+            settings.dismissedUpdateVersion !== updates.value.latestVersion
+          ) {
+            set({ updateDialogOpen: true })
+          }
         }
       } catch (error) {
         set({ error: error instanceof Error ? error.message : String(error) })
@@ -384,6 +417,40 @@ export const useApp = create<AppStore>((set, get) => {
       } catch {
         // keep previous
       }
+    },
+
+    async checkForUpdates() {
+      try {
+        const updates = await call<UpdateState>(Ipc.updatesCheck)
+        set({ updates })
+        if (updates.updateAvailable) set({ updateDialogOpen: true })
+        return updates
+      } catch {
+        return null
+      }
+    },
+
+    setUpdateDialogOpen(open) {
+      set({ updateDialogOpen: open })
+    },
+
+    async startUpdateDownload() {
+      const updates = get().updates
+      if (!updates?.latestVersion || !updates.installer) {
+        throw new Error('当前平台没有可用的安装包')
+      }
+      const state = await call<UpdateDownloadState>(Ipc.updatesDownload, {
+        version: updates.latestVersion,
+        installer: updates.installer,
+      })
+      set({ updateDownload: state })
+    },
+
+    async cancelUpdateDownload() {
+      const version = get().updates?.latestVersion
+      if (!version) return
+      const state = await call<UpdateDownloadState | null>(Ipc.updatesCancel, { version })
+      if (state) set({ updateDownload: state })
     },
 
     async saveSettings(patch) {
@@ -549,7 +616,7 @@ export const useApp = create<AppStore>((set, get) => {
     },
 
     async startLaunch(input) {
-      if (input.backend === 'clover') {
+      if (input.workspace === 'clover') {
         throw new Error('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio，或打开创作窗口。')
       }
       const instance = get().instances.find((item) => item.id === input.instanceId)
@@ -560,11 +627,10 @@ export const useApp = create<AppStore>((set, get) => {
         caseName: input.caseName?.trim() || `${instance.name} · 官方`,
         instanceId: instance.id,
         instanceName: instance.name,
-        backend: input.backend,
+        workspace: input.workspace,
         deviceId: input.deviceId,
         profile: input.profile,
-        port: input.port,
-        extraArgs: input.extraArgs,
+        gradio: input.gradio,
         state: 'queued',
         queuedAt: new Date().toISOString(),
       }

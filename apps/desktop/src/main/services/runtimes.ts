@@ -48,6 +48,11 @@ async function writeRuntime(runtime: RuntimeInfo): Promise<void> {
   await writeFile(depsFile(runtime.id), JSON.stringify(runtime, null, 2), 'utf8')
 }
 
+/** Persist the local shadow record for a remote venv (state/path live remotely). */
+export async function writeRemoteRuntime(runtime: RuntimeInfo): Promise<void> {
+  await writeRuntime(runtime)
+}
+
 export async function listRuntimes(): Promise<RuntimeInfo[]> {
   try {
     const entries = await readdir(paths.runtimes(), { withFileTypes: true })

@@ -1,12 +1,43 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LaunchCase } from '@shared/types'
+import type { GradioLaunchConfig, LaunchCase } from '@shared/types'
+import { normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
 import { paths } from '../lib/paths'
 import { getInstance } from './instances'
 
 const FILE = () => join(paths.root(), 'cases.json')
 let cases: LaunchCase[] | null = null
+
+interface StoredCase extends Partial<LaunchCase> {
+  backend?: unknown
+  port?: unknown
+  extraArgs?: unknown
+}
+
+function migrate(stored: StoredCase): LaunchCase | null {
+  if (!stored.id || !stored.instanceId) return null
+  const workspace = normalizeWorkspace(stored.workspace ?? stored.backend)
+  const legacyPort = typeof stored.port === 'number' ? stored.port : null
+  const legacyArgs = typeof stored.extraArgs === 'string' ? stored.extraArgs : undefined
+  const gradioInput =
+    stored.gradio ??
+    (legacyPort !== null || legacyArgs ? { port: legacyPort, extraArgs: legacyArgs } : undefined)
+  const gradio: GradioLaunchConfig | undefined =
+    workspace === 'official' || gradioInput ? normalizeGradioConfig(gradioInput) : undefined
+  const now = new Date().toISOString()
+  return {
+    id: stored.id,
+    name: typeof stored.name === 'string' && stored.name.trim() ? stored.name : stored.instanceId,
+    instanceId: stored.instanceId,
+    workspace,
+    deviceId: typeof stored.deviceId === 'string' ? stored.deviceId : 'mps',
+    profile: stored.profile === 'dmd8' ? 'dmd8' : 'base',
+    gradio,
+    createdAt: typeof stored.createdAt === 'string' ? stored.createdAt : now,
+    lastUsedAt: typeof stored.lastUsedAt === 'string' ? stored.lastUsedAt : undefined,
+  }
+}
 
 function ensure(): LaunchCase[] {
   if (cases) return cases
@@ -15,8 +46,15 @@ function ensure(): LaunchCase[] {
       cases = []
       return cases
     }
-    const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as LaunchCase[]
-    cases = Array.isArray(parsed) ? parsed : []
+    const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as StoredCase[]
+    const migrated = Array.isArray(parsed)
+      ? parsed.map(migrate).filter((item): item is LaunchCase => item !== null)
+      : []
+    cases = migrated
+    // Rewrite once so old `backend`/`port`/`extraArgs` fields do not linger.
+    if (Array.isArray(parsed) && parsed.some((item) => 'backend' in item || 'port' in item || 'extraArgs' in item)) {
+      persist()
+    }
   } catch {
     cases = []
   }
@@ -37,36 +75,40 @@ export function listCases(): LaunchCase[] {
     .sort((a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt))
 }
 
-export async function saveCase(input: Omit<LaunchCase, 'id' | 'createdAt' | 'lastUsedAt'> & { id?: string }): Promise<LaunchCase> {
+export async function saveCase(
+  input: Omit<LaunchCase, 'id' | 'createdAt' | 'lastUsedAt'> & { id?: string },
+): Promise<LaunchCase> {
   const instance = await getInstance(input.instanceId)
   if (!instance) throw new Error('实例不存在')
   const current = ensure()
   const existing = input.id ? current.find((item) => item.id === input.id) : undefined
+  const now = new Date().toISOString()
+  const gradio = input.workspace === 'official' || input.gradio
+    ? normalizeGradioConfig(input.gradio)
+    : undefined
   if (existing) {
     Object.assign(existing, {
       name: input.name?.trim() || existing.name,
       instanceId: input.instanceId,
-      backend: input.backend,
+      workspace: input.workspace,
       deviceId: input.deviceId,
       profile: input.profile,
-      port: input.port ?? null,
-      extraArgs: input.extraArgs ?? '',
-      lastUsedAt: new Date().toISOString(),
+      gradio,
+      lastUsedAt: now,
     })
     persist()
     return { ...existing }
   }
   const created: LaunchCase = {
     id: `case-${randomUUID().slice(0, 8)}`,
-    name: input.name?.trim() || `${instance.name} · ${input.backend === 'official' ? '官方' : 'Clover'}`,
+    name: input.name?.trim() || `${instance.name} · ${input.workspace === 'official' ? '官方' : 'Clover'}`,
     instanceId: input.instanceId,
-    backend: input.backend,
+    workspace: input.workspace,
     deviceId: input.deviceId,
     profile: input.profile,
-    port: input.port ?? null,
-    extraArgs: input.extraArgs ?? '',
-    createdAt: new Date().toISOString(),
-    lastUsedAt: new Date().toISOString(),
+    gradio,
+    createdAt: now,
+    lastUsedAt: now,
   }
   cases = [created, ...current]
   persist()

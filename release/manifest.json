@@ -9,6 +9,11 @@
     "notes_url": "https://github.com/CloverIris/CloverMossLauncher/releases",
     "rollout": 1
   },
+  "home": {
+    "chapter": "万象初绘",
+    "title": "一念落纸上，万象入画来。",
+    "subtitle": "选好工作台、实例与设备，开始今天的创作。"
+  },
   "announcements": [
     {
       "id": "2026-10-launch",
@@ -25,6 +30,7 @@
       }
     }
   ],
+  "installers": [],
   "assets": [],
   "sources": {
     "moss": {

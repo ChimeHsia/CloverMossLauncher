@@ -1,19 +1,25 @@
 import { app, dialog, nativeTheme, protocol } from 'electron'
-import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
-import { ensureDirs } from './lib/paths'
+import { ensureDirs, paths } from './lib/paths'
 import { getBackendInfo, startBackend, stopBackend } from './services/backend'
 import type { JobRecord } from '@shared/types'
+import { buildGradioArgs, gradioCommandPreview, gradioSummary, normalizeGradioConfig } from '@shared/launch'
+import { compareSemver, findInstaller, parseReleaseMarkdown } from '@shared/release'
+import { downloadUpdate } from './services/updateDownload'
 import WebSocket from 'ws'
 import { ensureMirror, listBranches, listCommits } from './services/git'
-import { createInstance, listInstances } from './services/instances'
-import { installDeps } from './services/runtimes'
+import { createInstance, deleteInstance, listInstances, updateInstance } from './services/instances'
+import { installDeps, readRuntime, writeRemoteRuntime } from './services/runtimes'
 import { cancelJob, getJob, getJobLogs, onJobCompleted, startJob, startTrainingJob } from './services/supervisor'
 import { createTrainerVersion, listTrainerVersions, startTrainerRun } from './services/trainers'
 import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
+import { listCases, removeCase, saveCase } from './services/cases'
 import { deleteProject, getProject, listProjects, saveProject } from './services/projects'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
-import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost, updateTrainingHostVersions } from './services/trainingHosts'
+import { listManagedHosts, listTrainingHosts, removeTrainingHost, saveTrainingHost, testManagedHost, testTrainingHost, updateTrainingHostVersions } from './services/trainingHosts'
 import {
   remoteBranches,
   remoteCommits,
@@ -27,12 +33,12 @@ import { run } from './lib/run'
 import { matchRule, parseTqdm } from './services/parsers'
 import { registerIpc } from './ipc'
 import { scanEnvironment } from './services/env'
-import { getSettings } from './services/settings'
+import { getSettings, updateSettings } from './services/settings'
 import { collectTrainerArtifact } from './services/trainerArtifacts'
 import { checkUpdates } from './services/updates'
 import { downloadCustomModel, getCatalog, listDownloads } from './services/models'
 import { registerGalleryProtocol } from './services/gallery'
-import { createAppWindow, getWindow, openWindow } from './windows'
+import { createAppWindow, getWindow, openGradioWindow, openWindow } from './windows'
 
 const isDev = !app.isPackaged
 const smoke = process.argv.includes('--smoke')
@@ -114,6 +120,590 @@ app.whenReady().then(async () => {
       console.error(error)
       app.exit(1)
     })
+    return
+  }
+
+  if (scenario === 'gradio-config') {
+    const config = normalizeGradioConfig({
+      model: 'OpenMOSS-Team/MOSS-Image-SFT',
+      modelRoot: 'models',
+      localFilesOnly: true,
+      outputDir: 'outputs/gradio',
+      promptDefaults: 'assets/prompt_defaults.txt',
+      profile: '24gb',
+      listen: 'lan',
+      port: 7861,
+      openMode: 'app-window',
+      extraArgs: '--flag "two words"',
+    })
+    const args = buildGradioArgs(config, 7861)
+    const preview = gradioCommandPreview(config)
+    const autoPreview = gradioCommandPreview(normalizeGradioConfig({}))
+    console.log(
+      JSON.stringify(
+        { scenario: 'gradio-config', args, preview, autoPreview, summary: gradioSummary(config) },
+        null,
+        2,
+      ),
+    )
+    app.exit(
+      args.includes('--flag') && args.includes('two words') && autoPreview.includes('<自动>') ? 0 : 1,
+    )
+    return
+  }
+
+  if (scenario === 'gradio-window') {
+    const backend = getBackendInfo()
+    if (!backend.url) {
+      console.error('backend not ready')
+      app.exit(1)
+      return
+    }
+    const win = openGradioWindow(`${backend.url}/health`, 'Gradio window test')
+    await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
+    const loadedUrl = win.webContents.getURL()
+    console.log(
+      JSON.stringify(
+        { scenario: 'gradio-window', url: loadedUrl, title: win.getTitle() },
+        null,
+        2,
+      ),
+    )
+    win.destroy()
+    app.exit(loadedUrl.endsWith('/health') ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'release-parse') {
+    const machine = {
+      schema_version: 2,
+      app: {
+        name: 'CloverMoss Launcher',
+        channel: 'stable',
+        version: '0.2.0',
+        min_supported: '0.1.0',
+        published_at: '2026-10-20T00:00:00Z',
+        notes_url: 'https://example.com/release',
+      },
+      home: {
+        chapter: '万象初绘',
+        title: '一念落纸上，万象入画来。',
+        subtitle: '开始今天的创作。',
+      },
+      installers: [
+        {
+          platform: 'darwin',
+          arch: 'arm64',
+          kind: 'dmg',
+          url: 'https://example.com/CloverMoss-0.2.0.dmg',
+          sha256: 'a'.repeat(64),
+          size_bytes: 1234,
+        },
+      ],
+      catalog: {
+        updated_at: '2026-10-20T00:00:00Z',
+        models_url: 'https://example.com/models.json',
+        models_sha256: 'b'.repeat(64),
+      },
+      announcements: [
+        {
+          id: 'test',
+          level: 'info',
+          title: 'test announcement',
+          body_markdown: 'hello',
+        },
+      ],
+    }
+    const markdown = `# CloverMoss Launcher 0.2.0\n\nRelease notes.\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``
+    try {
+      const parsed = parseReleaseMarkdown(markdown)
+      const legacyMachine = Object.fromEntries(
+        Object.entries(machine).filter(([key]) => key !== 'home'),
+      )
+      const legacy = parseReleaseMarkdown(
+        `# CloverMoss Launcher 0.2.0\n\n\`\`\`json clover-release\n${JSON.stringify(legacyMachine, null, 2)}\n\`\`\``,
+      )
+      const installer = findInstaller(parsed.document.installers, 'darwin', 'arm64')
+      const result = {
+        scenario: 'release-parse',
+        version: parsed.document.app.version,
+        homeTitle: parsed.document.home?.title ?? null,
+        legacyHomeAbsent: legacy.document.home === undefined,
+        body: parsed.body,
+        installer: installer?.kind ?? null,
+        newer: compareSemver(parsed.document.app.version, '0.1.0'),
+        betaPrerelease: compareSemver('0.2.0-beta.1', '0.2.0'),
+        equal: compareSemver('0.2.0', '0.2.0'),
+      }
+      console.log(JSON.stringify(result, null, 2))
+      app.exit(
+        result.version === '0.2.0' &&
+          result.homeTitle === '一念落纸上，万象入画来。' &&
+          result.legacyHomeAbsent &&
+          result.installer === 'dmg' &&
+          result.newer === 1 &&
+          result.betaPrerelease === -1 &&
+          result.equal === 0 &&
+          result.body.includes('Release notes')
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'update-download') {
+    const payload = Buffer.from('fake installer payload for clover update test')
+    const sha256 = createHash('sha256').update(payload).digest('hex')
+    const server = createServer((_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'content-length': payload.length,
+      })
+      res.end(payload)
+    })
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('test server did not bind a port')
+      process.env['CLOVER_UPDATE_TEST'] = '1'
+      const state = await downloadUpdate('9.9.9', {
+        platform: 'darwin',
+        arch: 'arm64',
+        kind: 'dmg',
+        url: `http://127.0.0.1:${address.port}/fake.dmg`,
+        sha256,
+        size_bytes: payload.length,
+      })
+      const downloaded = state.path && existsSync(state.path) ? readFileSync(state.path) : null
+      const digest = downloaded ? createHash('sha256').update(downloaded).digest('hex') : null
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'update-download',
+            phase: state.phase,
+            bytes: state.bytes,
+            path: state.path,
+            digestMatches: digest === sha256,
+          },
+          null,
+          2,
+        ),
+      )
+      server.close()
+      rmSync(join(app.getPath('userData'), 'downloads', 'updates', '9.9.9'), {
+        recursive: true,
+        force: true,
+      })
+      app.exit(state.phase === 'ready' && digest === sha256 ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      server.close()
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'remote-instance') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-instance-test')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'instances', 'git'), { recursive: true })
+      mkdirSync(join(root, 'models'), { recursive: true })
+      const source = join(app.getPath('userData'), 'git', 'moss-image.git')
+      const mirror = join(root, 'instances', 'git', 'moss-image.git')
+      const clone = await run('git', ['clone', '--bare', source, mirror], { timeoutMs: 60_000 })
+      if (clone.code !== 0) throw new Error(clone.stderr || 'clone mirror failed')
+      const head = await run('git', ['-C', mirror, 'rev-parse', 'main'], { timeoutMs: 10_000 })
+      const commit = head.stdout.trim()
+      if (!commit) throw new Error('main rev-parse failed')
+      const fakeBin = join(root, 'bin')
+      mkdirSync(fakeBin, { recursive: true })
+      const fakeGpu = join(fakeBin, 'nvidia-smi')
+      writeFileSync(fakeGpu, '#!/bin/bash\necho "Fake Remote RTX, 24576"\n', 'utf8')
+      chmodSync(fakeGpu, 0o755)
+      const fake = join(root, 'fake-ssh.sh')
+      writeFileSync(
+        fake,
+        `#!/bin/bash\nexport PATH="${fakeBin}:$PATH"\nfor last; do :; done\nexec bash -lc "$last"\n`,
+        'utf8',
+      )
+      chmodSync(fake, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fake
+      process.env['UV_CACHE_DIR'] = join(app.getPath('userData'), 'cache', 'uv')
+      process.env['PIP_CACHE_DIR'] = join(app.getPath('userData'), 'cache', 'pip')
+      const host = saveTrainingHost({
+        name: 'Fake Remote Instance',
+        host: 'fake.local',
+        user: 'tester',
+        trainerRoot: root,
+        instanceRoot: join(root, 'instances'),
+        modelsRoot: join(root, 'models'),
+      })
+      const instance = await createInstance(
+        { branch: 'main', commit, name: 'remote-smoke', runtimeMode: 'isolated', hostId: host.id },
+        getSettings(),
+      )
+      const testedHost = await testManagedHost(getSettings(), host.id)
+      const remoteRoot = instance.placement.kind === 'ssh' ? instance.placement.root : ''
+      const previous = await run('git', ['-C', mirror, 'rev-parse', 'HEAD~1'], { timeoutMs: 10_000 })
+      const previousSha = previous.stdout.trim()
+      const switched =
+        previous.code === 0 && previousSha
+          ? await updateInstance(instance.id, previousSha, getSettings())
+          : instance
+      const remoteHead = await run('git', ['-C', remoteRoot, 'rev-parse', 'HEAD'], { timeoutMs: 10_000 })
+      const switchedOk = !previousSha || (switched.commit === previousSha && remoteHead.stdout.trim() === previousSha)
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'remote-instance',
+            placement: instance.placement,
+            runtimeState: instance.runtimeState,
+            path: instance.path,
+            remoteRootExists: remoteRoot ? existsSync(remoteRoot) : false,
+            remoteGitExists: remoteRoot ? existsSync(join(remoteRoot, '.git')) : false,
+            remoteVenvExists: remoteRoot ? existsSync(join(remoteRoot, '.venv', 'bin', 'python3')) : false,
+            hostStatus: testedHost.status,
+            devices: testedHost.devices.map((device) => device.name),
+            switchedTo: switched.commit,
+            remoteHead: remoteHead.stdout.trim(),
+            switchedOk,
+          },
+          null,
+          2,
+        ),
+      )
+      const ok =
+        instance.placement.kind === 'ssh' &&
+        instance.runtimeState === 'created' &&
+        existsSync(join(remoteRoot, '.git')) &&
+        existsSync(join(remoteRoot, '.venv', 'bin', 'python3')) &&
+        switchedOk
+      let deleted = false
+      if (process.env['CLOVER_KEEP_TEST_DATA'] !== '1') {
+        await deleteInstance(instance.id, true, getSettings())
+        deleted = !existsSync(remoteRoot) && !existsSync(paths.instance(instance.id))
+        removeTrainingHost(host.id)
+        rmSync(root, { recursive: true, force: true })
+      } else {
+        console.log(JSON.stringify({ keptInstanceId: instance.id, keptHostId: host.id, keptRoot: root }, null, 2))
+      }
+      console.log(JSON.stringify({ scenario: 'remote-instance-delete', deleted }, null, 2))
+      app.exit(ok && (process.env['CLOVER_KEEP_TEST_DATA'] === '1' || deleted) ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'remote-gradio') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-gradio-test')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'instances', 'git'), { recursive: true })
+      mkdirSync(join(root, 'models', 'hf', 'hub', 'models--OpenMOSS-Team--MOSS-Image-SFT'), { recursive: true })
+      const source = join(app.getPath('userData'), 'git', 'moss-image.git')
+      const mirror = join(root, 'instances', 'git', 'moss-image.git')
+      const clone = await run('git', ['clone', '--bare', source, mirror], { timeoutMs: 60_000 })
+      if (clone.code !== 0) throw new Error(clone.stderr || 'clone mirror failed')
+      const head = await run('git', ['-C', mirror, 'rev-parse', 'main'], { timeoutMs: 10_000 })
+      const commit = head.stdout.trim()
+      if (!commit) throw new Error('main rev-parse failed')
+      const fakeSsh = join(root, 'fake-ssh.py')
+      writeFileSync(
+        fakeSsh,
+        [
+          '#!/usr/bin/env python3',
+          'import os, socket, sys, threading',
+          'def tunnel(spec):',
+          '    parts = spec.split(":")',
+          '    local_port, remote_host, remote_port = int(parts[1]), parts[2], int(parts[3])',
+          '    server = socket.socket()',
+          '    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)',
+          '    server.bind(("127.0.0.1", local_port))',
+          '    server.listen(16)',
+          '    def copy(a, b):',
+          '        try:',
+          '            while True:',
+          '                data = a.recv(65536)',
+          '                if not data: break',
+          '                b.sendall(data)',
+          '        except OSError:',
+          '            pass',
+          '        try: b.shutdown(socket.SHUT_WR)',
+          '        except OSError: pass',
+          '    def handle(client):',
+          '        try:',
+          '            upstream = socket.create_connection((remote_host, remote_port))',
+          '        except OSError:',
+          '            client.close(); return',
+          '        threading.Thread(target=copy, args=(client, upstream), daemon=True).start()',
+          '        threading.Thread(target=copy, args=(upstream, client), daemon=True).start()',
+          '    while True:',
+          '        client, _ = server.accept()',
+          '        threading.Thread(target=handle, args=(client,), daemon=True).start()',
+          'args = sys.argv[1:]',
+          'if "-N" in args and "-L" in args:',
+          '    tunnel(args[args.index("-L") + 1])',
+          '    sys.exit(0)',
+          'command = args[-1]',
+          'os.execvp("bash", ["bash", "-lc", command])',
+        ].join('\n'),
+        'utf8',
+      )
+      chmodSync(fakeSsh, 0o755)
+      const fakeScp = join(root, 'fake-scp.sh')
+      writeFileSync(
+        fakeScp,
+        '#!/bin/bash\nremote="${@: -2:1}"\nlocal="${@: -1}"\ncp "${remote#*:}" "$local"\n',
+        'utf8',
+      )
+      chmodSync(fakeScp, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fakeSsh
+      process.env['CLOVER_SCP_BIN'] = fakeScp
+      process.env['UV_CACHE_DIR'] = join(app.getPath('userData'), 'cache', 'uv')
+      process.env['PIP_CACHE_DIR'] = join(app.getPath('userData'), 'cache', 'pip')
+      const host = saveTrainingHost({
+        name: 'Fake Remote Gradio',
+        host: 'fake.local',
+        user: 'tester',
+        trainerRoot: root,
+        instanceRoot: join(root, 'instances'),
+        modelsRoot: join(root, 'models'),
+      })
+      const instance = await createInstance(
+        { branch: 'main', commit, name: 'remote-gradio-smoke', runtimeMode: 'isolated', hostId: host.id },
+        getSettings(),
+      )
+      if (instance.placement.kind !== 'ssh') throw new Error('not a remote instance')
+      const runtime = await readRuntime(instance.runtimeId)
+      if (!runtime) throw new Error('remote runtime missing')
+      runtime.state = 'ready'
+      await writeRemoteRuntime(runtime)
+      const fakeApp = join(instance.placement.root, 'gradio_app.py')
+      writeFileSync(
+        fakeApp,
+        [
+          'import http.server, os, sys',
+          'port = int(sys.argv[sys.argv.index("--port") + 1])',
+          'os.makedirs("outputs/gradio", exist_ok=True)',
+          'open("outputs/gradio/remote-test.png", "wb").write(bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000000020001e221bc330000000049454e44ae426082"))',
+          'class H(http.server.BaseHTTPRequestHandler):',
+          '    def do_GET(self):',
+          '        self.send_response(200)',
+          '        self.end_headers()',
+          '        self.wfile.write(b"ok")',
+          '    def log_message(self, *_args):',
+          '        pass',
+          'print(f"Running on local URL: http://127.0.0.1:{port}", flush=True)',
+          'http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()',
+        ].join('\n'),
+        'utf8',
+      )
+      const job = await startJob({
+        instanceId: instance.id,
+        prompt: '',
+        width: 1024,
+        height: 1024,
+        steps: 50,
+        cfg: 3,
+        seed: 42,
+        profile: 'base',
+        workspace: 'official',
+        mode: 'gradio',
+        gradio: {
+          model: 'OpenMOSS-Team/MOSS-Image-SFT',
+          localFilesOnly: false,
+          profile: 'auto',
+          listen: 'local',
+          port: null,
+          openMode: 'browser',
+        },
+      })
+      let current = job
+      const deadline = Date.now() + 45_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        current = (await getJob(job.id)) ?? current
+        if (current.state === 'running' && current.url) break
+        if (current.state === 'failed' || current.state === 'canceled') break
+      }
+      let reachable = false
+      if (current.url) {
+        try {
+          reachable = (await fetch(current.url)).ok
+        } catch {
+          reachable = false
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 6000))
+      const syncedOutput = existsSync(
+        join(paths.instance(instance.id), 'outputs', 'gradio', 'remote-test.png'),
+      )
+      await cancelJob(job.id)
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      let closedAfterCancel = false
+      if (current.url) {
+        try {
+          await fetch(current.url, { signal: AbortSignal.timeout(1500) })
+        } catch {
+          closedAfterCancel = true
+        }
+      }
+      const canceled = await getJob(job.id)
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'remote-gradio',
+            state: current.state,
+            canceledState: canceled?.state,
+            url: current.url,
+            hostId: current.hostId,
+            reachable,
+            syncedOutput,
+            closedAfterCancel,
+            error: current.error,
+          },
+          null,
+          2,
+        ),
+      )
+      rmSync(paths.instance(instance.id), { recursive: true, force: true })
+      rmSync(paths.runtime(instance.runtimeId), { recursive: true, force: true })
+      removeTrainingHost(host.id)
+      rmSync(root, { recursive: true, force: true })
+      app.exit(
+        current.state === 'running' &&
+          current.url &&
+          reachable &&
+          syncedOutput &&
+          closedAfterCancel
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'device-manager') {
+    try {
+      const root = join(app.getPath('userData'), 'device-manager-test')
+      const fakeBin = join(root, 'bin')
+      mkdirSync(fakeBin, { recursive: true })
+      const fakeGpu = join(fakeBin, 'nvidia-smi')
+      writeFileSync(fakeGpu, '#!/bin/bash\necho "Fake RTX, 24576"\n', 'utf8')
+      chmodSync(fakeGpu, 0o755)
+      const fakeSsh = join(root, 'fake-ssh.sh')
+      writeFileSync(
+        fakeSsh,
+        `#!/bin/bash\nexport PATH="${fakeBin}:$PATH"\nfor last; do :; done\nexec bash -lc "$last"\n`,
+        'utf8',
+      )
+      chmodSync(fakeSsh, 0o755)
+      mkdirSync(join(root, 'instances'), { recursive: true })
+      mkdirSync(join(root, 'models'), { recursive: true })
+      process.env['CLOVER_SSH_BIN'] = fakeSsh
+      const host = saveTrainingHost({
+        name: 'Fake Device Manager',
+        host: 'fake.local',
+        user: 'tester',
+        trainerRoot: root,
+        instanceRoot: join(root, 'instances'),
+        modelsRoot: join(root, 'models'),
+      })
+      const tested = await testManagedHost(getSettings(), host.id)
+      const local = listManagedHosts(getSettings()).find((item) => item.kind === 'local')
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'device-manager',
+            status: tested.status,
+            devices: tested.devices.map((device) => ({ id: device.id, name: device.name, kind: device.kind })),
+            instanceRoot: tested.instanceRoot,
+            localDevices: local?.devices.map((device) => ({ name: device.name, kind: device.kind })),
+          },
+          null,
+          2,
+        ),
+      )
+      removeTrainingHost(host.id)
+      rmSync(root, { recursive: true, force: true })
+      app.exit(
+        tested.status === 'ok' &&
+          tested.devices.length === 1 &&
+          tested.instanceRoot?.endsWith('/instances') &&
+          Boolean(local?.devices.length)
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'case-gradio') {
+    const [instance] = await listInstances()
+    if (!instance) {
+      console.error('没有实例，先运行 --scenario=create')
+      app.exit(1)
+      return
+    }
+    try {
+      const saved = await saveCase({
+        name: 'Gradio config test',
+        instanceId: instance.id,
+        workspace: 'official',
+        deviceId: 'mps',
+        profile: 'base',
+        gradio: {
+          model: 'OpenMOSS-Team/MOSS-Image-SFT',
+          localFilesOnly: true,
+          profile: '24gb',
+          listen: 'lan',
+          port: 7861,
+          openMode: 'app-window',
+          extraArgs: '--flag value',
+        },
+      })
+      const loaded = listCases().find((item) => item.id === saved.id)
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'case-gradio',
+            id: saved.id,
+            workspace: loaded?.workspace,
+            profile: loaded?.gradio?.profile,
+            port: loaded?.gradio?.port,
+            openMode: loaded?.gradio?.openMode,
+            extraArgs: loaded?.gradio?.extraArgs,
+          },
+          null,
+          2,
+        ),
+      )
+      removeCase(saved.id)
+      app.exit(
+        loaded?.workspace === 'official' &&
+          loaded.gradio?.profile === '24gb' &&
+          loaded.gradio.port === 7861 &&
+          loaded.gradio.openMode === 'app-window'
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
     return
   }
 
@@ -483,7 +1073,7 @@ exit 0
       caseName: 'Queue Test',
       instanceId: 'moss-main-9d799c1',
       instanceName: 'moss-main-9d799c1',
-      backend: 'official' as const,
+      workspace: 'official' as const,
       deviceId: 'mps',
       profile: 'base' as const,
       state: 'queued' as const,
@@ -784,6 +1374,51 @@ exit 0
     return
   }
 
+  if (scenario === 'update-dialog') {
+    const file = join(app.getPath('userData'), 'update-test-release.md')
+    const machine = {
+      schema_version: 2,
+      app: {
+        name: 'CloverMoss Launcher',
+        channel: 'stable',
+        version: '9.9.9',
+        min_supported: '0.1.0',
+        published_at: new Date().toISOString(),
+        notes_url: 'https://github.com/CloverIris/CloverMossLauncher/releases',
+      },
+      installers: [
+        {
+          platform: 'darwin',
+          arch: 'arm64',
+          kind: 'dmg',
+          url: 'https://example.com/CloverMoss-9.9.9-arm64.dmg',
+          sha256: 'c'.repeat(64),
+          size_bytes: 123456789,
+        },
+      ],
+      announcements: [],
+    }
+    writeFileSync(
+      file,
+      `# CloverMoss Launcher 9.9.9\n\n这是更新弹窗的预览数据，不会下载真实安装包。\n\n## 本次更新\n\n- 聚合 GitHub Release 发布源\n- 公告、模型表与版本文档\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``,
+      'utf8',
+    )
+    process.env['CLOVER_RELEASE_FILE'] = file
+    updateSettings({ autoCheckUpdates: true, dismissedUpdateVersion: null })
+    const win = createAppWindow('launcher', false)
+    await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 4500))
+    await win.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '本次跳过')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    const image = await win.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-update.png'), image.toPNG())
+    console.log('update dialog screenshot written')
+    app.exit(0)
+    return
+  }
+
   if (screenshot) {
     const launcher = createAppWindow('launcher', false)
     await new Promise<void>((resolve) => launcher.webContents.once('did-finish-load', () => resolve()))
@@ -802,6 +1437,16 @@ exit 0
     await new Promise((resolve) => setTimeout(resolve, 500))
     const cleanHome = await launcher.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-home-clean.png'), cleanHome.toPNG())
+    await launcher.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Gradio 启动参数')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    const gradioSheet = await launcher.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-gradio-sheet.png'), gradioSheet.toPNG())
+    await launcher.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '取消')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 400))
     await launcher.webContents.executeJavaScript(
       "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '启动')?.click()",
     )
@@ -846,6 +1491,16 @@ exit 0
     await new Promise((resolve) => setTimeout(resolve, 3000))
     const trainerShot = await trainer.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-trainer.png'), trainerShot.toPNG())
+
+    const devices = createAppWindow('devices', false)
+    await new Promise<void>((resolve) => devices.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 2800))
+    await devices.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Fake Remote Instance') && b.textContent.includes('1 设备'))?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    const devicesShot = await devices.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-devices.png'), devicesShot.toPNG())
 
     console.log('screenshots written to', app.getPath('userData'))
     app.exit(0)

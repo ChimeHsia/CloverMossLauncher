@@ -162,9 +162,10 @@ export function TerminalPage(): React.JSX.Element {
         instanceId: job.instanceId,
         caseId: job.caseId,
         caseName: job.caseName,
-        backend: job.backend ?? 'official',
+        workspace: job.workspace ?? (job.mode === 'gradio' ? 'official' : 'clover'),
         deviceId: job.deviceId ?? 'mps',
         profile: job.params.profile,
+        gradio: job.gradio,
       })
       if (row.jobId) setActiveJob(row.jobId)
       toast.push(row.state === 'queued' ? '设备占用，已排队' : '已重新启动', 'success')

@@ -2,7 +2,7 @@ import { AlertTriangle, Boxes, ChevronRight, FolderOpen, Plus, RefreshCw, Trash2
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
-import type { BranchInfo, CommitInfo, InstanceInfo } from '@shared/types'
+import type { BranchInfo, CommitInfo, InstanceInfo, ManagedHost } from '@shared/types'
 import { call } from '../lib/api'
 import { dateTime, relative } from '../lib/format'
 import { t } from '../lib/i18n'
@@ -40,6 +40,8 @@ export function InstancesPage(): React.JSX.Element {
   const toast = useToast()
   const { instances, refreshInstances, gitMessage, pushNotification } = useApp()
   const [createOpen, setCreateOpen] = useState(false)
+  const [hosts, setHosts] = useState<ManagedHost[]>([])
+  const [hostId, setHostId] = useState('')
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [branch, setBranch] = useState('main')
@@ -59,13 +61,18 @@ export function InstancesPage(): React.JSX.Element {
   async function openCreate(): Promise<void> {
     setCreateOpen(true)
     setLoadingBranches(true)
+    setHostId('')
     try {
-      const list = await call<BranchInfo[]>(Ipc.gitBranches)
+      const [list, hostList] = await Promise.all([
+        call<BranchInfo[]>(Ipc.gitBranches),
+        call<ManagedHost[]>(Ipc.hostsList),
+      ])
+      setHosts(hostList.filter((item) => item.kind === 'ssh'))
       setBranches(list)
       const preferred = list.find((item) => item.isStable) ?? list.find((item) => item.isDefault) ?? list[0]
       if (preferred) {
         setBranch(preferred.name)
-        await loadCommits(preferred.name)
+        await loadCommits(preferred.name, '')
       }
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -74,10 +81,40 @@ export function InstancesPage(): React.JSX.Element {
     }
   }
 
-  async function loadCommits(branchName: string): Promise<void> {
+  async function selectHost(nextHostId: string): Promise<void> {
+    setHostId(nextHostId)
+    setBranches([])
+    setCommits([])
+    setCommit('')
+    setLoadingBranches(true)
+    try {
+      const list =
+        nextHostId
+          ? await call<BranchInfo[]>(Ipc.instanceRemoteBranches, { hostId: nextHostId })
+          : await call<BranchInfo[]>(Ipc.gitBranches)
+      setBranches(list)
+      const preferred = list.find((item) => item.isStable) ?? list.find((item) => item.isDefault) ?? list[0]
+      if (preferred) {
+        setBranch(preferred.name)
+        await loadCommits(preferred.name, nextHostId)
+      }
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setLoadingBranches(false)
+    }
+  }
+
+  async function loadCommits(branchName: string, targetHostId = hostId): Promise<void> {
     setLoadingCommits(true)
     try {
-      const list = await call<CommitInfo[]>(Ipc.gitCommits, { branch: branchName, limit: 60 })
+      const list = targetHostId
+        ? await call<CommitInfo[]>(Ipc.instanceRemoteCommits, {
+            hostId: targetHostId,
+            branch: branchName,
+            limit: 60,
+          })
+        : await call<CommitInfo[]>(Ipc.gitCommits, { branch: branchName, limit: 60 })
       setCommits(list)
       setCommit(list[0]?.sha ?? '')
     } catch (error) {
@@ -99,15 +136,17 @@ export function InstancesPage(): React.JSX.Element {
         commit,
         name: name.trim() || undefined,
         runtimeMode,
+        hostId: hostId || undefined,
       })
-      toast.push(`实例 ${instance.name} 已创建`, 'success')
+      toast.push(`实例 ${instance.name} 已创建${hostId ? '（远端）' : ''}`, 'success')
       pushNotification({
         tone: 'success',
         title: '实例已创建',
-        message: `${instance.name} 已固定到 ${instance.shortCommit}`,
+        message: `${instance.name} 已固定到 ${instance.shortCommit}${hostId ? ' · 远端' : ''}`,
       })
       setCreateOpen(false)
       setName('')
+      if (hostId) await call(Ipc.hostsTest, { id: hostId }).catch(() => undefined)
       await refreshInstances()
       navigate(`/instances/${instance.id}`)
     } catch (error) {
@@ -207,6 +246,9 @@ export function InstancesPage(): React.JSX.Element {
                   {instance.channel === 'stable' ? <Pill tone="accent">稳定版</Pill> : null}
                   {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
                   {instance.channel === 'custom' ? <Pill tone="blue">自定义</Pill> : null}
+                  {instance.placement.kind === 'ssh' ? (
+                    <Pill tone="blue">远端 · {instance.placement.hostName ?? instance.placement.hostId}</Pill>
+                  ) : null}
                   {instance.dirty ? <Pill tone="amber">有本地改动</Pill> : null}
                   <Pill tone={runtimeTone(instance.runtimeState)}>{runtimeLabel[instance.runtimeState]}</Pill>
                 </div>
@@ -235,9 +277,11 @@ export function InstancesPage(): React.JSX.Element {
                   </Button>
                 ) : null}
                 <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                  <Button tone="ghost" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
-                    <FolderOpen className="size-3.5" />
-                  </Button>
+                  {instance.placement.kind === 'local' ? (
+                    <Button tone="ghost" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
+                      <FolderOpen className="size-3.5" />
+                    </Button>
+                  ) : null}
                   <Button tone="ghost" onClick={() => setDeleteTarget(instance)}>
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -256,7 +300,7 @@ export function InstancesPage(): React.JSX.Element {
         open={createOpen}
         onClose={() => !creating && setCreateOpen(false)}
         title="新建实例"
-        description="实例固定到一个 commit；代码、配置与运行时可随时回滚。"
+        description="实例固定到一个 commit；本机或 SSH 设备都可以部署。远端会独立 clone/worktree/venv，不上传本机权重。"
         width="max-w-3xl"
         footer={
           <>
@@ -275,6 +319,29 @@ export function InstancesPage(): React.JSX.Element {
           </div>
         ) : (
           <div className="space-y-5">
+            <label className="block space-y-1.5">
+              <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">运行位置</span>
+              <select
+                value={hostId}
+                onChange={(event) => void selectHost(event.target.value)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
+              >
+                <option value="">本机</option>
+                {hosts.map((host) => (
+                  <option key={host.id} value={host.id}>
+                    {host.name} · {host.user}@{host.host}:{host.port ?? 22}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-[10px] leading-4 text-[var(--color-text-tertiary)]">
+                {hosts.length === 0
+                  ? '还没有 SSH 设备；先在设备管理器添加并测试连接。'
+                  : hostId
+                    ? '远端：按 commit 创建 mirror/worktree/venv；模型需已在远端缓存，不会自动上传本机 27 GB。'
+                    : '本机：使用本地 mirror/worktree/venv。'}
+              </span>
+            </label>
+
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-1.5">
                 <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">分支</span>

@@ -31,24 +31,28 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
-| Electron 应用壳 | ✅ | 四窗口（每 kind 单例）、居中标题栏、深色/亚克力 |
+| Electron 应用壳 | ✅ | 五窗口（每 kind 单例）、居中标题栏、深色/亚克力 |
 | IPC + zod | ✅ | preload 白名单、主进程校验、统一错误 |
 | 环境报告 | ✅ | 系统/GPU/内存/磁盘/Python/git/uv/网络/端口 + 推荐档位 |
-| 公告/更新检查 | ✅ | manifest/公告缓存与镜像；**不安装更新** |
-| 实例 | 🟡 | bare mirror/worktree/固定 SHA/删除/隔离；版本 pin 切换 UI 已接，未做完整回滚验收 |
-| 运行时 | ✅ | 共享/独立 venv、lock hash、uv/pip、安装日志 |
+| 公告/更新检查 | ✅ | release.md/公告/缓存与版本比较；下载/安装见下方更新行 |
+| 实例 | 🟡 | 本机 mirror/worktree/固定 SHA/删除/隔离；远端 placement/mirror/worktree/venv/删除/切版本（fake ssh）；真实 host 未验收 |
+| 远端实例部署 | 🟡 | SSH mirror/worktree/venv、删除/切版本、远端模型缓存检查；fake ssh 验证，真实 host 未验收 |
+| 运行时 | ✅ | 共享/独立/远端 venv、lock hash、uv/pip、安装日志 |
 | 模型/适配器 | 🟡 | 目录/下载/HF 缓存；适配器绑定/启用/强度 UI 已接；模型包绑定未做 |
 | 画廊 | ✅ | 全局入口、自定义根、分页、元数据、`clover://` |
 | 通知 | ✅ | 右上角单矩形、默认展开、非首页收起 |
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |
-| 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；运行态锁定 |
+| 启动条/运行栈 | ✅ | Case/工作台/实例/设备/Gradio 参数或档位/Case 设置；运行态锁定 |
+| Gradio 启动参数 | 🟡 | 侧滑面板、命令预览、打开方式/监听/端口、旧数据迁移；真实 Gradio 启动未验收 |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
+| 设备管理器 | 🟡 | 第五窗口；本机/SSH host、GPU 库存、测试、路径；fake ssh 验证，真实 host 未验收 |
 | 设备维护 | 🟡 | 设置内启用/禁用/重命名，启动条过滤；未做完整验收 |
 | 训练并发 | 🟡 | 每 host 1 训练；本地训练时推理排队；强制并发/显存配额未做 |
-| Case 配置 | 🟡 | `cases.json` 持久化；未单独做保存/重载端到端验收 |
+| Case 配置 | 🟡 | `cases.json` 持久化；`backend→workspace`、`port/extraArgs→gradio` 迁移；未单独做保存/重载端到端验收 |
 | 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、starting/running 重启标 failed；未做完整重启验收 |
 | 队列运行 | 🟡 | 同设备默认 1 个；持久化行已接；强制并发未做 |
-| 官方 Gradio | 🟡 | 启动/readiness/预检代码路径；缺 27 GB 权重，未真机验收 |
+| 官方 Gradio | 🟡 | 本机启动/readiness/预检；远端 SSH 隧道/fake 端到端；缺 27 GB 权重，未真机验收 |
+| 远端 Gradio 隧道 | 🟡 | `ssh -N -L`、远端 PID/取消、本地 URL、输出目录观察器/scp 回传；fake ssh 验证，真实 host 未验收 |
 | xterm 终端 | ✅ | 推理/训练共用，stdout/stderr/stdin、停止/重启 |
 | Supervisor | ✅ | spawn、readiness、取消、进程组、失败分类、日志 |
 | runner | ✅ | NDJSON + `--simulate`；真实权重未验收 |
@@ -57,7 +61,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Clover 后端 | 🟡 | 独立 utilityProcess HTTP/WS、token、RPC；health/WS/job simulate 验证；真实生成未 |
 | 创作生成 | 🟡 | 已通过 backend `/api/jobs` 提交 Supervisor；缺权重/运行时预检仍拦截 |
 | Project/图层 | 🟡 | `projects/<id>/project.json` + assets、自动保存、图层 visible/lock/opacity；未做完整 UI 验收 |
-| 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景 |
+| 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景（历史阶段） |
+| 五窗口 UI v0.5 | 🟡 | 新增设备管理器；工作台/Gradio 参数；真实 host/权重未验收 |
 | Kohaku Trainer 仓库 | ✅ | runtime clone、bare mirror、commit/worktree |
 | Trainer 环境管理 | 🟡 | 本机/远端 venv、lock hash、install、doctor 代码路径；fake uv 验证，真实 CUDA 未 |
 | 训练窗口 | ✅ | 表单、命令预览、doctor、状态卡 |
@@ -68,12 +73,16 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | SSH 主机探测 | ✅ | `trainer:host-test` 通过 fake ssh 验证 uname/git/uv/python/GPU/root |
 | 远端仓库/版本 | 🟡 | 远端 mirror/worktree 创建/删除通过 fake ssh 验证；真实 host 未接 |
 | 远端训练/导出 | 🟡 | 系统 ssh 训练/导出/取消代码已接；fake ssh 验证 step/loss/产物；真实 host 未接 |
-| SSH host | ✅ | CRUD/测试 + `training-hosts.json`；不存密码 |
+| SSH host | ✅ | CRUD/测试 + `hosts.json`（旧 `training-hosts.json` 自动迁移）；不存密码 |
 | SSH 远端执行 | 🟡 | 系统 ssh + 密钥、host probe、远端 mirror/worktree/venv/train/export 代码已接；只有 fake ssh 验证，无真实 host |
-| WebUI | ⬜ | 没有 Fastify/SSE/HTTP API |
-| 应用内更新安装 | ⬜ | 只检查，不下载/验签/安装 |
+| Release 发布文档 | 🟡 | `release.md` 解析/生成/本地+远程+缓存回退；支持首页篇章名/标题/副标题；真实 GitHub Release 资产未验收 |
+| 更新提示与下载 | 🟡 | 更新弹窗/按版本稍后/sha256 下载/打开安装包；真实签名安装包未验收 |
+| 应用内更新安装 | ⬜ | 静默安装/electron-updater/打包签名未做 |
 | 打包/公证 | ⬜ | 未做 |
 | Windows 实机 | ⬜ | 未验证 |
+
+> Clover Creator 浏览器版不做（[ADR-0004](decisions/0004-workspaces-remote-devices.md)），
+> 因此不作为完成度项；HTTP/WS 后端只作为 Job/API 层。
 
 ## 3. 验证证据
 
@@ -83,7 +92,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | --- | --- | --- |
 | 构建/类型 | `pnpm build` / `pnpm typecheck` | 通过 |
 | 自检 | `--smoke` | 通过；M3 / 16 GB / 网络镜像 |
-| 四窗口创建 | `--scenario=windows` 与 `--screenshot` | 创作/终端通过 IPC 创建；训练窗口截图创建；四窗口均可渲染 |
+| 窗口创建 | `--scenario=windows` 与 `--screenshot` | 创作/终端/训练/设备管理器窗口均可渲染 |
 | 训练器部署 | `--scenario=trainer-deploy` | clone trainer mirror、创建 `kohaku-3bcd751` worktree |
 | 训练 Job | `--scenario=trainer-job` | `succeeded`，step 5、loss 0.1、5 行日志 |
 | SSH host | `--scenario=trainer-host` | 保存/读取/删除成功（before 2 / after 1） |
@@ -92,8 +101,21 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 远端环境 | `--scenario=trainer-remote-env` | fake uv：runtime=ready，doctor=true |
 | 远端训练 | `--scenario=trainer-remote-job` | fake ssh 下 succeeded，step 5、loss 0.1 |
 | 远端产物 | `--scenario=trainer-remote-artifact` | 导出 Job succeeded，适配器自动登记 provider=local |
-| 队列落盘 | `--scenario=queue-persist` | queued 行写入/读取/删除 |
+| 队列落盘 | `--scenario=queue-persist` | queued 行写入/读取/删除；旧 `backend`/`port`/`extraArgs` 启动时迁移为 `workspace`/`gradio` |
+| Gradio 参数构造 | `--scenario=gradio-config` | 模型/目录/档位/输出/监听/端口/引号额外参数顺序正确；自动端口预览为 `<自动>` |
+| Gradio 面板 UI | `--screenshot` | 侧滑面板可渲染；启动条显示模型/档位/端口与打开方式摘要 |
+| Gradio Case 持久化 | `--scenario=case-gradio` | workspace/gradio profile/port/openMode/extraArgs 保存后读取一致 |
+| Gradio 应用内窗口 | `--scenario=gradio-window` | 独立 BrowserWindow 加载本地 URL，标题正确 |
+| 设备管理器库存 | `--scenario=device-manager` | fake ssh 探测出远端 GPU；本机 MPS/CPU 与远端设备同列；instanceRoot/modelsRoot 持久化 |
+| 设备管理器 UI | `--screenshot` | 第五窗口、host 列表、设备卡、测试/使用入口渲染 |
+| Release 解析 | `--scenario=release-parse` | `json clover-release` 块、semver/prerelease、平台 installer 与正文解析 |
+| Release 首页文案 | `--scenario=release-parse` | 首页篇章文案可读取；缺少可选字段的旧文档仍能解析 |
+| 更新下载校验 | `--scenario=update-download` | 本地测试 HTTP 包下载完成，sha256 与源一致 |
+| 更新弹窗 | `--scenario=update-dialog` | 9.9.9 预览数据渲染更新弹窗、平台安装包摘要与发布说明 |
+| Release 文档生成 | `pnpm release:md:check` | manifest/models 生成 `release.md` 且可重复校验 |
 | 缺权重预检 | 首页点击启动 | 生成 `E_MODEL` 诊断 + toast，不误下载 |
+| 远端实例部署 | `--scenario=remote-instance` | fake ssh 下 mirror/worktree/venv；placement=ssh、runtime=created、远端 GPU 可被发现；切版本后 remote HEAD 一致；删除后远端 worktree 与本地记录清理 |
+| 远端 Gradio 隧道 | `--scenario=remote-gradio` | fake ssh 下远端 fake Gradio 启动，本地隧道 URL 可访问；远端输出 scp 到本地实例 outputs；取消后隧道关闭、Job=canceled |
 | layout 编译器 | Node 直接跑 `layout.ts` | 与官方示例逐字段一致 |
 | 画廊 | `--screenshot` | 全局入口、分页、详情、背景交接 |
 | 终端 | `--screenshot` | xterm 显示推理/训练日志，标题显示 step/loss |
@@ -121,23 +143,25 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 3. **Trainer 环境安装未验收**：venv/uv/pip/doctor 代码存在，但本机没有安装
    CUDA 版依赖，也没有运行 trainer。
 4. **SSH 只有 fake ssh 验证**：真实 host 的 host key/连接/远端 mirror/worktree/
-   venv/Job 没有验收；当前代码路径已接。
+   venv/远端 Instance/Gradio 隧道没有验收；当前代码路径已接。
 5. **导出/采样真实 CUDA 未验收**：代码已接，fake 导出/登记通过；真实 `kogine` 未跑。
 6. **Clover 后端/生成只验证 simulate**：独立 HTTP/WS 与 RPC 已通；真实 runner 生成缺权重/运行时。
 7. **Project/图层仅基础**：JSON+assets、自动保存、visible/lock/opacity 已接；未做完整 UI 回放/资产重链。
 8. **队列落盘未完整验收**：`launch-queue.json` 已接，queued 保留、starting/running
    重启标 failed；渲染层重启与自动重排还需要真实验收。
-9. **官方 Gradio 未真实启动**：没有权重，未验证端口/readiness/浏览器显示。
+9. **官方 Gradio 未真实启动**：没有权重，未验证端口/readiness/浏览器显示；远端隧道只在 fake ssh 下验证。
 10. **Windows/Linux 未实机验证**：目前只在 macOS arm64 测试。
-11. **更新只检查不安装**：manifest/公告读取已接；下载、签名、安装未做。
+11. **更新为分阶段**：release.md/公告/弹窗/下载/sha256/打开安装包已接；真实 GitHub Release 资产、beta tag、签名/公证、electron-updater 静默安装未验收。
 12. **开发 CSP 仍允许 `unsafe-eval`**：打包前必须收紧。
 13. **浅色主题已移除**：设置 schema 里仍有 `theme`，UI 固定深色；属于迁移残留。
 14. **终端保留已完成任务**：便于回看日志，不是只显示运行中。
+15. **远端模型下载未实现**：远端 Instance 会检查默认 SFT 缓存，但不会自动下载/上传 27 GB；需预先准备或改用自定义模型。
+16. **远端结果回传只验证官方 Gradio 目录同步**：fake ssh 下 `find + scp` 到本地实例 outputs；远端 runner 结果回传、真实 host 大文件同步未验收。
 
 ## 5. 明确没做（不是“下一轮顺手”）
 
-- WebUI / 浏览器模式；
-- 应用内更新下载与安装；
+- Clover Creator 浏览器版（不做，ADR-0004；HTTP/WS 仅 Job/API）；
+- 静默自动安装/签名验收；
 - 托管 Python；
 - 设备维护完整验收/强制并发/显存配额；
 - DMD 8 步采样器（当前 profile 只透传，仍走官方 pipeline）；
@@ -152,5 +176,6 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 1. 真实 SSH host 验收（host key/权限 → 远端 mirror/worktree/venv → 远端 Job/日志/取消）；
 2. 真实 CUDA 训练验收 + 数据缓存/导出/采样；
 3. Clover 生成真实权重验收、Project/图层 UI 收尾；
-4. 队列完整重启验收、Gradio/27 GB、设备维护；
-5. WebUI/更新、打包。
+4. 远端 Instance 真实 host 验收、远端模型下载、远端 runner 结果回传；
+5. 队列完整重启验收、Gradio/27 GB、设备维护；
+6. 真实签名安装包/electron-updater、打包。

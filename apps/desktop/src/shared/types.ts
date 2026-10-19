@@ -1,3 +1,5 @@
+import type { ReleaseHomeCopy, ReleaseInstaller } from './release'
+
 export type CheckStatus = 'ok' | 'warn' | 'error' | 'unknown'
 
 export type CheckActionKind =
@@ -118,7 +120,9 @@ export interface Settings {
   modelsRoot: string | null
   pythonPath: string | null
   autoCheckUpdates: boolean
+  updateChannel: 'stable' | 'beta'
   dismissedAnnouncements: string[]
+  dismissedUpdateVersion: string | null
   sidebarCollapsed: boolean
   galleryRoots: string[]
   homeBackground: string | null
@@ -156,7 +160,13 @@ export interface UpdateState {
   updateAvailable: boolean
   channel: 'stable' | 'beta'
   manifestSource: 'local' | 'remote' | 'cache' | 'none'
+  home?: ReleaseHomeCopy
   announcements: Announcement[]
+  releaseNotes?: string
+  publishedAt?: string
+  releaseUrl?: string
+  installer?: ReleaseInstaller | null
+  mandatory?: boolean
   error?: string
 }
 
@@ -179,6 +189,10 @@ export type InstanceChannel = 'stable' | 'experimental' | 'custom'
 export type RuntimeMode = 'shared' | 'isolated'
 export type RuntimeState = 'missing' | 'created' | 'installing' | 'ready' | 'error'
 
+export type InstancePlacement =
+  | { kind: 'local' }
+  | { kind: 'ssh'; hostId: string; hostName?: string; root: string }
+
 export interface InstanceInfo {
   id: string
   name: string
@@ -193,6 +207,8 @@ export interface InstanceInfo {
   runtimeId: string
   runtimeMode: RuntimeMode
   runtimeState: RuntimeState
+  placement: InstancePlacement
+  hostId?: string
   models: string[]
   adapters: string[]
   adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
@@ -213,6 +229,8 @@ export interface RuntimeInfo {
   lockHash: string
   kind: RuntimeMode
   state: RuntimeState
+  hostId?: string
+  remote?: boolean
   deps: string[]
   createdAt: string
 }
@@ -290,6 +308,10 @@ export interface TrainingHost {
   port?: number
   identityFile?: string
   trainerRoot: string
+  /** Remote MOSS instance worktrees; used by the device manager and remote inference. */
+  instanceRoot?: string
+  /** Remote HF-compatible model cache; never auto-uploaded from the local cache. */
+  modelsRoot?: string
   status: 'unchecked' | 'ok' | 'error'
   lastCheckedAt?: string
   error?: string
@@ -302,6 +324,22 @@ export interface TrainingHost {
     rootReady?: boolean
   }
   versions?: TrainerVersion[]
+}
+
+export interface ComputeDevice {
+  id: string
+  hostId: string
+  hostName: string
+  name: string
+  kind: DeviceKind
+  detail: string
+  memoryBytes?: number
+  available: boolean
+  source: 'local' | 'remote'
+}
+
+export interface ManagedHost extends TrainingHost {
+  devices: ComputeDevice[]
 }
 
 export interface TrainerVersion {
@@ -353,8 +391,11 @@ export interface TrainerRuntimeInfo {
   createdAt: string
 }
 
-export type LaunchBackend = 'official' | 'clover'
+export type WorkspaceKind = 'official' | 'clover'
 export type DeviceKind = 'mps' | 'cuda' | 'cpu'
+export type GradioProfile = 'auto' | '16gb' | '24gb' | '48gb'
+export type GradioListen = 'local' | 'lan'
+export type GradioOpenMode = 'browser' | 'app-window' | 'copy'
 
 export interface LaunchDevice {
   id: string
@@ -363,17 +404,39 @@ export interface LaunchDevice {
   detail: string
   memoryBytes?: number
   available: boolean
+  hostId?: string
+  source?: 'local' | 'remote'
+}
+
+/**
+ * Launch-level options for the official Gradio process.
+ *
+ * This intentionally mirrors `gradio_app.py`'s argparse surface only. Sampling
+ * parameters (steps/CFG/SLG/...) are owned by the Gradio page, not by the
+ * launcher, and must not be added here without a new product decision.
+ */
+export interface GradioLaunchConfig {
+  model?: string
+  modelRoot?: string
+  localFilesOnly: boolean
+  outputDir?: string
+  promptDefaults?: string
+  profile: GradioProfile
+  listen: GradioListen
+  port: number | null
+  openMode: GradioOpenMode
+  extraArgs?: string
 }
 
 export interface LaunchCase {
   id: string
   name: string
   instanceId: string
-  backend: LaunchBackend
+  workspace: WorkspaceKind
   deviceId: string
+  /** Clover runner sampling profile; Gradio has its own config.profile. */
   profile: 'base' | 'dmd8'
-  port?: number | null
-  extraArgs?: string
+  gradio?: GradioLaunchConfig
   createdAt: string
   lastUsedAt?: string
 }
@@ -412,11 +475,10 @@ export interface LaunchStartInput {
   instanceId: string
   caseId?: string
   caseName?: string
-  backend: LaunchBackend
+  workspace: WorkspaceKind
   deviceId: string
   profile: 'base' | 'dmd8'
-  port?: number | null
-  extraArgs?: string
+  gradio?: GradioLaunchConfig
 }
 
 export interface LaunchRow {
@@ -425,11 +487,10 @@ export interface LaunchRow {
   caseName: string
   instanceId: string
   instanceName: string
-  backend: LaunchBackend
+  workspace: WorkspaceKind
   deviceId: string
   profile: 'base' | 'dmd8'
-  port?: number | null
-  extraArgs?: string
+  gradio?: GradioLaunchConfig
   jobId?: string
   state: 'queued' | 'starting' | 'running' | 'stopped' | 'failed'
   queuedAt: string
@@ -441,7 +502,7 @@ export interface JobStartInput {
   instanceId: string
   caseId?: string
   caseName?: string
-  backend?: LaunchBackend
+  workspace?: WorkspaceKind
   deviceId?: string
   kind?: 'inference' | 'training'
   trainerVersionId?: string
@@ -454,8 +515,7 @@ export interface JobStartInput {
   seed: number
   profile?: 'base' | 'dmd8'
   mode?: 'runner' | 'gradio' | 'simulate'
-  port?: number | null
-  extraArgs?: string
+  gradio?: GradioLaunchConfig
 }
 
 export interface JobProgress {
@@ -473,7 +533,8 @@ export interface JobRecord {
   instanceName: string
   caseId?: string
   caseName?: string
-  backend?: LaunchBackend
+  workspace?: WorkspaceKind
+  gradio?: GradioLaunchConfig
   deviceId?: string
   kind?: 'inference' | 'training'
   trainerVersionId?: string

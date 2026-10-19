@@ -4,7 +4,8 @@
 - 应用版本：`0.1.0`（开发版）
 - 基线：[status.md](status.md)
 - 当前判断：训练器/SSH 远端代码基座、Clover HTTP/WS 基座、Project JSON/基础图层已完成；
-  下一步是 **真实 host/CUDA 验收**、**Clover 真实生成/Project UI 收尾**，再进 WebUI/打包。
+  下一步是 **真实 host/CUDA 验收**、**Clover 真实生成/Project UI 收尾**；
+  发布源/更新弹窗/下载校验已接，真实签名安装与 electron-updater 排在 P2。
 
 > 这里只列**尚未完成**的工作和验收条件。已完成能力见 [status.md](status.md)。
 > 不使用虚构日期；按 P0/P1/P2 和依赖关系排。
@@ -13,21 +14,24 @@
 
 已具备：
 
-- 四窗口：启动器 / 创作 / 终端 / Kohaku Trainer；
+- 五窗口：启动器 / 创作 / 终端 / Kohaku Trainer / 设备管理器；
 - 环境、实例、运行时、模型、下载、画廊、诊断；
 - Supervisor + runner + 终端；推理/训练共用 Job 表；
 - Trainer 仓库/版本/环境/训练窗口/本机训练 Job；
 - SSH host 探测、远端 mirror/worktree/venv/train/export 代码路径（fake ssh）；
 - 队列落盘、实例 pin 切换、适配器绑定、设备启用/禁用；
 - 独立 HTTP/WS Clover 后端（health/WS/RPC/simulate）；
-- Project JSON+assets、自动保存、基础图层。
+- Project JSON+assets、自动保存、基础图层；
+- GitHub Release `release.md`、公告/模型镜像、更新弹窗、sha256 下载/打开安装包。
 
 未具备：
 
 - 真实 SSH host / CUDA 验收；
 - 真实训练导出/采样；
 - Clover 真实生成验收、Project 完整 UI；
-- WebUI、更新安装、打包。
+- 真实 GitHub Release 资产、签名/公证安装包、electron-updater、打包。
+
+> Clover Creator 浏览器版不做（ADR-0004），不列为待办；这里只保留 Electron 创作窗口。
 
 ## 1. P0 · SSH 远端训练
 
@@ -54,6 +58,31 @@
 - 远端启动训练，终端出现 `step N loss=...`；
 - 停止/取消可用，JS 进程退出后远端无孤儿进程；
 - 本地/远端训练 Job 在终端可区分 host。
+
+## 1.1 P0 · 远端 Instance 与官方 Gradio 隧道
+
+**当前进度**：设备管理器、Instance placement、远端 mirror/worktree/venv/删除/切版本、
+官方 Gradio SSH 隧道、取消生命周期与输出回传已落地，并用 fake ssh 做端到端验证；
+远端模型下载、远端 runner、真实 host 未实现/未验收。
+
+范围：
+
+1. Instance placement：`local | { kind: 'ssh', hostId, root }`；远端实例只能选同 host 设备；
+2. 远端部署：复用设备管理器的 host，按 commit 建 mirror/worktree，建 venv，
+   检查/下载远端模型缓存（不自动上传本机 27 GB）；
+3. 官方 Gradio：远端启动 `gradio_app.py --host 127.0.0.1 --port <remote>`，本地
+   `ssh -N -L <local>:127.0.0.1:<remote>` 回传；启动器同时管理隧道与远端进程；
+4. 结果回传：不修改上游；远端输出目录观察器 + scp/rsync 拉回本地画廊；
+5. 诊断：host key、权限、端口占用、CUDA/磁盘/模型缺失都进入现有诊断；
+6. Home 设备选择只显示与实例 placement 兼容的设备。
+
+验收：
+
+- fake ssh 下完成远端 Instance 部署 + Gradio 隧道，本地 URL 可打开（已通过）；
+- 停止时隧道和远端进程一起结束，无孤儿（fake ssh 已验证 Job=canceled、隧道关闭）；
+- 远端结果出现在本地画廊/终端，远端文件不被静默删除（官方 Gradio 输出目录 `find + scp`
+  已 fake 验证；远端 runner 与真实 host 大文件同步未验收）；
+- 真实 host 验收前保持 🟡，不写成 ✅。
 
 ## 2. P0 · 真实 CUDA 训练与训练收尾
 
@@ -136,21 +165,27 @@
 - 真实权重启动 Gradio 成功；
 - 队列/设备行为有测试或可重复脚本。
 
-## 6. P2 · WebUI 与更新
+## 6. P2 · 更新收尾
+
+已具备：`release.md` 发布源、公告/模型表镜像、版本比较、更新弹窗、
+sha256 下载与打开安装包。
 
 范围：
 
-1. Fastify + SSE/HTTP，复用服务层；
-2. token/局域网开关/二维码；
-3. 队列、画廊、日志的浏览器视图；
-4. manifest 通道/ETag/签名；
-5. 更新下载/校验/重启安装（macOS 先行）。
+1. 真实 GitHub Release latest/beta 资产验收；
+2. 签名/公证安装包与 Windows NSIS；
+3. electron-updater 静默安装/重启；
+4. 下载缓存清理/断点续传（可选）。
 
 验收：
 
-- 桌面与浏览器核心行为一致；
-- 篡改 manifest/包被拒绝；
-- 更新可暂停/续传，安装后版本正确。
+- `release.md` 版本变化触发弹窗，同版本“稍后”不再自动弹；
+- sha256 不匹配的安装包被拒绝；
+- 签名安装包可安装并重启到新版本；
+- stable/beta 不混淆，beta 不污染 latest。
+
+> Clover Creator 不做浏览器 WebUI / served UI（ADR-0004）；如果未来要做纯队列/日志
+> 监控页，另立 ADR，不把 Creator 的 Electron 架构改成双通道。
 
 ## 7. P2 · 打包与 Beta
 
@@ -170,7 +205,8 @@ MPS 仅 oracle、MLX 条件触发。通过 `RuntimeAdapter` 接入，UI/协议�
 
 ```
 SSH 远端执行 ──> 远端真实 CUDA 验收 ──> 导出/采样执行
-Clover 常驻后端 ──> Project/图层 ──> WebUI 复用
+Clover 常驻后端 ──> Project/图层
+release.md/下载校验 ──> 签名安装/electron-updater
 队列落盘/设备维护 ──> 打包/设备矩阵
 Gradio 真机 + 27 GB 验收 ──> Beta
 ```

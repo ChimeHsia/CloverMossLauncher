@@ -16,7 +16,8 @@ const api = {
     | 'launcher'
     | 'creator'
     | 'terminal'
-    | 'trainer',
+    | 'trainer'
+    | 'devices',
   channel: process.argv.find((arg) => arg.startsWith('--clover-channel='))?.split('=')[1] ?? 'dev',
 }
 

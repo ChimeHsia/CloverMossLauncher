@@ -1,11 +1,12 @@
-import { Bell, BellOff, House, PanelLeftClose, PanelLeftOpen, SquareTerminal, Wand2 } from 'lucide-react'
+import { Bell, BellOff, Cpu, House, PanelLeftClose, PanelLeftOpen, SquareTerminal, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { t } from '../lib/i18n'
 import { useApp } from '../store'
 import { openWindow } from '../lib/windows'
 import { cn, IconButton } from './ui'
 
 interface AppTitlebarProps {
-  kind: 'launcher' | 'creator' | 'terminal' | 'trainer'
+  kind: 'launcher' | 'creator' | 'terminal' | 'trainer' | 'devices'
   collapsed?: boolean
   onToggleSidebar?: () => void
   notificationsOpen?: boolean
@@ -23,7 +24,7 @@ export function AppTitlebar({
   notificationsOpen,
   onToggleNotifications,
   unread = 0,
-  appName = 'CloverMoss',
+  appName = t('app.name'),
   appTag,
   right,
 }: AppTitlebarProps): React.JSX.Element {
@@ -74,6 +75,9 @@ export function AppTitlebar({
       <div className="no-drag flex items-center gap-0.5">
         {kind === 'launcher' ? (
           <>
+            <IconButton label="打开设备管理器" className="size-7" onClick={() => openWindow('devices')}>
+              <Cpu className="size-3.5" />
+            </IconButton>
             <IconButton label="打开创作窗口" className="size-7" onClick={() => openWindow('creator')}>
               <Wand2 className="size-3.5" />
             </IconButton>

@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, shell } from 'electron'
+import { app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { ZodError, type ZodType } from 'zod'
 import { Events, Ipc } from '@shared/channels'
 import { schemas } from '@shared/schemas'
@@ -15,6 +15,13 @@ import {
   updateAdapterBindings,
   updateInstance,
 } from './services/instances'
+import {
+  ensureRemoteMirror,
+  installRemoteRuntime as installRemoteMossRuntime,
+  remoteBranches as remoteMossBranches,
+  remoteCommits as remoteMossCommits,
+  remoteRoots,
+} from './services/remoteInstances'
 import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload } from './services/models'
 import { galleryDetail, listGallery, revealInFolder } from './services/gallery'
 import { cancelJob, getJob, getJobLogs, inputJob, listJobs, startJob } from './services/supervisor'
@@ -23,8 +30,9 @@ import { ensureMirror, listBranches, listCommits } from './services/git'
 import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
 import { checkUpdates, dismissAnnouncement } from './services/updates'
+import { cancelUpdateDownload, downloadUpdate } from './services/updateDownload'
 import { isInside } from './lib/paths'
-import { openWindow } from './windows'
+import { openGradioWindow, openWindow } from './windows'
 import { listDevices } from './services/devices'
 import { listCases, removeCase, saveCase } from './services/cases'
 import { getOnboardingStatus } from './services/onboarding'
@@ -43,7 +51,14 @@ import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 import { getBackendInfo } from './services/backend'
 import { deleteProject, getProject, listProjects, saveProject } from './services/projects'
 import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
-import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost } from './services/trainingHosts'
+import {
+  listManagedHosts,
+  listTrainingHosts,
+  removeTrainingHost,
+  saveTrainingHost,
+  testManagedHost,
+  testTrainingHost,
+} from './services/trainingHosts'
 import {
   remoteBranches,
   remoteCommits,
@@ -104,7 +119,38 @@ export function registerIpc(): void {
     return true
   })
 
+  handle(Ipc.gradioOpen, schemas.gradioOpen, ({ url, title }) => {
+    openGradioWindow(url, title)
+    return true
+  })
+
+  handle(Ipc.copyText, schemas.copyText, ({ text }) => {
+    clipboard.writeText(text)
+    return true
+  })
+
   handle(Ipc.devicesList, null, () => listDevices(getSettings()))
+
+  handle(Ipc.hostsList, null, () => listManagedHosts(getSettings()))
+
+  handle(Ipc.hostsSave, schemas.hostSave, (input) => {
+    const saved = saveTrainingHost(input)
+    const managed = listManagedHosts(getSettings()).find((host) => host.id === saved.id) ?? saved
+    emit(Events.hostsChanged, { id: saved.id })
+    return managed
+  })
+
+  handle(Ipc.hostsRemove, schemas.hostId, ({ id }) => {
+    removeTrainingHost(id)
+    emit(Events.hostsChanged, { id })
+    return true
+  })
+
+  handle(Ipc.hostsTest, schemas.hostId, async ({ id }) => {
+    const host = await testManagedHost(getSettings(), id)
+    emit(Events.hostsChanged, { id })
+    return host
+  })
 
   handle(Ipc.casesList, null, () => listCases())
 
@@ -200,6 +246,12 @@ export function registerIpc(): void {
 
   handle(Ipc.updatesCheck, null, () => checkUpdates(getSettings()))
 
+  handle(Ipc.updatesDownload, schemas.updatesDownload, ({ version, installer }) =>
+    downloadUpdate(version, installer),
+  )
+
+  handle(Ipc.updatesCancel, schemas.updatesCancel, ({ version }) => cancelUpdateDownload(version))
+
   handle(Ipc.announcementsDismiss, schemas.announcementsDismiss, ({ id }) => {
     dismissAnnouncement(id)
     return true
@@ -217,22 +269,41 @@ export function registerIpc(): void {
 
   handle(Ipc.instanceCreate, schemas.instanceCreate, (input) => createInstance(input, getSettings()))
 
-  handle(Ipc.instanceDelete, schemas.instanceDelete, ({ id, keepOutputs }) => deleteInstance(id, keepOutputs))
+  handle(Ipc.instanceRemoteBranches, schemas.instanceRemoteHost, async ({ hostId }) => {
+    const roots = await remoteRoots(getSettings(), hostId)
+    await ensureRemoteMirror(roots)
+    return remoteMossBranches(roots)
+  })
 
-  handle(Ipc.instanceUpdate, schemas.instanceUpdate, ({ id, commit }) => updateInstance(id, commit))
+  handle(Ipc.instanceRemoteCommits, schemas.instanceRemoteCommits, async ({ hostId, branch, limit }) => {
+    const roots = await remoteRoots(getSettings(), hostId)
+    await ensureRemoteMirror(roots)
+    return remoteMossCommits(roots, branch, limit)
+  })
+
+  handle(Ipc.instanceDelete, schemas.instanceDelete, ({ id, keepOutputs }) =>
+    deleteInstance(id, keepOutputs, getSettings()),
+  )
+
+  handle(Ipc.instanceUpdate, schemas.instanceUpdate, ({ id, commit }) =>
+    updateInstance(id, commit, getSettings()),
+  )
 
   handle(Ipc.instanceAdapters, schemas.instanceAdapters, ({ id, bindings }) => updateAdapterBindings(id, bindings))
 
   handle(Ipc.instanceOpen, schemas.instanceOpen, async ({ id }) => {
     const instance = await getInstance(id)
     if (!instance) throw new Error('实例不存在')
+    if (instance.placement.kind === 'ssh') {
+      throw new Error('远端实例目录在 SSH host 上；请通过设备管理器/终端访问')
+    }
     return shell.openPath(instance.path)
   })
 
   handle(Ipc.runtimeInstall, schemas.runtimeInstall, async ({ instanceId }) => {
     const instance = await getInstance(instanceId)
     if (!instance) throw new Error('实例不存在')
-    const runtime = await installDeps(instance.runtimeId, getSettings(), (line, stream) => {
+    const logger = (line: string, stream: 'stdout' | 'stderr' = 'stdout'): void => {
       emit(Events.runtimeLog, {
         runtimeId: instance.runtimeId,
         instanceId,
@@ -240,7 +311,16 @@ export function registerIpc(): void {
         stream,
         at: new Date().toISOString(),
       })
-    })
+    }
+    if (instance.placement.kind === 'ssh') {
+      const runtime = await readRuntime(instance.runtimeId)
+      if (!runtime) throw new Error('远端运行时记录不存在')
+      const roots = await remoteRoots(getSettings(), instance.placement.hostId)
+      const next = await installRemoteMossRuntime(roots, runtime, getSettings(), logger)
+      emit(Events.instancesChanged, { id: instanceId })
+      return next
+    }
+    const runtime = await installDeps(instance.runtimeId, getSettings(), logger)
     emit(Events.instancesChanged, { id: instanceId })
     return runtime
   })

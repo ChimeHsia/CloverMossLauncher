@@ -99,7 +99,9 @@ export function RunPage(): React.JSX.Element {
         cfg: active.params.cfg,
         seed: active.params.seed,
         profile: active.params.profile,
-        mode: active.mode === 'simulate' ? 'simulate' : 'runner',
+        workspace: active.workspace,
+        gradio: active.gradio,
+        mode: active.mode === 'simulate' ? 'simulate' : active.mode === 'gradio' ? 'gradio' : 'runner',
       })
       setActiveJob(job.id)
       toast.push('已重新提交任务', 'success')

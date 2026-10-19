@@ -1,33 +1,55 @@
 import {
   ChevronDown,
+  Cpu,
   ExternalLink,
   FolderCog,
   ListChecks,
   Play,
   Settings2,
+  SlidersHorizontal,
   Square,
   SquareTerminal,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Select as AppsSelect } from '@openai/apps-sdk-ui/components/Select'
-import { Ipc } from '@shared/channels'
-import type { LaunchRow, LaunchStartInput } from '@shared/types'
-import { call } from '../lib/api'
+import { Events, Ipc } from '@shared/channels'
+import type {
+  GradioLaunchConfig,
+  JobRecord,
+  LaunchCase,
+  LaunchRow,
+  LaunchStartInput,
+  ManagedHost,
+  WorkspaceKind,
+} from '@shared/types'
+import {
+  GRADIO_LISTEN_LABELS,
+  GRADIO_OPEN_LABELS,
+  createDefaultGradioConfig,
+  gradioSummary,
+  normalizeGradioConfig,
+} from '@shared/launch'
+import { call, onEvent } from '../lib/api'
+import { openGradioUi } from '../lib/openGradio'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
+import { GradioSettingsSheet } from '../components/GradioSettingsSheet'
 import { Button, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
     <label className="flex min-w-0 flex-col gap-0.5">
-      <span className="px-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-tertiary)]">
         {label}
       </span>
       {children}
     </label>
   )
 }
+
+const launchControlClass =
+  'h-[30px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[11px] text-[var(--color-text)] transition hover:border-[var(--color-border)] hover:bg-white/[0.06]'
 
 function Select({
   value,
@@ -51,7 +73,7 @@ function Select({
       options={options}
       disabled={disabled}
       onChange={(option) => onChange(option.value)}
-      triggerClassName={cn('min-w-[92px] text-[10.5px]', className)}
+      triggerClassName={cn(launchControlClass, 'min-w-[92px]', className)}
     />
   )
 }
@@ -77,51 +99,76 @@ export function HomePage(): React.JSX.Element {
   const toast = useToast()
   const instances = useApp((state) => state.instances)
   const allDevices = useApp((state) => state.devices)
-  const devices = allDevices.filter((item) => item.available)
   const cases = useApp((state) => state.cases)
   const launchRows = useApp((state) => state.launchRows)
   const jobs = useApp((state) => state.jobs)
   const env = useApp((state) => state.env)
+  const homeCopy = useApp((state) => state.updates?.home)
   const startLaunch = useApp((state) => state.startLaunch)
   const stopLaunch = useApp((state) => state.stopLaunch)
   const setActiveJob = useApp((state) => state.setActiveJob)
   const refreshCases = useApp((state) => state.refreshCases)
 
   const [caseId, setCaseId] = useState('new')
-  const [backend, setBackend] = useState<'official' | 'clover'>('official')
+  const [workspace, setWorkspace] = useState<WorkspaceKind>('official')
   const [instanceId, setInstanceId] = useState('')
   const [deviceId, setDeviceId] = useState('')
+  const [remoteHosts, setRemoteHosts] = useState<ManagedHost[]>([])
   const [profile, setProfile] = useState<'base' | 'dmd8'>(
     env?.recommendation.profile === 'base' ? 'base' : 'dmd8',
   )
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [gradioOpen, setGradioOpen] = useState(false)
+  const [gradio, setGradio] = useState<GradioLaunchConfig>(() => createDefaultGradioConfig())
   const [caseName, setCaseName] = useState('')
-  const [port, setPort] = useState('')
-  const [extraArgs, setExtraArgs] = useState('')
   const [launching, setLaunching] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [sort, setSort] = useState<'started' | 'name'>('started')
+
+  const selectedCase = cases.find((item) => item.id === caseId)
+  const instance = instances.find((item) => item.id === instanceId)
+  const devices = useMemo(() => {
+    const placement = instance?.placement
+    if (placement?.kind === 'ssh') {
+      const host = remoteHosts.find((item) => item.id === placement.hostId)
+      return (host?.devices ?? []).filter((item) => item.available)
+    }
+    return allDevices.filter((item) => item.available)
+  }, [allDevices, instance, remoteHosts])
 
   useEffect(() => {
     if (!instanceId && instances[0]) setInstanceId(instances[0].id)
   }, [instanceId, instances])
 
   useEffect(() => {
+    void call<ManagedHost[]>(Ipc.hostsList)
+      .then(setRemoteHosts)
+      .catch(() => undefined)
+  }, [instance?.placement.kind === 'ssh' ? instance.placement.hostId : 'local'])
+
+  useEffect(
+    () =>
+      onEvent(Events.hostsChanged, () => {
+        void call<ManagedHost[]>(Ipc.hostsList)
+          .then(setRemoteHosts)
+          .catch(() => undefined)
+      }),
+    [],
+  )
+
+  useEffect(() => {
     if (!devices.some((item) => item.id === deviceId)) setDeviceId(devices[0]?.id ?? '')
   }, [deviceId, devices])
 
-  const selectedCase = cases.find((item) => item.id === caseId)
-  const instance = instances.find((item) => item.id === instanceId)
-
   useEffect(() => {
     if (!selectedCase) return
-    setBackend(selectedCase.backend)
+    setWorkspace(selectedCase.workspace)
     setInstanceId(selectedCase.instanceId)
     setDeviceId(selectedCase.deviceId)
     setProfile(selectedCase.profile)
     setCaseName(selectedCase.name)
-    setPort(selectedCase.port ? String(selectedCase.port) : '')
-    setExtraArgs(selectedCase.extraArgs ?? '')
+    setGradio(normalizeGradioConfig(selectedCase.gradio))
+    setGradioOpen(false)
   }, [selectedCase])
 
   const activeRows = useMemo(() => {
@@ -136,6 +183,12 @@ export function HomePage(): React.JSX.Element {
 
   const runningCount = activeRows.filter((row) => row.state === 'running' || row.state === 'starting').length
   const queuedCount = activeRows.filter((row) => row.state === 'queued').length
+  const gradioSummaryText = useMemo(() => gradioSummary(gradio), [gradio])
+  const gradioOpenText = useMemo(
+    () =>
+      `${GRADIO_OPEN_LABELS[gradio.openMode]}${gradio.listen === 'lan' ? ` · ${GRADIO_LISTEN_LABELS.lan}` : ''}`,
+    [gradio],
+  )
 
   async function launch(): Promise<void> {
     if (!instanceId) {
@@ -146,7 +199,7 @@ export function HomePage(): React.JSX.Element {
       toast.push('没有可用设备', 'error')
       return
     }
-    if (backend === 'clover') {
+    if (workspace === 'clover') {
       toast.push('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio', 'info')
       return
     }
@@ -156,13 +209,13 @@ export function HomePage(): React.JSX.Element {
         instanceId,
         caseId: selectedCase?.id,
         caseName: caseName || selectedCase?.name,
-        backend,
+        workspace,
         deviceId,
         profile,
-        port: port ? Number(port) : null,
-        extraArgs,
+        gradio: workspace === 'official' ? normalizeGradioConfig(gradio) : undefined,
       }
       const row = await startLaunch(input)
+      setGradioOpen(false)
       toast.push(row.state === 'queued' ? '设备被占用，已排队' : '已启动', 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -174,22 +227,51 @@ export function HomePage(): React.JSX.Element {
   async function saveCase(): Promise<void> {
     if (!instanceId) return
     try {
-      await call(Ipc.casesSave, {
+      const saved = await call<LaunchCase>(Ipc.casesSave, {
         id: selectedCase?.id,
-        name: caseName.trim() || `${instance?.name ?? 'MOSS'} · ${backend === 'official' ? '官方' : 'Clover'}`,
+        name:
+          caseName.trim() ||
+          `${instance?.name ?? 'MOSS'} · ${workspace === 'official' ? '官方' : 'Clover'}`,
         instanceId,
-        backend,
+        workspace,
         deviceId,
         profile,
-        port: port ? Number(port) : null,
-        extraArgs,
+        gradio: workspace === 'official' ? normalizeGradioConfig(gradio) : undefined,
       })
       await refreshCases()
+      setCaseId(saved.id)
       toast.push('启动配置已保存', 'success')
       setAdvancedOpen(false)
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     }
+  }
+
+  function chooseCase(value: string): void {
+    setCaseId(value)
+    if (value !== 'new') return
+    setCaseName('')
+    setWorkspace('official')
+    setGradio(createDefaultGradioConfig())
+    setAdvancedOpen(false)
+    setGradioOpen(false)
+    setInstanceId(instances[0]?.id ?? '')
+    setDeviceId(devices[0]?.id ?? '')
+    setProfile(env?.recommendation.profile === 'base' ? 'base' : 'dmd8')
+  }
+
+  function openGradioInterface(
+    url: string,
+    mode: GradioLaunchConfig['openMode'] = 'browser',
+    title?: string,
+  ): void {
+    void openGradioUi(url, mode, title)
+      .then((result) => {
+        if (result === 'copied') toast.push('Gradio 地址已复制', 'success')
+      })
+      .catch((error: unknown) =>
+        toast.push(error instanceof Error ? error.message : String(error), 'error'),
+      )
   }
 
   function openTerminal(row: LaunchRow): void {
@@ -201,24 +283,28 @@ export function HomePage(): React.JSX.Element {
     return devices.find((item) => item.id === id)?.name ?? id
   }
 
+  function rowJob(row: LaunchRow): JobRecord | undefined {
+    return jobs.find((item) => item.id === row.jobId)
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="relative z-10 mx-auto flex w-full max-w-[880px] flex-1 flex-col">
       <header className="pt-4">
         <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
-          Launcher
+          当前篇章 · {homeCopy?.chapter ?? '万象初绘'}
         </div>
         <h1 className="mt-1.5 text-[25px] font-semibold leading-tight tracking-[-0.02em]">
-          今天想启动哪个 Case？
+          {homeCopy?.title ?? '一念落纸上，万象入画来。'}
         </h1>
         <p className="mt-1 max-w-[560px] text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
-          选好后端、实例与设备，在底部启动。运行中的 Case 会像任务表一样收在启动条上方。
+          {homeCopy?.subtitle ?? '选好工作台、实例与设备，开始今天的创作。'}
         </p>
       </header>
 
       <div className="min-h-[18vh] flex-1" />
 
-      <section className="mb-12 overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.025]">
+      <section className="glass-strong mb-12 overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)]">
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
@@ -249,7 +335,7 @@ export function HomePage(): React.JSX.Element {
               {activeRows.map((row) => {
                 const running = row.state === 'running' || row.state === 'starting'
                 const queued = row.state === 'queued'
-                const job = jobs.find((item) => item.id === row.jobId)
+                const job = rowJob(row)
                 return (
                   <div
                     key={row.id}
@@ -285,7 +371,13 @@ export function HomePage(): React.JSX.Element {
                         <IconButton
                           label="打开界面"
                           className="size-6"
-                          onClick={() => void call(Ipc.openExternal, { url: job.url! })}
+                          onClick={() =>
+                            openGradioInterface(
+                              job.url!,
+                              job.gradio?.openMode ?? 'browser',
+                              job.caseName,
+                            )
+                          }
                         >
                           <ExternalLink className="size-3" />
                         </IconButton>
@@ -322,28 +414,15 @@ export function HomePage(): React.JSX.Element {
                   value={caseName}
                   onChange={(event) => setCaseName(event.target.value)}
                   placeholder="例如：日常 1024 / 官方 Gradio"
-                  className="h-7 w-[220px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60"
-                />
-              </Field>
-              <Field label="Gradio 端口">
-                <input
-                  value={port}
-                  onChange={(event) => setPort(event.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="自动"
-                  className="h-7 w-[90px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] tabular-nums outline-none focus:border-accent-500/60"
-                />
-              </Field>
-              <Field label="额外参数">
-                <input
-                  value={extraArgs}
-                  onChange={(event) => setExtraArgs(event.target.value)}
-                  placeholder="--flag value"
-                  className="h-7 w-[220px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 font-mono text-[9.5px] outline-none focus:border-accent-500/60"
+                  className="h-7 w-[240px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60"
                 />
               </Field>
               <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
-                保存为 Case
+                {selectedCase ? '保存 Case' : '保存为 Case'}
               </Button>
+              <p className="w-full text-[9px] leading-4 text-[var(--color-text-tertiary)]">
+                Gradio 的启动参数在启动条上的「Gradio」按钮里配置；这里只管理 Case 本身。
+              </p>
             </div>
           </div>
         ) : null}
@@ -352,10 +431,7 @@ export function HomePage(): React.JSX.Element {
           <Field label="Case">
             <Select
               value={caseId}
-              onChange={(value) => {
-                setCaseId(value)
-                if (value === 'new') setCaseName('')
-              }}
+              onChange={chooseCase}
               options={[
                 { value: 'new', label: '新建配置' },
                 ...cases.map((item) => ({ value: item.id, label: item.name })),
@@ -363,16 +439,15 @@ export function HomePage(): React.JSX.Element {
               className="min-w-[110px]"
             />
           </Field>
-          <Field label="后端">
+          <Field label="工作台">
             <Select
-              value={backend}
-              onChange={(value) => setBackend(value as 'official' | 'clover')}
+              value={workspace}
+              onChange={(value) => setWorkspace(value as WorkspaceKind)}
               options={[
                 { value: 'official', label: '官方 Gradio' },
                 { value: 'clover', label: 'Clover（下一轮）' },
               ]}
-              disabled={Boolean(selectedCase)}
-              className="min-w-[92px]"
+              className="min-w-[112px]"
             />
           </Field>
           <Field label="实例">
@@ -384,7 +459,7 @@ export function HomePage(): React.JSX.Element {
                   ? [{ value: '', label: '没有实例', disabled: true }]
                   : instances.map((item) => ({ value: item.id, label: item.name }))
               }
-              disabled={Boolean(selectedCase) || instances.length === 0}
+              disabled={instances.length === 0}
               className="min-w-[140px]"
             />
           </Field>
@@ -392,25 +467,72 @@ export function HomePage(): React.JSX.Element {
             <Select
               value={deviceId}
               onChange={setDeviceId}
-              options={devices.map((item) => ({ value: item.id, label: item.name }))}
-              disabled={Boolean(selectedCase)}
+              options={
+                devices.length > 0
+                  ? devices.map((item) => {
+                      const host =
+                        item.hostId && item.hostId !== 'local'
+                          ? remoteHosts.find((entry) => entry.id === item.hostId)?.name
+                          : undefined
+                      return { value: item.id, label: host ? `${item.name} · ${host}` : item.name }
+                    })
+                  : [
+                      {
+                        value: '',
+                        label:
+                          instance?.placement.kind === 'ssh'
+                            ? '远端无可用设备（先测试连接）'
+                            : '没有可用设备',
+                        disabled: true,
+                      },
+                    ]
+              }
               className="min-w-[110px]"
             />
           </Field>
-          <Field label="档位">
-            <Select
-              value={profile}
-              onChange={(value) => setProfile(value as 'base' | 'dmd8')}
-              options={[
-                { value: 'dmd8', label: '8 步 DMD' },
-                { value: 'base', label: '50 步质量' },
-              ]}
-              disabled={Boolean(selectedCase)}
-              className="min-w-[88px]"
-            />
-          </Field>
+          {workspace === 'official' ? (
+            <Field label="Gradio">
+              <button
+                type="button"
+                aria-label="Gradio 启动参数"
+                onClick={() => setGradioOpen(true)}
+                title={`${gradioSummaryText} · ${gradioOpenText}`}
+                className={cn(
+                  launchControlClass,
+                  'flex w-full min-w-[178px] max-w-[224px] items-center gap-1.5',
+                )}
+              >
+                <SlidersHorizontal className="size-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+                <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
+                  <span className="truncate text-[10.5px] leading-[13px]">{gradioSummaryText}</span>
+                  <span className="truncate text-[8px] leading-[10px] text-[var(--color-text-tertiary)]">
+                    {gradioOpenText}
+                  </span>
+                </span>
+              </button>
+            </Field>
+          ) : (
+            <Field label="档位">
+              <Select
+                value={profile}
+                onChange={(value) => setProfile(value as 'base' | 'dmd8')}
+                options={[
+                  { value: 'dmd8', label: '8 步 DMD' },
+                  { value: 'base', label: '50 步质量' },
+                ]}
+                className="min-w-[88px]"
+              />
+            </Field>
+          )}
 
           <div className="ml-auto flex items-center gap-1">
+            <IconButton
+              label="设备管理器"
+              className="size-7"
+              onClick={() => openWindow('devices')}
+            >
+              <Cpu className="size-3.5" />
+            </IconButton>
             <IconButton
               label="打开实例设置"
               className="size-7"
@@ -420,7 +542,7 @@ export function HomePage(): React.JSX.Element {
               <Settings2 className="size-3.5" />
             </IconButton>
             <IconButton
-              label="高级选项"
+              label="Case 设置"
               className={cn('size-7', advancedOpen && 'bg-white/[0.07] text-[var(--color-text)]')}
               onClick={() => setAdvancedOpen((value) => !value)}
             >
@@ -435,6 +557,16 @@ export function HomePage(): React.JSX.Element {
           </div>
         </div>
       </div>
+
+      <GradioSettingsSheet
+        open={gradioOpen}
+        value={gradio}
+        onClose={() => setGradioOpen(false)}
+        onApply={(next) => {
+          setGradio(next)
+          toast.push('Gradio 参数已应用到当前启动条', 'success')
+        }}
+      />
 
       {instances.length === 0 ? (
         <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-tertiary)]">

@@ -1,5 +1,5 @@
 const messages = {
-  'app.name': 'CloverMoss',
+  'app.name': 'Clover Moss Launcher',
   'app.tagline': 'MOSS-Image 启动器',
   'nav.home': '首页',
   'nav.studio': '创作',

@@ -52,9 +52,14 @@ Authorization: Bearer <token>
   "cfg": 1,
   "seed": 42,
   "profile": "dmd8",
+  "workspace": "clover",
   "mode": "runner"
 }
 ```
+
+`workspace` 是 `official | clover`，缺省时 `mode: "gradio"` 归为 official，其余归为
+clover。官方 Gradio 还可带启动级 `gradio` 配置（`model`/`profile`/`listen`/`port`/
+`openMode` 等）；它不包含 steps/CFG/尺寸等页面内生成参数。
 
 当前 `backend-job` 场景使用 `mode: "simulate"` 验证流程；真实 `mode: "runner"`
 需要已安装 runtime 与 27 GB SFT 权重。
@@ -72,7 +77,7 @@ ws://127.0.0.1:<port>/ws?token=<token>
 { "type": "event", "channel": "event:job-log", "payload": { "...JobLogLine": true } }
 ```
 
-主要给未来 WebUI 用；Creator 目前仍由 renderer store 的 IPC 事件更新 UI。
+主要给 Job/API 集成使用；Creator 不做浏览器版，仍由 renderer store 的 IPC 事件更新 UI。
 
 ## 4. Project 文件
 
@@ -128,7 +133,7 @@ ws://127.0.0.1:<port>/ws?token=<token>
 ## 5. 已知边界
 
 - 真实 backend 生成未验收（缺权重/runtime）；
-- WebUI 尚未实现，WS 事件只完成基础广播；
+- Clover Creator 浏览器版不做（ADR-0004）；WS 事件只完成基础广播；
 - Project 完整回放/资产重链/导入导出未做；
 - 后端 token 只保存在内存，应用重启重新生成；
 - 打包时 `backend.js` 与 `ws` 依赖的打包路径待 M6 验证。

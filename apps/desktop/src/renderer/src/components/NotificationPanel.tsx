@@ -26,7 +26,7 @@ export function NotificationPanel(): React.JSX.Element | null {
   const toggle = useApp((state) => state.setNotificationsOpen)
   const markAllRead = useApp((state) => state.markAllNotificationsRead)
   const dismissAnnouncement = useApp((state) => state.dismissAnnouncement)
-  const refreshUpdates = useApp((state) => state.refreshUpdates)
+  const checkForUpdates = useApp((state) => state.checkForUpdates)
   const unread = notifications.filter((item) => !item.read).length
 
   if (!open) return null
@@ -93,7 +93,7 @@ export function NotificationPanel(): React.JSX.Element | null {
                           if (announcement.action?.kind === 'open_url' && announcement.action.url) {
                             void call(Ipc.openExternal, { url: announcement.action.url })
                           } else if (announcement.action?.kind === 'check_update') {
-                            void refreshUpdates()
+                            void checkForUpdates()
                           }
                         }}
                       >

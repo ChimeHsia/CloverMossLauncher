@@ -29,29 +29,30 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 ## 3. 版本与修订号
 
 - 应用包版本：`package.json` / `release/manifest.json` 的 `0.1.0`；
-- 设计与文档修订号：**v0.4**（2026-10-19）；
-- UI v0.2 / v0.3 / v0.4、Trainer v0.4 是**设计与交付批次名**，不是应用 semver；
+- 设计与文档修订号：**v0.4**（2026-10-19）；UI v0.5 与 ADR-0005 是同日增量；
+- UI v0.2 / v0.3 / v0.4 / v0.5、Trainer v0.4 是**设计与交付批次名**，不是应用 semver；
 - 公告里的“开发版 0.1.0”指应用包版本。
 
 ## 4. 文档地图
 
 | 文档 | 作用 | 当前性 |
 | --- | --- | --- |
-| [../README.md](../README.md) | 项目总览、四窗口、快速开始、能力矩阵 | 当前 |
-| [product-design.md](product-design.md) | 产品定位、四窗口、启动模型、视觉规范、边界 | 当前 |
+| [../README.md](../README.md) | 项目总览、五窗口、快速开始、能力矩阵 | 当前 |
+| [product-design.md](product-design.md) | 产品定位、五窗口、启动模型、视觉规范、边界 | 当前 |
 | [architecture.md](architecture.md) | 当前代码结构、数据模型、持久化、IPC、训练/推理链路 | 当前 |
 | [status.md](status.md) | 完成度、证据、未做事项、下一轮入口 | **事实来源** |
 | [roadmap.md](roadmap.md) | 下一阶段工作流、优先级、验收条件 | 当前计划 |
 | [layout-schema.md](layout-schema.md) | 官方 layout JSON 与编辑器字段规范 | 稳定契约 |
 | [backend-and-project.md](backend-and-project.md) | Clover HTTP/WS、token、Project JSON/图层 | 当前 |
+| [release-and-updates.md](release-and-updates.md) | GitHub Release 发布源、release.md 契约、更新下载 | 当前 |
 | [model-notes.md](model-notes.md) | MOSS-Image 模型结构、预算、采样约定 | 参考资料 |
 | [research/upstream-survey.md](research/upstream-survey.md) | 上游项目调研 | 立项参考 |
 | [future-inference-engine.md](future-inference-engine.md) | V2 自研推理引擎设想 | **未排期** |
 | [benchmarks/v2-mnn-spike.md](benchmarks/v2-mnn-spike.md) | V2 MNN spike | **未排期** |
-| [decisions/](decisions/) | ADR：为什么这样选 | 历史依据 |
+| [decisions/](decisions/) | ADR：为什么这样选；发布/更新见 ADR-0005 | 历史依据 |
 | [../apps/README.md](../apps/README.md) | 开发者手册：目录、窗口、自检命令 | 当前 |
 | [../runner/README.md](../runner/README.md) | 薄 runner 协议与模拟模式 | 当前 |
-| [../release/README.md](../release/README.md) | 面向用户的内测公告 | 当前公告 |
+| [../release/README.md](../release/README.md) | 面向用户的公告/发布说明；发布时生成 release.md | 当前公告 |
 
 ## 5. 维护规则
 

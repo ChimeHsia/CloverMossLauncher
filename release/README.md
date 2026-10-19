@@ -58,7 +58,25 @@
 2. **真实 CUDA 训练验收 + 导出/采样执行**；
 3. **Clover 真实生成验收 + Project/图层 UI 收尾**；
 4. **队列完整重启验收、Gradio/27 GB、设备维护**；
-5. **WebUI + 应用内更新 + 打包**。
+5. **签名安装/electron-updater、打包/公证**；Creator 不做浏览器版（ADR-0004）。
+
+## 发布与更新（维护者）
+
+发布信息不再分散手写：`release/release.md` 由 `release/manifest.json` 和
+`release/models.json` 生成，并作为 GitHub Release 的 `release.md` 资产上传。
+
+1. 同步修改 `apps/desktop/package.json` 与 `release/manifest.json` 的 `app.version`；
+2. 在 `manifest.installers` 写入安装包：
+   `{ platform, arch, kind, url, sha256, size_bytes }`；
+   未签名构建只能手动安装，不应宣称自动更新；
+3. 运行 `pnpm release:md`，检查 `pnpm release:md:check`；
+4. 创建 GitHub Release（tag 例如 `v0.2.0`），上传 `release/release.md` 命名为
+   `release.md`，并上传安装包；
+5. 应用读取 `releases/latest/download/release.md`；开发模式优先读本地
+   `release/release.md`。beta 通道读取 pinned `beta` 资产，缺失时回退 stable。
+
+`release/models.json` 仍是模型下载目录的机器源；`release.md` 里的模型表只是为
+发布页生成的人可读镜像，不要手改表格。安装包下载完成后必须通过 sha256 才会打开。
 
 ## 已知限制
 

@@ -14,7 +14,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { Ipc } from '@shared/channels'
 import type { AppInfo, Settings } from '@shared/types'
-import defaultHomeBackground from '../assets/home-background.webp'
+import defaultHomeBackground from '../assets/home-background.png'
 import { call } from '../lib/api'
 import { cloverUrl } from '../lib/clover'
 import { bytes } from '../lib/format'
@@ -25,7 +25,7 @@ import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../compo
 
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
-  const { settings, env, devices, saveSettings, refreshEnv, refreshDevices, refreshUpdates } = useApp()
+  const { settings, env, devices, updates, saveSettings, refreshEnv, refreshDevices, checkForUpdates } = useApp()
   const [draft, setDraft] = useState<Settings | null>(settings)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [saving, setSaving] = useState(false)
@@ -102,8 +102,16 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   async function checkUpdates(): Promise<void> {
-    await refreshUpdates()
-    toast.push('已检查更新（开发模式读取本地 release/）', 'info')
+    const result = await checkForUpdates()
+    if (!result) {
+      toast.push('检查更新失败，请稍后重试', 'error')
+    } else if (result.updateAvailable) {
+      toast.push(`发现新版本 ${result.latestVersion}`, 'info')
+    } else if (result.error) {
+      toast.push(result.error, 'error')
+    } else {
+      toast.push('当前已是最新版本', 'success')
+    }
   }
 
   const selected = env?.network.selected
@@ -437,7 +445,7 @@ export function SettingsPage(): React.JSX.Element {
               <div>
                 <div className="text-[12px] font-medium">启动时检查更新</div>
                 <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
-                  读取仓库 /release 下的签名清单
+                  读取 GitHub Release 的 release.md（本地 release/ 回退）
                 </div>
               </div>
               <Switch
@@ -447,9 +455,30 @@ export function SettingsPage(): React.JSX.Element {
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
               <div>
+                <div className="text-[12px] font-medium">更新通道</div>
+                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  Beta 读取 GitHub Release 的 beta pinned 资产；缺失时回退 stable
+                </div>
+              </div>
+              <select
+                value={draft.updateChannel}
+                onChange={(event) =>
+                  patch({ updateChannel: event.target.value as Settings['updateChannel'] })
+                }
+                className="h-[30px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[11px] text-[var(--color-text)] outline-none focus:border-accent-500/60"
+              >
+                <option value="stable">稳定版</option>
+                <option value="beta">Beta</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
+              <div>
                 <div className="text-[12px] font-medium">当前版本</div>
                 <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
                   {appInfo?.version ?? env?.appVersion ?? '0.1.0'} · Electron {appInfo?.electron ?? '—'}
+                  {updates?.latestVersion && updates.latestVersion !== (appInfo?.version ?? env?.appVersion)
+                    ? ` · 最新 ${updates.latestVersion}`
+                    : ''}
                 </div>
               </div>
               <Button tone="secondary" onClick={() => void checkUpdates()}>
@@ -459,7 +488,8 @@ export function SettingsPage(): React.JSX.Element {
               </Button>
             </div>
             <p className="text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
-              开发模式会优先读取本地 release/manifest.json，便于测试公告与更新流程。
+              开发模式优先读取本地 release/release.md；正式包读取 GitHub Release 的 latest 资产，
+              失败时回退 raw/缓存。安装包必须带 sha256。
             </p>
           </div>
         </Card>
@@ -467,11 +497,11 @@ export function SettingsPage(): React.JSX.Element {
         <Card className="px-5 py-4">
           <h2 className="text-[13px] font-semibold">{t('settings.about')}</h2>
           <div className="mt-3 space-y-2 text-[11.5px]">
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-[var(--color-text-tertiary)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] pb-3">
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--color-text-tertiary)]">
                 <Info className="size-3.5" /> 产品
               </span>
-              <span>CloverMoss Launcher</span>
+              <span className="text-right text-[12px] font-semibold">{t('app.name')}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-[var(--color-text-tertiary)]">

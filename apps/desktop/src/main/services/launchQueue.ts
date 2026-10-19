@@ -1,10 +1,47 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LaunchRow } from '@shared/types'
+import { normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
 import { paths } from '../lib/paths'
 
 const FILE = () => join(paths.root(), 'launch-queue.json')
+const STATES = new Set<LaunchRow['state']>(['queued', 'starting', 'running', 'stopped', 'failed'])
 let rows: LaunchRow[] | null = null
+
+interface StoredRow extends Partial<LaunchRow> {
+  backend?: unknown
+  port?: unknown
+  extraArgs?: unknown
+}
+
+function migrate(stored: StoredRow): LaunchRow | null {
+  if (!stored.id || !stored.instanceId) return null
+  const workspace = normalizeWorkspace(stored.workspace ?? stored.backend)
+  const legacyPort = typeof stored.port === 'number' ? stored.port : null
+  const legacyArgs = typeof stored.extraArgs === 'string' ? stored.extraArgs : undefined
+  const gradioInput =
+    stored.gradio ??
+    (legacyPort !== null || legacyArgs ? { port: legacyPort, extraArgs: legacyArgs } : undefined)
+  const now = new Date().toISOString()
+  return {
+    id: stored.id,
+    caseId: typeof stored.caseId === 'string' ? stored.caseId : undefined,
+    caseName: typeof stored.caseName === 'string' && stored.caseName ? stored.caseName : stored.instanceId,
+    instanceId: stored.instanceId,
+    instanceName: typeof stored.instanceName === 'string' ? stored.instanceName : stored.instanceId,
+    workspace,
+    deviceId: typeof stored.deviceId === 'string' ? stored.deviceId : 'mps',
+    profile: stored.profile === 'dmd8' ? 'dmd8' : 'base',
+    gradio: workspace === 'official' || gradioInput ? normalizeGradioConfig(gradioInput) : undefined,
+    jobId: typeof stored.jobId === 'string' ? stored.jobId : undefined,
+    state: STATES.has(stored.state as LaunchRow['state'])
+      ? (stored.state as LaunchRow['state'])
+      : 'failed',
+    queuedAt: typeof stored.queuedAt === 'string' ? stored.queuedAt : now,
+    startedAt: typeof stored.startedAt === 'string' ? stored.startedAt : undefined,
+    error: typeof stored.error === 'string' ? stored.error : undefined,
+  }
+}
 
 function ensure(): LaunchRow[] {
   if (rows) return rows
@@ -13,8 +50,10 @@ function ensure(): LaunchRow[] {
       rows = []
       return rows
     }
-    const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as LaunchRow[]
-    rows = Array.isArray(parsed) ? parsed : []
+    const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as StoredRow[]
+    rows = Array.isArray(parsed)
+      ? parsed.map(migrate).filter((item): item is LaunchRow => item !== null)
+      : []
   } catch {
     rows = []
   }

@@ -1,7 +1,33 @@
 import { z } from 'zod'
+import { releaseInstallerSchema } from './release'
 
 const pathLike = z.string().min(1).max(4096)
 const urlLike = z.string().min(8).max(2048).regex(/^https?:\/\//)
+
+const gradioConfig = z.object({
+  model: z.string().max(4096).optional(),
+  modelRoot: z.string().max(4096).optional(),
+  localFilesOnly: z.boolean().default(false),
+  outputDir: z.string().max(4096).optional(),
+  promptDefaults: z.string().max(4096).optional(),
+  profile: z.enum(['auto', '16gb', '24gb', '48gb']).default('auto'),
+  listen: z.enum(['local', 'lan']).default('local'),
+  port: z.number().int().min(1024).max(65535).nullable().default(null),
+  openMode: z.enum(['browser', 'app-window', 'copy']).default('browser'),
+  extraArgs: z.string().max(4000).optional(),
+})
+
+const hostSaveSchema = z.object({
+  id: z.string().max(80).optional(),
+  name: z.string().max(120).default(''),
+  host: z.string().min(1).max(255),
+  user: z.string().min(1).max(120),
+  port: z.number().int().min(1).max(65535).optional(),
+  identityFile: z.string().max(4096).optional(),
+  trainerRoot: z.string().min(1).max(4096),
+  instanceRoot: z.string().max(4096).optional(),
+  modelsRoot: z.string().max(4096).optional(),
+})
 
 export const schemas = {
   settingsUpdate: z
@@ -15,6 +41,8 @@ export const schemas = {
       modelsRoot: z.string().max(4096).nullable(),
       pythonPath: z.string().max(4096).nullable(),
       autoCheckUpdates: z.boolean(),
+      updateChannel: z.enum(['stable', 'beta']),
+      dismissedUpdateVersion: z.string().max(80).nullable(),
       sidebarCollapsed: z.boolean(),
       galleryRoots: z.array(z.string().max(4096)).max(20),
       homeBackground: z.string().max(4096).nullable(),
@@ -33,6 +61,15 @@ export const schemas = {
     name: z.string().min(1).max(60).optional(),
     runtimeMode: z.enum(['shared', 'isolated']).default('shared'),
     source: urlLike.optional(),
+    hostId: z.string().max(80).optional(),
+  }),
+
+  instanceRemoteHost: z.object({ hostId: z.string().min(1).max(80) }),
+
+  instanceRemoteCommits: z.object({
+    hostId: z.string().min(1).max(80),
+    branch: z.string().min(1).max(120),
+    limit: z.number().int().min(1).max(200).default(80),
   }),
 
   instanceDelete: z.object({
@@ -75,28 +112,40 @@ export const schemas = {
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
 
   windowOpen: z.object({
-    kind: z.enum(['launcher', 'creator', 'terminal', 'trainer']),
+    kind: z.enum(['launcher', 'creator', 'terminal', 'trainer', 'devices']),
     route: z.string().regex(/^\/[a-z0-9/_-]*$/i).max(120).optional(),
   }),
+
+  gradioOpen: z.object({
+    url: urlLike,
+    title: z.string().max(200).optional(),
+  }),
+
+  copyText: z.object({ text: z.string().max(4096) }),
+
+  updatesDownload: z.object({
+    version: z.string().min(1).max(80),
+    installer: releaseInstallerSchema,
+  }),
+
+  updatesCancel: z.object({ version: z.string().min(1).max(80) }),
 
   trainerCommits: z.object({
     branch: z.string().min(1).max(120),
     limit: z.number().int().min(1).max(200).default(80),
   }),
 
-  trainerHostSave: z.object({
-    id: z.string().max(80).optional(),
-    name: z.string().max(120).default(''),
-    host: z.string().min(1).max(255),
-    user: z.string().min(1).max(120),
-    port: z.number().int().min(1).max(65535).optional(),
-    identityFile: z.string().max(4096).optional(),
-    trainerRoot: z.string().min(1).max(4096),
-  }),
+  trainerHostSave: hostSaveSchema,
 
   trainerHostRemove: z.object({ id: z.string().min(1).max(80) }),
 
   trainerHostTest: z.object({ id: z.string().min(1).max(80) }),
+
+  hostsList: z.object({}).optional(),
+
+  hostSave: hostSaveSchema,
+
+  hostId: z.object({ id: z.string().min(1).max(80) }),
 
   trainerRemoteHost: z.object({ hostId: z.string().min(1).max(80) }),
 
@@ -148,11 +197,10 @@ export const schemas = {
     caseName: z.string().max(240),
     instanceId: z.string().min(1).max(160),
     instanceName: z.string().max(240),
-    backend: z.enum(['official', 'clover']),
+    workspace: z.enum(['official', 'clover']),
     deviceId: z.string().max(160),
     profile: z.enum(['base', 'dmd8']),
-    port: z.number().int().min(1).max(65535).nullable().optional(),
-    extraArgs: z.string().max(4000).optional(),
+    gradio: gradioConfig.optional(),
     jobId: z.string().max(160).optional(),
     state: z.enum(['queued', 'starting', 'running', 'stopped', 'failed']),
     queuedAt: z.string(),
@@ -208,11 +256,10 @@ export const schemas = {
     id: z.string().max(80).optional(),
     name: z.string().max(120).optional(),
     instanceId: z.string().min(1).max(120),
-    backend: z.enum(['official', 'clover']),
+    workspace: z.enum(['official', 'clover']),
     deviceId: z.string().min(1).max(120),
     profile: z.enum(['base', 'dmd8']),
-    port: z.number().int().min(1024).max(65535).nullable().optional(),
-    extraArgs: z.string().max(2000).optional(),
+    gradio: gradioConfig.optional(),
   }),
 
   caseRemove: z.object({ id: z.string().min(1).max(80) }),
@@ -230,11 +277,10 @@ export const schemas = {
     mode: z.enum(['runner', 'gradio', 'simulate']).default('runner'),
     caseId: z.string().max(80).optional(),
     caseName: z.string().max(120).optional(),
-    backend: z.enum(['official', 'clover']).optional(),
+    workspace: z.enum(['official', 'clover']).optional(),
     deviceId: z.string().max(120).optional(),
     kind: z.enum(['inference', 'training']).optional(),
-    port: z.number().int().min(1024).max(65535).nullable().optional(),
-    extraArgs: z.string().max(2000).optional(),
+    gradio: gradioConfig.optional(),
   }),
 
   jobId: z.object({ id: z.string().min(1).max(120) }),

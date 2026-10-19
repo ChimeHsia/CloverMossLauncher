@@ -51,7 +51,16 @@ export function InstanceDetailPage(): React.JSX.Element {
 
   useEffect(() => {
     if (!instance) return
-    void call<CommitInfo[]>(Ipc.gitCommits, { branch: instance.branch, limit: 80 })
+    const placement = instance.placement
+    const request =
+      placement.kind === 'ssh'
+        ? call<CommitInfo[]>(Ipc.instanceRemoteCommits, {
+            hostId: placement.hostId,
+            branch: instance.branch,
+            limit: 80,
+          })
+        : call<CommitInfo[]>(Ipc.gitCommits, { branch: instance.branch, limit: 80 })
+    void request
       .then((rows) => {
         setCommits(rows)
         setTargetCommit((current) => current || instance.commit)
@@ -154,11 +163,13 @@ export function InstanceDetailPage(): React.JSX.Element {
           <ArrowLeft className="size-3.5" /> 实例
         </button>
         <div className="flex items-center gap-1.5">
-          <Button tone="ghost" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
-            <span className="inline-flex items-center gap-1.5">
-              <FolderOpen className="size-3.5" /> 打开目录
-            </span>
-          </Button>
+          {instance.placement.kind === 'local' ? (
+            <Button tone="ghost" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
+              <span className="inline-flex items-center gap-1.5">
+                <FolderOpen className="size-3.5" /> 打开目录
+              </span>
+            </Button>
+          ) : null}
           <Button tone="ghost" onClick={() => void remove()}>
             <span className="inline-flex items-center gap-1.5 text-red-500">
               <Trash2 className="size-3.5" /> 删除
@@ -174,6 +185,9 @@ export function InstanceDetailPage(): React.JSX.Element {
             {instance.channel === 'stable' ? <Pill tone="accent">稳定版</Pill> : null}
             {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
             {instance.channel === 'custom' ? <Pill tone="blue">自定义</Pill> : null}
+            {instance.placement.kind === 'ssh' ? (
+              <Pill tone="blue">远端 · {instance.placement.hostName ?? instance.placement.hostId}</Pill>
+            ) : null}
             {instance.dirty ? <Pill tone="amber">有本地改动</Pill> : null}
           </div>
           <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
@@ -196,11 +210,12 @@ export function InstanceDetailPage(): React.JSX.Element {
               ['时间', dateTime(instance.commitDate)],
               ['作者', instance.author || '—'],
               ['来源', instance.source],
+              ['位置', instance.placement.kind === 'ssh' ? `${instance.placement.hostName ?? instance.placement.hostId} · ${instance.placement.root}` : '本机'],
               ['创建于', relative(instance.createdAt)],
             ].map(([label, value]) => (
               <div key={label} className="flex items-start justify-between gap-4">
                 <dt className="shrink-0 text-[var(--color-text-tertiary)]">{label}</dt>
-                <dd className="min-w-0 truncate text-right font-mono text-[11px]">{value}</dd>
+                <dd className="min-w-0 truncate text-right font-mono text-[11px]" title={value}>{value}</dd>
               </div>
             ))}
           </dl>
@@ -229,7 +244,12 @@ export function InstanceDetailPage(): React.JSX.Element {
               <Button
                 tone="secondary"
                 size="sm"
-                disabled={busy !== null || !targetCommit || targetCommit === instance.commit || instance.dirty}
+                disabled={
+                  busy !== null ||
+                  !targetCommit ||
+                  targetCommit === instance.commit ||
+                  instance.dirty
+                }
                 onClick={() => void updateVersion()}
               >
                 {busy === 'update' ? <Spinner className="size-3" /> : '切换'}
@@ -237,6 +257,10 @@ export function InstanceDetailPage(): React.JSX.Element {
             </div>
             {instance.dirty ? (
               <p className="mt-1.5 text-[9.5px] text-amber-300/80">实例有本地修改，先清理或提交后再切换 pin。</p>
+            ) : instance.placement.kind === 'ssh' ? (
+              <p className="mt-1.5 text-[9.5px] text-[var(--color-text-tertiary)]">
+                远端切换只移动 worktree commit；如果依赖变化，需要重新安装远端依赖。
+              </p>
             ) : (
               <p className="mt-1.5 text-[9.5px] text-[var(--color-text-tertiary)]">切换只移动 commit pin，不重新下载权重；可随时切回列表中的任意提交。</p>
             )}
@@ -264,7 +288,7 @@ export function InstanceDetailPage(): React.JSX.Element {
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--color-text-tertiary)]">模式</dt>
-                <dd>{runtime.kind === 'shared' ? '共享' : '独立'}</dd>
+                <dd>{runtime.kind === 'shared' ? '共享' : runtime.remote ? '独立 · 远端' : '独立'}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--color-text-tertiary)]">依赖</dt>
@@ -282,7 +306,7 @@ export function InstanceDetailPage(): React.JSX.Element {
             <Button tone="primary" size="sm" disabled={busy !== null} onClick={() => void install()}>
               {busy === 'install' ? <Spinner className="size-3.5" /> : runtime?.state === 'ready' ? '重新安装依赖' : '安装依赖'}
             </Button>
-            {runtime?.kind === 'shared' ? (
+            {runtime?.kind === 'shared' && instance.placement.kind === 'local' ? (
               <Button tone="secondary" size="sm" disabled={busy !== null} onClick={() => void isolate()}>
                 {busy === 'isolate' ? <Spinner className="size-3.5" /> : '转为独立'}
               </Button>

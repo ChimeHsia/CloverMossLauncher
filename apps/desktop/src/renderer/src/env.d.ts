@@ -8,7 +8,7 @@ declare global {
       platform: string
       version: string
       acrylic: boolean
-      windowKind: 'launcher' | 'creator' | 'terminal' | 'trainer'
+      windowKind: 'launcher' | 'creator' | 'terminal' | 'trainer' | 'devices'
       channel: string
     }
   }

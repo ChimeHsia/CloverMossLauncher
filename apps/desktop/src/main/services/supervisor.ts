@@ -1,17 +1,39 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import net from 'node:net'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, isAbsolute, join, posix as posixPath } from 'node:path'
 import { app } from 'electron'
 import { Events } from '@shared/channels'
-import type { JobLogLine, JobParams, JobRecord, JobStage, JobState } from '@shared/types'
+import { buildGradioArgs, normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
+import type {
+  GradioLaunchConfig,
+  JobLogLine,
+  JobParams,
+  JobRecord,
+  JobStage,
+  JobState,
+  TrainingHost,
+  WorkspaceKind,
+} from '@shared/types'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
 import { getInstance } from './instances'
 import { readRuntime, venvPython } from './runtimes'
 import { getSettings } from './settings'
+import { getTrainingHost } from './trainingHosts'
+import { remoteModelReady, remoteRoots } from './remoteInstances'
+import {
+  posixQuote,
+  remoteFreePort,
+  scpFrom,
+  sshArgs,
+  sshCommand,
+  sshExec,
+  sshTunnelArgs,
+} from './ssh'
 import { pushDiagnostic } from './diagnostics'
 import {
   LineSplitter,
@@ -38,6 +60,15 @@ interface RunningJob {
   lastLines: string[]
   cancelRequested: boolean
   cancelCommand?: { command: string; args: string[] }
+  tunnel?: ChildProcess
+  tunnelUrl?: string
+  remoteHost?: TrainingHost
+  remotePidFile?: string
+  remoteOutputDir?: string
+  syncedRemoteFiles?: Set<string>
+  syncTimer?: NodeJS.Timeout
+  syncBusy?: boolean
+  syncError?: boolean
 }
 
 const jobs = new Map<string, JobRecord>()
@@ -59,8 +90,17 @@ async function loadJobs(): Promise<void> {
   if (loaded) return
   loaded = true
   try {
-    const raw = JSON.parse(await readFile(join(jobsDir(), 'jobs.json'), 'utf8')) as JobRecord[]
-    for (const job of raw) {
+    const raw = JSON.parse(await readFile(join(jobsDir(), 'jobs.json'), 'utf8')) as Array<
+      JobRecord & { backend?: unknown }
+    >
+    for (const stored of raw) {
+      const { backend: legacyBackend, ...rest } = stored
+      const job: JobRecord = {
+        ...rest,
+        workspace: normalizeWorkspace(
+          stored.workspace ?? legacyBackend ?? (stored.mode === 'gradio' ? 'official' : 'clover'),
+        ),
+      }
       if (job.state === 'running' || job.state === 'starting' || job.state === 'queued') {
         job.state = 'failed'
         job.error = { code: 'E_INTERRUPTED', message: '应用重启，任务已中断' }
@@ -158,7 +198,7 @@ function envFor(job: JobRecord): NodeJS.ProcessEnv {
   }
 }
 
-function killTree(child: ChildProcessWithoutNullStreams): void {
+function killTree(child: ChildProcess): void {
   try {
     if (process.platform === 'win32') {
       spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true })
@@ -174,10 +214,78 @@ function killTree(child: ChildProcessWithoutNullStreams): void {
   }
 }
 
+function killTunnel(runningJob: RunningJob): void {
+  if (!runningJob.tunnel) return
+  try {
+    killTree(runningJob.tunnel)
+  } catch {
+    // already gone
+  }
+  runningJob.tunnel = undefined
+}
+
+function killRemoteProcess(runningJob: RunningJob): void {
+  if (!runningJob.remoteHost || !runningJob.remotePidFile) return
+  try {
+    spawn(
+      sshCommand(),
+      sshArgs(runningJob.remoteHost, `kill -TERM "$(cat ${posixQuote(runningJob.remotePidFile)})" 2>/dev/null || true`),
+      { windowsHide: true, stdio: 'ignore' },
+    ).unref()
+  } catch {
+    // best effort
+  }
+}
+
+async function syncRemoteOutputs(job: JobRecord, runningJob: RunningJob): Promise<void> {
+  if (!runningJob.remoteHost || !runningJob.remoteOutputDir || runningJob.syncBusy) return
+  runningJob.syncBusy = true
+  try {
+    const result = await sshExec(
+      runningJob.remoteHost,
+      `find ${posixQuote(runningJob.remoteOutputDir)} -type f 2>/dev/null || true`,
+      20_000,
+    )
+    if (result.code !== 0) return
+    const localRoot = join(paths.instance(job.instanceId), 'outputs', posixPath.basename(runningJob.remoteOutputDir))
+    const synced = (runningJob.syncedRemoteFiles ??= new Set<string>())
+    for (const raw of result.stdout.split('\n')) {
+      const remoteFile = raw.trim()
+      if (!remoteFile || synced.has(remoteFile)) continue
+      const rel = posixPath.relative(runningJob.remoteOutputDir, remoteFile)
+      if (!rel || rel.startsWith('..')) continue
+      const localFile = join(localRoot, ...rel.split('/'))
+      await mkdir(dirname(localFile), { recursive: true })
+      const copied = await scpFrom(runningJob.remoteHost, remoteFile, localFile, 120_000)
+      if (copied.code === 0) {
+        synced.add(remoteFile)
+      } else if (!runningJob.syncError) {
+        runningJob.syncError = true
+        appendLog(job, 'system', `远端输出拉取失败（后续会继续重试）：${(copied.stderr || copied.stdout).trim().slice(-500)}`, runningJob)
+      }
+    }
+  } catch {
+    // Remote output sync must never turn a running generation into a failure.
+  } finally {
+    runningJob.syncBusy = false
+  }
+}
+
+function startRemoteOutputSync(job: JobRecord, runningJob: RunningJob): void {
+  if (!runningJob.remoteHost || !runningJob.remoteOutputDir || runningJob.syncTimer) return
+  void syncRemoteOutputs(job, runningJob)
+  runningJob.syncTimer = setInterval(() => {
+    void syncRemoteOutputs(job, runningJob)
+  }, 5_000)
+}
+
 function finish(job: JobRecord, runningJob: RunningJob, code: number | null): void {
   if (!running.has(job.id)) return
   clearTimeout(runningJob.readyTimer)
   if (runningJob.killTimer) clearTimeout(runningJob.killTimer)
+  if (runningJob.syncTimer) clearInterval(runningJob.syncTimer)
+  killTunnel(runningJob)
+  killRemoteProcess(runningJob)
   for (const line of runningJob.out.flush()) appendLog(job, 'stdout', line, runningJob)
   for (const line of runningJob.err.flush()) appendLog(job, 'stderr', line, runningJob)
   running.delete(job.id)
@@ -362,7 +470,14 @@ function handleLine(job: JobRecord, runningJob: RunningJob, stream: 'stdout' | '
     const url = line.match(/Running on local URL:\s*(http:\/\/\S+)/)
     if (url?.[1]) {
       clearTimeout(runningJob.readyTimer)
-      update(job, { state: 'running', stage: 'ready', url: url[1] })
+      // Remote Gradio is reached through the local SSH tunnel; local Gradio
+      // normalizes 0.0.0.0/[::] because a browser needs a loopback host.
+      const localUrl =
+        runningJob.tunnelUrl ??
+        url[1]
+          .replace('://0.0.0.0:', '://127.0.0.1:')
+          .replace('://[::]:', '://127.0.0.1:')
+      update(job, { state: 'running', stage: 'ready', url: localUrl })
       return
     }
   }
@@ -410,7 +525,7 @@ export interface StartJobInput {
   instanceId: string
   caseId?: string
   caseName?: string
-  backend?: 'official' | 'clover'
+  workspace?: WorkspaceKind
   deviceId?: string
   kind?: 'inference' | 'training'
   trainerVersionId?: string
@@ -423,8 +538,7 @@ export interface StartJobInput {
   seed: number
   profile?: 'base' | 'dmd8'
   mode?: 'runner' | 'gradio' | 'simulate'
-  port?: number | null
-  extraArgs?: string
+  gradio?: GradioLaunchConfig
 }
 
 export async function startJob(input: StartJobInput): Promise<JobRecord> {
@@ -432,6 +546,9 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   const instance = await getInstance(input.instanceId)
   if (!instance) throw new Error('实例不存在')
   const mode = input.mode ?? 'runner'
+  const workspace = input.workspace ?? (mode === 'gradio' ? 'official' : 'clover')
+  const gradio = mode === 'gradio' ? normalizeGradioConfig(input.gradio) : undefined
+  const remote = instance.placement.kind === 'ssh' ? instance.placement : null
   const runtime = await readRuntime(instance.runtimeId)
   if (mode !== 'simulate' && (!runtime || runtime.state !== 'ready')) {
     pushDiagnostic({
@@ -439,7 +556,9 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       ruleId: 'E_RUNTIME',
       severity: 'error',
       title: '运行时未就绪',
-      explain: '这个实例还没有安装 Python 依赖。先到实例详情里点“安装依赖”。',
+      explain: remote
+        ? '这个远端实例的 venv 还没有安装依赖。先到实例详情里点“安装依赖”。'
+        : '这个实例还没有安装 Python 依赖。先到实例详情里点“安装依赖”。',
       solutions: [{ label: '打开实例', action: 'open_instances' }],
       raw: 'runtime not ready',
       signature: `E_RUNTIME:${instance.id}`,
@@ -449,14 +568,41 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   }
 
   if (mode !== 'simulate') {
-    const modelDir = join(paths.hub(getSettings().modelsRoot), 'models--OpenMOSS-Team--MOSS-Image-SFT')
-    if (!existsSync(modelDir)) {
+    const requestedModel = gradio?.model?.trim()
+    const usesDefault = !requestedModel || requestedModel === 'OpenMOSS-Team/MOSS-Image-SFT'
+    let modelAvailable = true
+    if (remote) {
+      if (usesDefault) {
+        const roots = await remoteRoots(getSettings(), remote.hostId)
+        modelAvailable = await remoteModelReady(roots)
+      }
+    } else {
+      const modelDir = join(paths.hub(getSettings().modelsRoot), 'models--OpenMOSS-Team--MOSS-Image-SFT')
+      const localModel =
+        requestedModel &&
+        (requestedModel.startsWith('/') ||
+          requestedModel.startsWith('./') ||
+          requestedModel.startsWith('../') ||
+          requestedModel.startsWith('~'))
+      const localModelPath =
+        localModel && requestedModel
+          ? requestedModel.startsWith('~/')
+            ? join(homedir(), requestedModel.slice(2))
+            : isAbsolute(requestedModel)
+              ? requestedModel
+              : join(instance.path, requestedModel)
+          : null
+      modelAvailable = usesDefault ? existsSync(modelDir) : localModelPath ? existsSync(localModelPath) : true
+    }
+    if (!modelAvailable) {
       pushDiagnostic({
         jobId: undefined,
         ruleId: 'E_MODEL',
         severity: 'error',
         title: '还没有下载 MOSS-Image 权重',
-        explain: '运行需要约 27 GB 的 SFT 权重。请先在模型页下载，或改用已缓存的量化包。',
+        explain: remote
+          ? '远端模型缓存里没有默认 SFT。请先在远端准备好模型，或在 Gradio 参数里指定可用的模型。'
+          : '运行需要约 27 GB 的 SFT 权重。请先在模型页下载，或在 Gradio 参数里指定一个可用的模型。',
         solutions: [{ label: '打开模型库', action: 'open_models' }],
         raw: 'model missing',
         signature: 'E_MODEL:moss-sft',
@@ -465,8 +611,14 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       throw new Error('尚未下载 MOSS-Image 权重（约 27 GB），请先在模型页下载')
     }
   }
-  const python = runtime ? venvPython(runtime.path) : process.platform === 'win32' ? 'python' : 'python3'
-  if (!existsSync(python) && mode !== 'simulate') {
+  const python = runtime
+    ? remote
+      ? runtime.python
+      : venvPython(runtime.path)
+    : process.platform === 'win32'
+      ? 'python'
+      : 'python3'
+  if (!remote && !existsSync(python) && mode !== 'simulate') {
     throw new Error('找不到运行时 Python，请修复运行时')
   }
 
@@ -486,7 +638,9 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     instanceName: instance.name,
     caseId: input.caseId,
     caseName: input.caseName,
-    backend: input.backend,
+    workspace,
+    gradio,
+    hostId: remote?.hostId,
     deviceId: input.deviceId,
     kind: input.kind ?? 'inference',
     mode,
@@ -533,28 +687,77 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     'utf8',
   )
 
-  let command: string
-  let args: string[]
-  if (mode === 'gradio') {
-    const port = input.port ?? (await freePort())
-    command = python
-    args = [join(instance.path, 'gradio_app.py'), '--host', '127.0.0.1', '--port', String(port)]
-    if (input.extraArgs?.trim()) args.push(...input.extraArgs.trim().split(/\s+/))
-  } else {
-    command = python
-    args = [runnerScript(), '--job', jobFile, ...(mode === 'simulate' ? ['--simulate'] : [])]
+  let command = ''
+  let args: string[] = []
+  let tunnel: ChildProcess | undefined
+  let tunnelUrl: string | undefined
+  let remoteHost: TrainingHost | undefined
+  let remotePidFile: string | undefined
+  let remoteOutputDir: string | undefined
+  try {
+    if (remote && mode !== 'gradio') {
+      throw new Error('远端 runner 尚未接入；当前支持远端官方 Gradio')
+    }
+    if (mode === 'gradio') {
+      if (remote) {
+        remoteHost = getTrainingHost(getSettings(), remote.hostId)
+        if (!remoteHost) throw new Error('远端 host 不存在')
+        const roots = await remoteRoots(getSettings(), remote.hostId)
+        const localPort = await freePort()
+        const remotePort = gradio?.port ?? (await remoteFreePort(remoteHost))
+        const pidFile = `${instance.path.replace(/\/$/, '')}/.clover-gradio.pid`
+        const deviceIndex = input.deviceId?.match(/:cuda:(\d+)$/)?.[1]
+        const envPrefix = [
+          `HF_HOME=${posixQuote(`${roots.modelsRoot.replace(/\/$/, '')}/hf`)}`,
+          `HF_HUB_CACHE=${posixQuote(`${roots.modelsRoot.replace(/\/$/, '')}/hf/hub`)}`,
+          ...(deviceIndex ? [`CUDA_VISIBLE_DEVICES=${deviceIndex}`] : []),
+        ].join(' ')
+        const remoteArgs = buildGradioArgs(gradio!, remotePort)
+        const remoteCommand = [
+          `cd ${posixQuote(instance.path)}`,
+          `echo $$ > ${posixQuote(pidFile)}`,
+          `exec env ${envPrefix} ${posixQuote(python)} gradio_app.py ${remoteArgs.map(posixQuote).join(' ')}`,
+        ].join(' && ')
+        command = sshCommand()
+        args = sshArgs(remoteHost, remoteCommand)
+        tunnel = spawn(sshCommand(), sshTunnelArgs(remoteHost, localPort, remotePort), {
+          detached: process.platform !== 'win32',
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'ignore'],
+        })
+        tunnelUrl = `http://127.0.0.1:${localPort}`
+        remotePidFile = pidFile
+        const outputArg = gradio?.outputDir?.trim() || 'outputs/gradio'
+        remoteOutputDir = outputArg.startsWith('/')
+          ? outputArg
+          : posixPath.join(instance.path, outputArg)
+      } else {
+        const port = gradio?.port ?? (await freePort())
+        command = python
+        args = [join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
+      }
+    } else {
+      command = python
+      args = [runnerScript(), '--job', jobFile, ...(mode === 'simulate' ? ['--simulate'] : [])]
+    }
+  } catch (error) {
+    tunnel?.kill('SIGKILL')
+    const message = error instanceof Error ? error.message : String(error)
+    update(job, { state: 'failed', error: { code: 'E_REMOTE', message } })
+    throw error
   }
 
   let child: ChildProcessWithoutNullStreams
   try {
     child = spawn(command, args, {
-      cwd: instance.path,
+      cwd: remote ? app.getAppPath() : instance.path,
       env: { ...process.env, ...envFor(job) },
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
   } catch (error) {
+    tunnel?.kill('SIGKILL')
     const message = error instanceof Error ? error.message : String(error)
     update(job, { state: 'failed', error: { code: 'E_SPAWN', message } })
     throw error
@@ -584,9 +787,31 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     readyTimer,
     lastLines: [],
     cancelRequested: false,
+    tunnel,
+    tunnelUrl,
+    remoteHost,
+    remotePidFile,
+    remoteOutputDir,
   }
   running.set(job.id, runningJob)
   update(job, { pid: child.pid ?? undefined })
+  startRemoteOutputSync(job, runningJob)
+
+  tunnel?.on('error', (error) => {
+    appendLog(job, 'system', `SSH 隧道错误：${String(error)}`, runningJob)
+    if (job.state === 'starting' || job.state === 'running') {
+      update(job, { state: 'failed', error: { code: 'E_TUNNEL', message: 'SSH 隧道启动失败' } })
+      killTree(child)
+    }
+  })
+  tunnel?.on('exit', (code) => {
+    if (runningJob.cancelRequested) return
+    if (job.state === 'starting' || job.state === 'running') {
+      appendLog(job, 'system', `SSH 隧道已退出（${code ?? '?'}）`, runningJob)
+      update(job, { state: 'failed', error: { code: 'E_TUNNEL', message: 'SSH 隧道已断开' } })
+      killTree(child)
+    }
+  })
 
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
@@ -751,6 +976,8 @@ export async function cancelJob(id: string): Promise<JobRecord | null> {
   }
   runningJob.cancelRequested = true
   appendLog(job, 'system', '正在停止任务…', runningJob)
+  killTunnel(runningJob)
+  killRemoteProcess(runningJob)
   if (runningJob.cancelCommand) {
     try {
       spawn(runningJob.cancelCommand.command, runningJob.cancelCommand.args, {

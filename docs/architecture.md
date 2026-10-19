@@ -6,7 +6,7 @@
 - 产品形态与交互：[product-design.md](product-design.md)
 
 > 本文只描述**当前代码实际怎么工作**。最后一节单列“未实现/计划架构”，
-> 不把 WebUI、签名、托管 Python 等未落地设计写成现状。
+> 不把 Creator 浏览器版、签名、托管 Python 等未落地设计写成现状。
 
 ---
 
@@ -34,11 +34,12 @@ Electron Main (Node)
 ├── 领域服务（env / git / runtimes / instances / models / gallery /
 │             supervisor / diagnostics / trainerGit / trainers / trainingHosts）
 ├── ipc.ts（ipcMain.handle + zod）
-└── BrowserWindow × 4
+└── BrowserWindow × 5
     ├── launcher   /            1180×760
     ├── creator    /studio      1320×860
     ├── terminal   /terminal    1120×720
-    └── trainer    /trainer     1280×840
+    ├── trainer    /trainer     1280×840
+    └── devices    /devices     1180×780
          ↕ preload（contextBridge）
     React 19 renderer（同一 bundle；按 windowKind 分流）
 
@@ -46,7 +47,7 @@ UtilityProcess
 └── backend.js    独立 Node HTTP/WS（127.0.0.1、token、RPC 到 main）
 ```
 
-- 四个窗口共用同一个 renderer bundle；`--clover-window=<kind>` 在 preload
+- 五个窗口共用同一个 renderer bundle；`--clover-window=<kind>` 在 preload
   暴露 `windowKind`；
 - `src/main/windows.ts` 负责创建/单例/聚焦/关闭；`window:open` 可打开指定
   kind 与 route；
@@ -55,7 +56,8 @@ UtilityProcess
   Windows：`hidden` + `titleBarOverlay` + acrylic；Linux 默认；
 - 截图模式使用不透明 `#191b1f`；普通桌面窗口启用亚克力。
 
-**没有** WebUI server / Fastify / HTTP API；这部分是 M5 计划。
+**没有** served WebUI；Clover Creator 保持 Electron-only（ADR-0004）。
+utilityProcess HTTP/WS 只作为 Job/API 层，不承载 Creator UI。
 
 ## 3. 代码结构
 
@@ -65,25 +67,26 @@ apps/desktop/
   src/backend/index.ts   独立 Node HTTP/WS 后端（utilityProcess）
   src/main/
     index.ts             生命周期、smoke、scenario、screenshot
-    windows.ts           四窗口
+    windows.ts           五窗口（含设备管理器）
     ipc.ts               IPC handler + zod
     lib/                 paths / run / events
     services/            env / network / git / runtimes / instances / models /
-                         updates / gallery / supervisor / parsers / diagnostics /
-                         devices / cases / onboarding / trainerGit / trainers /
-                         trainingHosts / remoteTrainer / ssh / launchQueue / trainerArtifacts /
-                         projects / backend
+                         release / updates / updateDownload / gallery / supervisor / parsers /
+                         diagnostics / devices / cases / onboarding / trainerGit / trainers /
+                         trainingHosts / remoteTrainer / remoteInstances / ssh / launchQueue /
+                         trainerArtifacts / projects / backend
   src/preload/index.ts   contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx          按 windowKind 分流 shell
     src/pages/           Home / Studio / Gallery / Terminal / Training / TrainerWindow /
                          Instances / InstanceDetail / Models / Diagnostics / Settings
-    src/components/      AppTitlebar / layout / NotificationPanel / Oobe / ui
+    src/components/      AppTitlebar / layout / NotificationPanel / Oobe / UpdateDialog / ui
     src/lib/             layout.ts / clover.ts / windows.ts / api / format / i18n
     src/store.ts         Zustand：env / instances / jobs / downloads / notifications / UI
-  src/shared/            types / channels / zod schemas
+  src/shared/            types / channels / zod schemas / launch（workspace + Gradio args） / release
 runner/                  薄 Python runner（官方 pipeline + NDJSON + --simulate）
-release/                 manifest / 公告 / 模型目录 / 错误规则
+release/                 manifest / README / release.md（生成） / 模型目录 / 错误规则
+tools/release-md.mjs      manifest + models + README → release.md
 docs/                    产品、架构、状态、路线图、layout 规范、ADR
 ```
 
@@ -98,7 +101,9 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `instances.ts` | `instance.json`、版本固定、运行时引用、删除/隔离 |
 | `runtimes.ts` | 共享/独立 venv、依赖锁 hash、uv/pip 安装、状态 |
 | `models.ts` | HF 兼容缓存、下载、Range 续传、LFS sha256、适配器 |
-| `updates.ts` | manifest/公告检查；**不下载安装更新** |
+| `release.ts` | GitHub Release/本地/cache/legacy 发布文档加载与回退 |
+| `updates.ts` | 公告、版本比较、平台 installer 匹配 |
+| `updateDownload.ts` | 安装包下载、进度、sha256 校验、打开安装程序 |
 | `gallery.ts` | outputs/自定义根、分页、元数据、`clover://` |
 | `supervisor.ts` | 推理/训练 Job、spawn、日志、进度、readiness、取消 |
 | `parsers.ts` | ANSI、`\r`/`\n` 分帧、tqdm、下载条、错误匹配 |
@@ -108,7 +113,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `onboarding.ts` | OOBE 三行状态 |
 | `trainerGit.ts` | trainer bare mirror、分支/commit、per-commit worktree |
 | `trainers.ts` | TrainerVersion、lock hash venv、doctor、训练命令拼装 |
-| `trainingHosts.ts` | local + SSH host 持久化、测试状态 |
+| `trainingHosts.ts` | 本机/SSH host 持久化、探测、设备库存（ManagedHost/ComputeDevice） |
 | `ssh.ts` | 系统 OpenSSH 参数、host probe、scp |
 | `remoteTrainer.ts` | 远端 mirror/worktree/venv/doctor/版本（fake ssh 验证） |
 | `launchQueue.ts` | `launch-queue.json` 队列持久化/中断标记 |
@@ -143,7 +148,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
   cases.json                    Case 启动配置
   launch-queue.json             运行/排队行（重启语义）
   diagnostics.json              诊断历史
-  training-hosts.json           local + SSH host
+  hosts.json                    本机 + SSH host（旧 training-hosts.json 自动迁移）
   projects/<id>/project.json    Project 文档
   projects/<id>/assets/         Project 资产
   announcements.json            公告缓存（如使用）
@@ -161,6 +166,9 @@ docs/                    产品、架构、状态、路线图、layout 规范、
     adapters/<id>/              适配器
     adapters/index.json         本地训练产物登记
   downloads/
+    updates/<version>/           已下载并校验的安装包
+  cache/
+    release-v2-<channel>.json    最后一次成功的发布文档
   jobs/
     jobs.json                   最近 Job 记录（最多 60）
     <jobId>.json / .jsonl
@@ -185,14 +193,17 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | 类型 | 关键字段 |
 | --- | --- |
 | `Settings` | networkMode/gitMirror/pipIndex/hfEndpoint/modelsRoot/galleryRoots/homeBackground/trainerRoot |
-| `InstanceInfo` | id/name/commit/runtimeId/models/adapters/status |
+| `InstanceInfo` | id/name/commit/runtimeId/placement/hostId/models/adapters/status |
 | `RuntimeInfo` | id/python/lockHash/deps/state |
 | `ModelEntry` | repo/revision/role/size/installed |
 | `AdapterEntry` | repo/kind/base/files/installed |
-| `LaunchCase` | instanceId/backend/deviceId/profile/port/extraArgs |
-| `JobRecord` | id/instanceId/kind/mode/state/stage/progress/metrics/hostId/trainerVersionId/trainerRunName/error/logPath |
+| `LaunchCase` | instanceId/workspace/deviceId/profile/gradio? |
+| `GradioLaunchConfig` | model/modelRoot/localFilesOnly/outputDir/promptDefaults/profile/listen/port/openMode/extraArgs |
+| `JobRecord` | id/instanceId/kind/mode/workspace/gradio/state/stage/progress/metrics/hostId/trainerVersionId/trainerRunName/error/logPath |
 | `TrainerVersion` | commit/branch/path/runtimeId/runtimeState/channel/dirty/status |
-| `TrainingHost` | id/kind/host/user/port/identityFile/trainerRoot/status/remote/versions |
+| `TrainingHost` | id/kind/host/user/port/identityFile/trainerRoot/instanceRoot/modelsRoot/status/remote/versions |
+| `ComputeDevice` | id/hostId/name/kind/detail/memoryBytes/available/source |
+| `ManagedHost` | `TrainingHost` + devices |
 | `ProjectDocument` | id/name/width/height/summary/layers/prompt/negative/seed/steps/cfg/backgroundPath |
 | `Diagnostic` | ruleId/severity/title/explain/solutions/raw/signature |
 
@@ -209,6 +220,14 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 4. 实例引用一个 runtime、一个模型选择与启动档位；
 5. dirty 检测排除 `instance.json` 与 `outputs/`；
 6. 删除实例保留 outputs；运行时按引用清理。
+
+远端实例（`placement: { kind: 'ssh', hostId, root }`）：
+
+1. 在 host 的 `instanceRoot/git/moss-image.git` 建/更新 bare mirror；
+2. 在 `instanceRoot/<id>` 创建 worktree；
+3. 在 worktree 内创建 `.venv`，本地写一份 runtime 影子记录（path/python 指向远端）；
+4. 本地 `instances/<id>/instance.json` 只存元数据，`InstanceInfo.path` 指向远端；
+5. 远端删除（先备份 outputs）与版本切换已接；远端模型下载尚未接；启动 Gradio 时检查远端模型缓存。
 
 MOSS-Image 没有 tag：稳定版 = `main` 分支 HEAD 或 manifest 的
 `recommended_commit`。
@@ -240,7 +259,7 @@ MOSS-Image 没有 tag：稳定版 = `main` 分支 HEAD 或 manifest 的
 - `clover://local?path=…` 只允许画廊根与 `homeBackground`；
 - 支持 PNG 元数据 + sidecar JSON；
 - “用作布局底图”写入 `studioBackground`，通过 `window:open` 聚焦创作窗口；
-- 首页背景默认 `assets/home-background.webp`（16:9），
+- 首页背景默认 `assets/home-background.png`（16:9），
   `settings.homeBackground` 可替换，并以 `linear-gradient + url` 铺满所有页面。
 
 ## 11. Supervisor、解析与诊断
@@ -280,23 +299,54 @@ queued → starting → running → succeeded | failed | canceled
 - 诊断写 `diagnostics.json`，可清空；
 - 训练/推理错误都走同一诊断入口。
 
+### 11.4 发布与更新
+
+- 发布源：稳定版 `releases/latest/download/release.md`；beta 读 pinned `beta` 资产；
+  开发模式优先本地 `release/release.md`，打包后回退 raw/jsDelivr/cache/legacy；
+- `release.md` 是“人读正文 + `json clover-release` 机器块”；解析、semver（含
+  prerelease）和 installer 匹配在 `shared/release.ts`；
+- `models.json` 仍是模型下载目录的机器源；`release.md` 的模型表由
+  `tools/release-md.mjs` 生成，不作为第二下载源；
+- `updates.ts` 返回 `UpdateState`（版本、公告、发布说明、当前平台 installer）；
+  `UpdateDialog` 负责“稍后/下载并安装”，`dismissedUpdateVersion` 按版本记住；
+- IPC：`updates:check` / `updates:download` / `updates:cancel`；
+  事件：`event:update-download`（进度/校验/完成/错误）；
+- `updateDownload.ts` 下载到 `downloads/updates/<version>/`，必须在 sha256 校验
+  通过后才打开安装程序；当前不静默安装，签名/公证和 electron-updater 未接。
+
 ## 12. 启动器 Case、设备与队列
 
-- `devices.ts` 自动枚举 MPS / CUDA / CPU；没有维护页；
+- `devices.ts` 自动枚举 MPS / CUDA / CPU；设备管理器复用同一枚举并合并远端 GPU 缓存；
+- `trainingHosts.ts` 是 host/device 的唯一库存：`listManagedHosts`、`testManagedHost`；
+  本机设备直接枚举，远端设备来自最近一次 SSH 探测；`hosts.json` 作为 host 持久化文件
+  （旧 `training-hosts.json` 一次性迁移；`instanceRoot`/`modelsRoot` 为新增可选字段）；
+- 设备管理器是第五个窗口 `/devices`，通过 `hosts:*` IPC 做 host CRUD/测试；训练页
+  不再提供 host 增删改，host 选择仍来自同一库存；远端官方 Gradio 已接，远端终端未接；
 - `cases.ts` 持久化 Case，不是每次 Job；
 - 首页 `Home.tsx` 维护当前会话的运行/排队视图；
 - 同设备默认只跑 1 个真实任务，其余 `queued`；
 - 本地训练独占本地设备，推理排队；每 host 只允许 1 个训练；
 - 队列行持久化到 `launch-queue.json`；重启时 queued 保留，starting/running 标 failed；
-- 官方 Gradio：`gradio_app.py --host 127.0.0.1 --port <free>`，
-  可追加 extraArgs；匹配 `Running on local URL` 后显示 URL；真实权重未验收；
+- 官方 Gradio：`gradio_app.py --host 127.0.0.1 --port <free>`，启动参数由
+  `src/shared/launch.ts` 的 `buildGradioArgs` 统一构造；只覆盖上游 argparse 支持的
+  启动级参数（model/model-root/profile/output-dir/prompt-defaults/local-files-only）；
+  匹配 `Running on local URL` 后显示 URL，并按 `openMode` 打开浏览器/应用内窗口或复制；
+  真实权重未验收；
+- 远端 Gradio：`Instance.placement=ssh` 时由 `remoteInstances.ts` 校验 host/instanceRoot/
+  modelsRoot；Supervisor 分配本地端口与远端空闲端口，启动
+  `ssh -N -L <local>:127.0.0.1:<remote>` 和远端 `gradio_app.py`；远端 PID 写入实例目录，
+  取消时同时杀隧道与远端 PID；本地 URL 使用隧道端口；运行中每 5 秒 `find + scp` 把新
+  输出拉到本地实例 `outputs/`。fake ssh 已做启动/访问/输出回传/取消端到端，真实 host
+  未验收；远端 runner 未接；
+- `LaunchCase`/`LaunchRow`/`JobRecord` 使用 `workspace` 而不是 `backend`；旧数据里的
+  `backend` 与 `port`/`extraArgs` 在读取时迁移到 `workspace`/`gradio`；
 - Clover 后端：没有常驻进程/HTTP/WS，仅 UI 占位。
 
 ## 12.1 Clover 后端与 Project
 
 - `src/backend/index.ts` 作为 Electron `utilityProcess` 启动，监听 127.0.0.1 随机端口；
 - HTTP：`/health`、`/api/jobs`（list/start/get/cancel），Bearer token；
-- WS：`/ws?token=...`，广播 `event`（job/jobLog），用于未来 WebUI；
+- WS：`/ws?token=...`，广播 `event`（job/jobLog），用于 Job/API 集成；不作为 Creator 浏览器版；
 - 后端 **不直接跑 Python**：通过 parentPort RPC 调 main 的 Supervisor，保证终端/诊断/画廊同源；
 - `backendInfo` 暴露 url/token/ready；Creator 的“开始生成”走 HTTP `/api/jobs`；
 - Project 保存到 `projects/<id>/project.json`，背景图复制到 `assets/`；
@@ -342,7 +392,7 @@ trainerRoot/
 
 ### 13.4 SSH
 
-- host 配置持久化到 `training-hosts.json`；
+- host 配置持久化到 `hosts.json`（旧 `training-hosts.json` 自动迁移）；
 - 系统 OpenSSH + 密钥/agent + `StrictHostKeyChecking=yes` + `BatchMode=yes`；
 - host probe 读取 uname / nvidia-smi / git / uv / python / root；
 - 远端 mirror、worktree、版本、venv、doctor、train/export 命令已接；
@@ -404,9 +454,9 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 
 | 计划 | 说明 |
 | --- | --- |
-| WebUI | 复用 backend HTTP/WS、浏览器 UI、局域网；未实现 |
+| Creator 浏览器版 | 不做；Clover Creator 保持 Electron-only（ADR-0004） |
 | 托管 Python | python-build-standalone 下载/校验未接 |
-| 更新安装 | 只检查 manifest/公告，不下载/验签/安装 |
+| 更新安装（真实签名） | release.md/更新弹窗/下载/sha256/打开安装包已接；electron-updater、签名、公证未做 |
 | SSH 远端训练验证 | 真实 host 的 host key/权限/网络、远端 venv/Job 验收 |
 | 导出/采样真实验收 | 代码已接，fake 验证；真实 CUDA 未 |
 | Project / 图层完整 UI | 已有 JSON+assets/基础图层，待完整回放/资产重链 |
@@ -427,7 +477,9 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | UI v0.2 | 亚克力、侧栏、通知、画廊、创作台 | ✅ |
 | UI v0.3（历史阶段） | 三窗口、启动条/运行栈、OOBE、终端 | ✅（已扩展为四窗口） |
 | UI v0.4 | 四窗口、全局背景、训练页/训练窗口 | ✅ |
+| UI v0.5 | 工作台语义、Gradio 参数面板、设备管理器第五窗口 | 🟡 代码/截图/fake ssh；真实 host/权重未验收 |
 | Trainer v0.4 | 外部 trainer 部署/版本/环境/训练 Job/远端代码 | ✅ 基础；真实 CUDA/环境安装/真实 host 未验收 |
-| M5 | WebUI、更新安装 | ⬜ |
+| M5 | 发布/更新（Creator 不做浏览器版） | 🟡 release.md/弹窗/下载已接；真实 Release、签名安装、electron-updater 未 |
+| UI v0.6 | 发布/更新弹窗、通道与下载校验 | 🟡 本地测试/fake 安装包；真实签名产物未 |
 | B v0.5 | utilityProcess HTTP/WS、Creator 生成、Project JSON+assets/基础图层 | 🟡；真实生成/完整 UI 验收未 |
 | M6 | 打包、公证、Windows | ⬜ |

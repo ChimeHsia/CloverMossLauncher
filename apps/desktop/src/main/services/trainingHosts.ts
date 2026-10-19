@@ -1,23 +1,28 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Settings, TrainingHost } from '@shared/types'
+import type { ComputeDevice, ManagedHost, Settings, TrainingHost } from '@shared/types'
 import { paths } from '../lib/paths'
 import { run } from '../lib/run'
+import { listDevices } from './devices'
 import { probeHost } from './ssh'
 
-const FILE = () => join(paths.root(), 'training-hosts.json')
+const FILE = () => join(paths.root(), 'hosts.json')
+const LEGACY_FILE = () => join(paths.root(), 'training-hosts.json')
 let remote: TrainingHost[] | null = null
 
 function load(): TrainingHost[] {
   if (remote) return remote
+  const file = existsSync(FILE()) ? FILE() : existsSync(LEGACY_FILE()) ? LEGACY_FILE() : null
+  if (!file) {
+    remote = []
+    return remote
+  }
   try {
-    if (!existsSync(FILE())) {
-      remote = []
-      return remote
-    }
-    const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as TrainingHost[]
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as TrainingHost[]
     remote = Array.isArray(parsed) ? parsed : []
+    // One-way migration: keep the legacy file untouched, write the global inventory.
+    if (file === LEGACY_FILE()) persist()
   } catch {
     remote = []
   }
@@ -38,6 +43,8 @@ export function listTrainingHosts(settings: Settings): TrainingHost[] {
     name: '本机',
     kind: 'local',
     trainerRoot: paths.trainerRoot(settings.trainerRoot),
+    instanceRoot: paths.instances(),
+    modelsRoot: paths.models(settings.modelsRoot),
     status: 'unchecked',
   }
   return [local, ...load()]
@@ -51,6 +58,8 @@ export interface SaveTrainingHostInput {
   port?: number
   identityFile?: string
   trainerRoot: string
+  instanceRoot?: string
+  modelsRoot?: string
 }
 
 export function saveTrainingHost(input: SaveTrainingHostInput): TrainingHost {
@@ -65,6 +74,8 @@ export function saveTrainingHost(input: SaveTrainingHostInput): TrainingHost {
     port: input.port ?? 22,
     identityFile: input.identityFile?.trim() || undefined,
     trainerRoot: input.trainerRoot.trim(),
+    instanceRoot: input.instanceRoot?.trim() || undefined,
+    modelsRoot: input.modelsRoot?.trim() || undefined,
     status: 'unchecked',
     lastCheckedAt: undefined,
   }
@@ -127,4 +138,70 @@ export function updateTrainingHostVersions(settings: Settings, id: string, versi
 export function removeTrainingHost(id: string): void {
   remote = load().filter((host) => host.id !== id)
   persist()
+}
+
+function parseRemoteDevices(host: TrainingHost): ComputeDevice[] {
+  if (host.kind !== 'ssh' || host.status !== 'ok' || !host.remote?.gpu) return []
+  return host.remote.gpu
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [name = 'GPU', memory = ''] = line.split(',').map((part) => part.trim())
+      const mb = Number.parseInt(memory, 10)
+      const memoryBytes = Number.isFinite(mb) ? mb * 1024 * 1024 : undefined
+      return {
+        id: `${host.id}:cuda:${index}`,
+        hostId: host.id,
+        hostName: host.name,
+        name: name || `GPU ${index}`,
+        kind: 'cuda' as const,
+        detail: `CUDA · ${memoryBytes ? `${Math.round(memoryBytes / 1024 ** 3)} GB` : '显存未知'}`,
+        memoryBytes,
+        available: true,
+        source: 'remote' as const,
+      }
+    })
+}
+
+function localManagedDevices(settings: Settings): ComputeDevice[] {
+  const devices = listDevices(settings)
+  const mpsName = devices.find((device) => device.kind === 'mps')?.name
+  return devices.map((device) => ({
+    ...device,
+    name: device.kind === 'cpu' && mpsName === device.name ? `${device.name} · CPU` : device.name,
+    hostId: 'local',
+    hostName: '本机',
+    source: 'local' as const,
+  }))
+}
+
+function managedHost(settings: Settings, host: TrainingHost): ManagedHost {
+  const devices = host.kind === 'local' ? localManagedDevices(settings) : parseRemoteDevices(host)
+  return {
+    ...host,
+    status: host.kind === 'local' ? 'ok' : host.status,
+    devices,
+  }
+}
+
+/** Hosts plus their current device inventory; the single source for the device manager. */
+export function listManagedHosts(settings: Settings): ManagedHost[] {
+  return listTrainingHosts(settings).map((host) => managedHost(settings, host))
+}
+
+export async function testManagedHost(settings: Settings, id: string): Promise<ManagedHost> {
+  const existing = getTrainingHost(settings, id)
+  if (existing?.kind === 'local') {
+    // Local host availability is not the trainer's CUDA check; MPS/CPU are valid
+    // devices for the launcher even when Kohaku training cannot use them.
+    return managedHost(settings, {
+      ...existing,
+      status: 'ok',
+      lastCheckedAt: new Date().toISOString(),
+      error: undefined,
+    })
+  }
+  const host = await testTrainingHost(settings, id)
+  return managedHost(settings, host)
 }

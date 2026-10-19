@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { InstanceInfo, RuntimeInfo, Settings } from '@shared/types'
+import type { InstanceInfo, InstancePlacement, RuntimeInfo, Settings } from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
@@ -17,6 +17,17 @@ import {
   removeWorktree,
 } from './git'
 import { ensureRuntime, readRuntime } from './runtimes'
+import {
+  createRemoteRuntime,
+  createRemoteWorktree,
+  ensureRemoteMirror,
+  remoteCheckout,
+  remoteCommits,
+  remoteInstancePath,
+  remoteMirrorPath,
+  remoteRoots,
+} from './remoteInstances'
+import { posixQuote, sshExec } from './ssh'
 import { getRecommendedCommit } from './updates'
 
 export interface InstanceRecord {
@@ -33,6 +44,7 @@ export interface InstanceRecord {
   channel: InstanceInfo['channel']
   runtimeId: string
   runtimeMode: InstanceInfo['runtimeMode']
+  placement?: InstancePlacement
   models: string[]
   adapters: string[]
   adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
@@ -72,11 +84,14 @@ function channelFor(branch: string, commit: string, mainSha: string | null): Ins
 }
 
 async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
-  const dir = paths.instance(record.id)
+  const placement: InstancePlacement = record.placement ?? { kind: 'local' }
+  const localDir = paths.instance(record.id)
+  const dir = placement.kind === 'local' ? localDir : placement.root
   const runtime = await readRuntime(record.runtimeId)
   const mainSha = await branchStableSha()
-  const exists = existsSync(dir) && existsSync(join(dir, 'pyproject.toml'))
-  const dirty = exists ? await isDirty(dir) : false
+  const exists =
+    placement.kind === 'local' ? existsSync(localDir) && existsSync(join(localDir, 'pyproject.toml')) : true
+  const dirty = placement.kind === 'local' && exists ? await isDirty(localDir) : false
   return {
     id: record.id,
     name: record.name,
@@ -91,6 +106,8 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
     runtimeId: record.runtimeId,
     runtimeMode: record.runtimeMode,
     runtimeState: runtime?.state ?? 'missing',
+    placement,
+    hostId: placement.kind === 'ssh' ? placement.hostId : undefined,
     models: record.models,
     adapters: record.adapters,
     adapterBindings: record.adapterBindings ?? [],
@@ -128,9 +145,11 @@ export interface CreateInstanceInput {
   name?: string
   runtimeMode: 'shared' | 'isolated'
   source?: string
+  hostId?: string
 }
 
 export async function createInstance(input: CreateInstanceInput, settings: Settings): Promise<InstanceInfo> {
+  if (input.hostId) return createRemoteInstance(input, settings)
   const source = input.source ?? DEFAULT_SOURCE
   await ensureMirror(settings, source)
   if (!(await commitExists(input.commit))) throw new Error('该提交不在本地镜像中，请先刷新分支')
@@ -173,6 +192,7 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
     channel: channelFor(input.branch, sha, await branchStableSha()),
     runtimeId: runtime.id,
     runtimeMode: input.runtimeMode,
+    placement: { kind: 'local' },
     models: [],
     adapters: [],
     createdAt: new Date().toISOString(),
@@ -183,8 +203,77 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
   return toInfo(record)
 }
 
-export async function deleteInstance(id: string, keepOutputs: boolean): Promise<void> {
+async function createRemoteInstance(input: CreateInstanceInput, settings: Settings): Promise<InstanceInfo> {
+  if (!input.hostId) throw new Error('缺少远端 host')
+  const roots = await remoteRoots(settings, input.hostId)
+  await ensureRemoteMirror(roots, input.source ?? DEFAULT_SOURCE)
+  const commits = await remoteCommits(roots, input.branch, 200)
+  const commit = commits.find((item) => item.sha === input.commit || item.sha.startsWith(input.commit))
+  const sha = commit?.sha ?? input.commit
+  const short = sha.slice(0, 7)
+  const name = (input.name?.trim() || `moss-${input.branch}-${short}`).slice(0, 60)
+  let id = slugify(name)
+  let suffix = 1
+  while (existsSync(paths.instance(id))) {
+    suffix += 1
+    id = `${slugify(name)}-${suffix}`
+  }
+  const remotePath = remoteInstancePath(roots, id)
+  await createRemoteWorktree(roots, id, sha)
+  const runtime = await createRemoteRuntime(roots, id, sha)
+  const record: InstanceRecord = {
+    schemaVersion: 1,
+    id,
+    name,
+    source: input.source ?? DEFAULT_SOURCE,
+    branch: input.branch,
+    commit: sha,
+    shortCommit: short,
+    commitDate: commit?.date ?? new Date().toISOString(),
+    subject: commit?.subject ?? '',
+    author: commit?.author ?? '',
+    channel: channelFor(input.branch, sha, await branchStableSha()),
+    runtimeId: runtime.id,
+    runtimeMode: 'isolated',
+    placement: {
+      kind: 'ssh',
+      hostId: roots.host.id,
+      hostName: roots.host.name,
+      root: remotePath,
+    },
+    models: [],
+    adapters: [],
+    createdAt: new Date().toISOString(),
+    lastUsedAt: null,
+  }
+  await writeRecord(record)
+  emit(Events.instancesChanged, { id })
+  return toInfo(record)
+}
+
+export async function deleteInstance(id: string, keepOutputs: boolean, settings?: Settings): Promise<void> {
   const record = await readRecord(id)
+  if (record?.placement?.kind === 'ssh') {
+    if (!settings) throw new Error('缺少设置，无法清理远端实例')
+    const placement = record.placement
+    const roots = await remoteRoots(settings, placement.hostId)
+    const mirror = remoteMirrorPath(roots)
+    const backup = `${roots.instanceRoot.replace(/\/$/, '')}/outputs-kept/${id}`
+    const command = [
+      keepOutputs
+        ? `mkdir -p ${posixQuote(backup)} && cp -R ${posixQuote(`${placement.root}/outputs/.`)} ${posixQuote(`${backup}/`)} 2>/dev/null || true`
+        : ':',
+      `git -C ${posixQuote(mirror)} worktree remove --force ${posixQuote(placement.root)} 2>/dev/null || { rm -rf ${posixQuote(placement.root)}; git -C ${posixQuote(mirror)} worktree prune; }`,
+    ].join('\n')
+    const result = await sshExec(roots.host, command, 120_000)
+    if (result.code !== 0) {
+      throw new Error(`远端实例删除失败：${(result.stderr || result.stdout).trim().slice(-1200)}`)
+    }
+    await rm(paths.instance(id), { recursive: true, force: true })
+    if (record) await rm(paths.runtime(record.runtimeId), { recursive: true, force: true })
+    emit(Events.instancesChanged, { id })
+    return
+  }
   const dir = paths.instance(id)
   if (keepOutputs && existsSync(join(dir, 'outputs'))) {
     const backup = join(paths.root(), 'outputs-kept', id)
@@ -207,13 +296,28 @@ export async function deleteInstance(id: string, keepOutputs: boolean): Promise<
   emit(Events.instancesChanged, { id })
 }
 
-export async function updateInstance(id: string, commit: string): Promise<InstanceInfo> {
+export async function updateInstance(
+  id: string,
+  commit: string,
+  settings?: Settings,
+): Promise<InstanceInfo> {
   const record = await readRecord(id)
   if (!record) throw new Error('实例不存在')
-  await checkout(paths.instance(id), commit)
-  const commits = await listCommits(record.branch, 100)
-  const info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
-  record.commit = info?.sha ?? commit
+  let info: { sha: string; date: string; subject: string; author: string } | undefined
+  if (record.placement?.kind === 'ssh') {
+    if (!settings) throw new Error('缺少设置，无法切换远端实例版本')
+    const roots = await remoteRoots(settings, record.placement.hostId)
+    const commits = await remoteCommits(roots, record.branch, 200)
+    info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
+    const sha = info?.sha ?? commit
+    await remoteCheckout(roots, id, sha)
+    record.commit = sha
+  } else {
+    await checkout(paths.instance(id), commit)
+    const commits = await listCommits(record.branch, 100)
+    info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
+    record.commit = info?.sha ?? commit
+  }
   record.shortCommit = record.commit.slice(0, 7)
   record.commitDate = info?.date ?? new Date().toISOString()
   record.subject = info?.subject ?? ''
@@ -227,6 +331,7 @@ export async function updateInstance(id: string, commit: string): Promise<Instan
 export async function isolateInstance(id: string, settings: Settings): Promise<RuntimeInfo> {
   const record = await readRecord(id)
   if (!record) throw new Error('实例不存在')
+  if (record.placement?.kind === 'ssh') throw new Error('远端实例已经是独立 venv；不支持本地 isolate')
   const previous = await readRuntime(record.runtimeId)
   const runtime = await ensureRuntime({
     instanceId: id,
