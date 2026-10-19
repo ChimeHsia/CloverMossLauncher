@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import os from 'node:os'
-import type { LaunchDevice } from '@shared/types'
+import type { LaunchDevice, Settings } from '@shared/types'
 
 function command(file: string, args: string[]): string {
   try {
@@ -10,7 +10,7 @@ function command(file: string, args: string[]): string {
   }
 }
 
-export function listDevices(): LaunchDevice[] {
+export function listDevices(settings?: Pick<Settings, 'disabledDevices' | 'deviceLabels'>): LaunchDevice[] {
   const devices: LaunchDevice[] = []
   const cpu = os.cpus()[0]?.model?.trim() || 'CPU'
 
@@ -56,5 +56,10 @@ export function listDevices(): LaunchDevice[] {
     memoryBytes: os.totalmem(),
     available: true,
   })
-  return devices
+  const disabled = new Set(settings?.disabledDevices ?? [])
+  return devices.map((device) => ({
+    ...device,
+    name: settings?.deviceLabels?.[device.id] || device.name,
+    available: device.available && !disabled.has(device.id),
+  }))
 }

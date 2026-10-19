@@ -123,6 +123,8 @@ export interface Settings {
   galleryRoots: string[]
   homeBackground: string | null
   trainerRoot: string | null
+  disabledDevices: string[]
+  deviceLabels: Record<string, string>
 }
 
 export interface AppNotification {

@@ -43,6 +43,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |
 | 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；运行态锁定 |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
+| 设备维护 | 🟡 | 设置内启用/禁用/重命名，启动条过滤；未做完整验收 |
+| 训练并发 | 🟡 | 每 host 1 训练；本地训练时推理排队；强制并发/显存配额未做 |
 | Case 配置 | 🟡 | `cases.json` 持久化；未单独做保存/重载端到端验收 |
 | 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、starting/running 重启标 failed；未做完整重启验收 |
 | 队列运行 | 🟡 | 同设备默认 1 个；持久化行已接；强制并发未做 |
@@ -136,7 +138,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - WebUI / 浏览器模式；
 - 应用内更新下载与安装；
 - 托管 Python；
-- 设备维护页/强制并发/显存配额；
+- 设备维护完整验收/强制并发/显存配额；
 - DMD 8 步采样器（当前 profile 只透传，仍走官方 pipeline）；
 - 真实 SSH host / 真实 CUDA 验收；
 - Clover 常驻后端 / Project / 图层；

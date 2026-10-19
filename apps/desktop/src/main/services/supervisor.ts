@@ -639,6 +639,14 @@ function trainerMetrics(line: string): { step?: number; loss?: number; gradNorm?
 
 export async function startTrainingJob(input: StartTrainingJobInput): Promise<JobRecord> {
   await loadJobs()
+  const hostKey = input.hostId ?? 'local'
+  const active = [...jobs.values()].filter((item) => item.state === 'running' || item.state === 'starting')
+  const trainingConflict = active.find((item) => item.kind === 'training' && (item.hostId ?? 'local') === hostKey)
+  if (trainingConflict) throw new Error('该训练主机已有训练任务在运行；每个 host 同时只允许 1 个训练')
+  if (hostKey === 'local') {
+    const inferenceConflict = active.find((item) => item.kind !== 'training')
+    if (inferenceConflict) throw new Error('本机还有推理任务在运行；训练独占本地设备，请先停止推理')
+  }
   const job: JobRecord = {
     id: `train-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
     instanceId: input.versionId,

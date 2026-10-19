@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: Settings = {
   galleryRoots: [],
   homeBackground: null,
   trainerRoot: null,
+  disabledDevices: [],
+  deviceLabels: {},
 }
 
 let cache: Settings | null = null

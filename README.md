@@ -21,6 +21,7 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
 | 通知/OOBE | ✅ | 单矩形通知抽屉；OOBE 三行环境清单，可本次跳过 |
 | 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；同设备默认排队 |
 | 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、running 重启标 failed |
+| 设备维护 | 🟡 | 设置内启用/禁用/重命名；启动条过滤；未完整验收 |
 | 官方 Gradio | 🟡 | 代码路径已接；缺 27 GB 权重，未做真机验收 |
 | xterm 终端 | ✅ | 推理/训练 Case 共用；stdout/stderr/stdin、停止/重启 |
 | 创作台/布局标注 | ✅ | 画布、区域、官方 layout JSON 编译；生成入口未接 |
@@ -59,8 +60,8 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
 - 上方新增一条新的空白启动条；
 - 运行中的 Case 收在启动条上方的折叠任务表里，可按名称/启动时间排序；
 - 同设备默认只跑 1 个真实任务，其余排队。**Case 配置写入 `cases.json`；
-  排队只在当前启动器会话内，重启丢失**；
-- 设备自动枚举 Apple MPS / NVIDIA CUDA / CPU；设备维护页未做；
+  队列行写入 `launch-queue.json`：queued 保留、running 重启标 failed**；
+- 设备自动枚举 Apple MPS / NVIDIA CUDA / CPU；设备启用/禁用/重命名在设置内；
 - `official` 后端启动实例里的 `gradio_app.py`；`Clover` 常驻后端未实现。
 
 ![创作窗口](docs/assets/studio.webp)
@@ -180,7 +181,8 @@ docs/                   产品、架构、状态、路线图、layout 规范、A
 - 真实 CUDA 训练未验收；`startTrainingJob` 用模拟输出/fake ssh 验证过 step/loss 链路；
   远端环境安装/doctor 用 fake uv 验证；
 - SSH 远端执行/导出采样只有 fake ssh 验证，真实 host/CUDA 未验收；
-  Clover 常驻后端、Project/图层、设备维护、WebUI、应用内更新、打包/公证未实现；
+  Clover 常驻后端、Project/图层、WebUI、应用内更新、打包/公证未实现；
+  设备维护/并发只做代码路径与基础验收。
 - DMD 8 步 profile 目前只透传，仍走官方 pipeline；真正 8 步采样器未实现；
 - Windows 未实机验证；
 - 开发渲染 CSP 仍允许 `unsafe-eval`，打包前需要收紧。

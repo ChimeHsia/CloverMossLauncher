@@ -98,7 +98,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `supervisor.ts` | 推理/训练 Job、spawn、日志、进度、readiness、取消 |
 | `parsers.ts` | ANSI、`\r`/`\n` 分帧、tqdm、下载条、错误匹配 |
 | `diagnostics.ts` | 诊断去重、toast 预算、解决动作、持久化 |
-| `devices.ts` | Apple MPS / CUDA / CPU 枚举 |
+| `devices.ts` | Apple MPS / CUDA / CPU 枚举；设置过滤/重命名 |
 | `cases.ts` | Case（启动配置）持久化 |
 | `onboarding.ts` | OOBE 三行状态 |
 | `trainerGit.ts` | trainer bare mirror、分支/commit、per-commit worktree |
@@ -276,6 +276,7 @@ queued → starting → running → succeeded | failed | canceled
 - `cases.ts` 持久化 Case，不是每次 Job；
 - 首页 `Home.tsx` 维护当前会话的运行/排队视图；
 - 同设备默认只跑 1 个真实任务，其余 `queued`；
+- 本地训练独占本地设备，推理排队；每 host 只允许 1 个训练；
 - 队列行持久化到 `launch-queue.json`；重启时 queued 保留，starting/running 标 failed；
 - 官方 Gradio：`gradio_app.py --host 127.0.0.1 --port <free>`，
   可追加 extraArgs；匹配 `Running on local URL` 后显示 URL；真实权重未验收；
@@ -386,7 +387,7 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | Project / 图层 | 画布/草稿只存在内存 |
 | Clover 常驻后端 | 没有 HTTP/WS 服务；创作生成未接 |
 | 队列完整重启验收 | 已有 `launch-queue.json`，但自动重排/重启行为未验收 |
-| 设备维护/并发配额 | 未做 |
+| 设备维护完整验收/并发配额 | 已有设置过滤与本地训练互斥，未做完整验收 |
 | 打包/公证 | 未做 |
 | V2 推理引擎 | 见 [future-inference-engine.md](future-inference-engine.md) |
 

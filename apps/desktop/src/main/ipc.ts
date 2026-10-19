@@ -99,7 +99,7 @@ export function registerIpc(): void {
     return true
   })
 
-  handle(Ipc.devicesList, null, () => listDevices())
+  handle(Ipc.devicesList, null, () => listDevices(getSettings()))
 
   handle(Ipc.casesList, null, () => listCases())
 

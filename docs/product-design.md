@@ -127,7 +127,7 @@ Kohaku Trainer
 - Case 是可复用的**启动配置**，不是一次 Job；
 - Case 配置持久化在 `cases.json`；
 - 队列行写 `launch-queue.json`；重启时 queued 保留、starting/running 标 failed；
-- 同设备默认 1 个真实任务，其余排队；
+- 同设备默认 1 个真实任务，其余排队；本地训练期间本地推理排队；每 host 同时 1 个训练；
 - 运行中 Jobs 进入运行栈，同时可在终端查看日志；
 - 运行结束后 Job 历史/终端仍可回看日志；首页任务列表只显示当前会话的进行中/排队项。
 
@@ -241,6 +241,7 @@ Kohaku Trainer
 | 外观 | 背景图选择/恢复默认；深色固定 |
 | 更新 | 检查更新（不安装） |
 | 画廊 | 额外根目录 |
+| 设备 | 启用/禁用/重命名；启动条过滤 |
 | 运行时 | Python 解释器路径、Node/Chrome 信息；托管 Python 未接 |
 
 ## 10. 视觉与交互规范
@@ -293,13 +294,14 @@ Kohaku Trainer
 - 官方 Gradio 真实启动（缺 27 GB 权重）；
 - 真实 CUDA 训练（本机无 CUDA）；
 - trainer 环境安装（未在 CUDA 主机执行）；
-- 数据检查/缓存（命令已拼装，未真实运行）；
-- SSH host/远端代码只验证 fake ssh，没有真实连接。
+- 数据检查/缓存（代码已拼装，未真实运行）；
+- SSH host/远端代码只验证 fake ssh，没有真实连接；
+- 队列完整重启、设备维护完整流程未验收。
 
 **未实现：**
 
 - Clover 常驻后端、Project 持久化/图层；
-- 队列完整重启验收、设备维护页、强制并发/显存配额；
+- 队列完整重启验收、设备维护完整验收、强制并发/显存配额；
 - 训练导出/采样真实 CUDA 验收；
 - SSH 远端真实 host 验收；
 - WebUI、应用内更新安装、打包/公证；
@@ -313,7 +315,7 @@ Kohaku Trainer
 2. **Project + 图层**：Project 独立于 Case；持久化画布/图层/资产；
 3. **SSH 真实 host 验收**：host key/权限、远端 mirror/worktree/venv、远端 Job/日志；
 4. **训练收尾**：真实 CUDA 验收、导出/采样真实执行、loss 曲线；
-5. **启动器加固**：队列完整重启验收、设备维护、Gradio 真机、27 GB 权重；
+5. **启动器加固**：队列完整重启验收、设备维护验收、Gradio 真机、27 GB 权重；
 6. **M5 WebUI + 更新**：Fastify/SSE、token/局域网、更新下载/安装；
 7. **M6 打包**：macOS 签名/公证、Windows NSIS、设备矩阵；
 8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期。

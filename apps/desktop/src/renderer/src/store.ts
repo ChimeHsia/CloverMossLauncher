@@ -578,6 +578,12 @@ export const useApp = create<AppStore>((set, get) => {
           (job) =>
             job.deviceId === input.deviceId &&
             (job.state === 'starting' || job.state === 'running'),
+        ) ||
+        get().jobs.some(
+          (job) =>
+            job.kind === 'training' &&
+            (!job.hostId || job.hostId === 'local') &&
+            (job.state === 'starting' || job.state === 'running'),
         )
 
       if (busy) {

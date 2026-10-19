@@ -25,7 +25,7 @@ import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../compo
 
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
-  const { settings, env, saveSettings, refreshEnv, refreshUpdates } = useApp()
+  const { settings, env, devices, saveSettings, refreshEnv, refreshDevices, refreshUpdates } = useApp()
   const [draft, setDraft] = useState<Settings | null>(settings)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [saving, setSaving] = useState(false)
@@ -58,6 +58,7 @@ export function SettingsPage(): React.JSX.Element {
       await saveSettings(draft)
       toast.push('设置已保存', 'success')
       await refreshEnv()
+      await refreshDevices()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     } finally {
@@ -242,6 +243,44 @@ export function SettingsPage(): React.JSX.Element {
             <p className="text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
               迁移目录不会自动搬文件；建议先在新位置下载，再删除旧缓存。
             </p>
+          </div>
+        </Card>
+
+        <Card className="px-5 py-4">
+          <h2 className="text-[13px] font-semibold">设备维护</h2>
+          <p className="mt-1 text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
+            禁用的设备不再出现在启动条；每设备仍默认只跑 1 个推理任务，训练占用本地设备时推理排队。
+          </p>
+          <div className="mt-3 space-y-1.5">
+            {devices.map((device) => {
+              const disabled = (draft.disabledDevices ?? []).includes(device.id)
+              return (
+                <div key={device.id} className="flex items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-2">
+                  <input
+                    type="checkbox"
+                    checked={!disabled}
+                    onChange={(event) => {
+                      const next = new Set(draft.disabledDevices ?? [])
+                      if (event.target.checked) next.delete(device.id)
+                      else next.add(device.id)
+                      patch({ disabledDevices: [...next] })
+                    }}
+                    className="size-3 accent-[var(--color-accent)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <input
+                      value={draft.deviceLabels?.[device.id] ?? ''}
+                      placeholder={device.name}
+                      onChange={(event) => patch({ deviceLabels: { ...(draft.deviceLabels ?? {}), [device.id]: event.target.value } })}
+                      className="w-full bg-transparent text-[10.5px] outline-none placeholder:text-[var(--color-text-secondary)]"
+                    />
+                    <span className="block text-[8.5px] text-[var(--color-text-tertiary)]">{device.detail} · {disabled ? '已禁用' : '可用'}</span>
+                  </span>
+                  <Pill tone={disabled ? 'neutral' : 'accent'}>{disabled ? 'Off' : 'On'}</Pill>
+                </div>
+              )
+            })}
+            {devices.length === 0 ? <p className="text-[10.5px] text-[var(--color-text-tertiary)]">没有检测到设备。</p> : null}
           </div>
         </Card>
 

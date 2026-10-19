@@ -17,14 +17,15 @@
 - 环境、实例、运行时、模型、下载、画廊、诊断；
 - Supervisor + runner + 终端；推理/训练共用 Job 表；
 - Trainer 仓库/版本/环境/训练窗口/本机训练 Job；
-- SSH host CRUD 骨架。
+- SSH host 探测、远端 mirror/worktree/venv/train/export 代码路径（fake ssh）；
+- 队列落盘、实例 pin 切换、适配器绑定、设备启用/禁用。
 
 未具备：
 
-- SSH 远端执行；
-- 真实 CUDA 训练与导出/采样；
+- 真实 SSH host / CUDA 验收；
+- 真实训练导出/采样；
 - Clover 常驻后端、Project/图层；
-- 队列落盘、WebUI、更新安装、打包。
+- WebUI、更新安装、打包。
 
 ## 1. P0 · SSH 远端训练
 
@@ -114,7 +115,7 @@
 范围：
 
 1. 队列落盘完整验收：queued/running 跨重启行为、渲染层自动重排；
-2. 设备维护页：禁用/重命名/显存预算；
+2. 设备维护验收：启用/禁用/重命名/显存预算；
 3. 强制并发/显存配额（显式高级选项）；
 4. 官方 Gradio 真机验收（27 GB 权重）；
 5. 实例更新/回滚 UI；
