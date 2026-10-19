@@ -147,3 +147,92 @@ delta。三者缺一不可。
    批量生成时不要简单 stack；
 4. **CFG + skip**：skip 只在 `slg_start..slg_stop` 区间生效，默认全区间；
 5. **分辨率**：必须是 16 的倍数，否则直接报错（上游如此）。
+
+## 9. 社区 FP16-fixed（KBlueLeaf）
+
+来源：[KBlueLeaf/MOSS-Image-FP16-fixed](https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed)，
+Apache-2.0，commit `a880990b7fc9d2052f32fa9a1527f524b6847e83`（2026-10-19）。
+
+### 9.1 它是什么
+
+- **只替换 transformer**：Base 和 SFT 的 DiT 权重各自提供；文本编码器、tokenizer、
+  VAE、scheduler 和 pipeline 代码仍使用官方组件；
+- 官方权重的 residual stream 最大约 61–62k，接近 fp16 上限 65.5k（约 1.05× 余量）；
+  修复版把 stream 在权重里按 `c = 1/16` 缩放，同一位置的余量约 16.9×；
+- 缩放是 2 的幂，fp32/bf16 下精确；RMSNorm 的 `eps` 仍保持官方值，diffusers/
+  ComfyUI 可直接加载；
+- 模型卡称它是“same outputs as the official model up to rounding”，并在自己的
+  测试里比官方 bf16 更接近 fp32；这不是“所有场景绝对精度更高”的证明。
+
+### 9.2 文件与大小
+
+| 内容 | 路径 | 大小 |
+| --- | --- | ---: |
+| Base transformer（diffusers，3 shards + config/index） | `base/transformer/` | 10.16 GB |
+| SFT transformer（diffusers） | `sft/transformer/` | 10.16 GB |
+| Base ComfyUI 单文件 | `comfyui/moss_image_base_fp16_fixed.safetensors` | 10.16 GB |
+| SFT ComfyUI 单文件 | `comfyui/moss_image_sft_fp16_fixed.safetensors` | 10.16 GB |
+
+完整仓库约 40.7 GB（两套 diffusers + 两套 ComfyUI + 报告/图）。启动器目录把它拆成
+四个 `role: dit` 条目：Base/SFT 的 diffusers transformer，以及 Base/SFT 的 ComfyUI
+单文件；每个条目只下载自己需要的文件，约 10.16 GB。diffusers 条目下载后仍需官方
+完整 pipeline 的 TE/VAE/tokenizer。
+
+### 9.3 使用
+
+diffusers：先加载官方 pipeline，把 transformer 替换为修复版权重：
+
+```python
+import importlib
+import torch
+from diffusers import DiffusionPipeline
+
+pipe = DiffusionPipeline.from_pretrained(
+    "OpenMOSS-Team/MOSS-Image-Base",  # or MOSS-Image-SFT
+    custom_pipeline="pipeline_moss_image",
+    trust_remote_code=True,
+    transformer=None,
+    torch_dtype=torch.float16,
+)
+pipe.scheduler = type(pipe.scheduler).from_config(pipe.scheduler.config)
+MOSSImageTransformer = importlib.import_module(type(pipe).__module__).MOSSImageTransformer
+pipe.transformer = MOSSImageTransformer.from_pretrained(
+    "KBlueLeaf/MOSS-Image-FP16-fixed",
+    subfolder="base/transformer",  # or sft/transformer
+    torch_dtype=torch.float16,
+)
+pipe.to("cuda")
+```
+
+ComfyUI：把对应 `comfyui/*.safetensors` 放进 `models/diffusion_models/`，搭配
+Comfy-Org 的 Qwen3.5 文本编码器与 Flux2 VAE；启动参数必须带 `--fp16-unet`，
+否则 ComfyUI 会按 bf16/fp32 处理。
+
+KohakuMoss：`PRECISION=fp16`，`WEIGHTS`/`TRANSFORMER` 指向对应文件；也支持
+`FP16_FIX=online` 在加载官方权重时折叠。
+
+### 9.4 质量与硬件注意
+
+- 模型卡报告（RTX 5090，1024²/50 步/CFG3，对各自 fp32 参考）：
+  - ComfyUI Base：fp16-fixed LPIPS **0.0062** / PSNR **44.8 dB**；官方 bf16
+    0.0501 / 29.3 dB；SFT 0.0042 / 43.2 dB；
+  - diffusers Base：0.0111 / 42.8 dB；官方 bf16 0.0900 / 26.8 dB；
+  - 这些是作者测试数据，不是本项目复现结果。
+- 社区反馈 2080 Ti / V100 可直接用 fp16，不需要特殊处理；本机没有这些卡，
+  **未验收**。
+- 只替换 transformer；如果 LoRA/LoKr 作用在 `video_embedder`、`text_embedder` 或
+  `shared_block_modulation`，delta 需要按同一 `c` 缩放；常规 q/k/v/o/FFN 适配器
+  可以直接迁移。
+- 需要官方完整模型的 TE/VAE/tokenizer；不要把它当完整 pipeline 单独启动。
+
+### 9.5 目录条目
+
+| id | precision | role | 下载路径 |
+| --- | --- | --- | --- |
+| `moss-base-fp16-fixed` | fp16 | dit | `base/transformer/*` |
+| `moss-sft-fp16-fixed` | fp16 | dit | `sft/transformer/*` |
+| `moss-base-fp16-fixed-comfy` | fp16 | dit | `comfyui/moss_image_base_fp16_fixed.safetensors` |
+| `moss-sft-fp16-fixed-comfy` | fp16 | dit | `comfyui/moss_image_sft_fp16_fixed.safetensors` |
+
+四个条目共享同一个 HF repo 缓存；下载其中一个不会拉取其他变体。删除其中一个只
+移除该变体的完成标记，不删除其他变体的文件。

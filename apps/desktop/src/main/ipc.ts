@@ -31,6 +31,7 @@ import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
 import { checkUpdates, dismissAnnouncement } from './services/updates'
 import { cancelUpdateDownload, downloadUpdate } from './services/updateDownload'
+import { pushTestNotification } from './services/desktopNotifications'
 import { isInside } from './lib/paths'
 import { openGradioWindow, openWindow } from './windows'
 import { listDevices } from './services/devices'
@@ -251,6 +252,8 @@ export function registerIpc(): void {
   )
 
   handle(Ipc.updatesCancel, schemas.updatesCancel, ({ version }) => cancelUpdateDownload(version))
+
+  handle(Ipc.notificationTest, null, () => pushTestNotification())
 
   handle(Ipc.announcementsDismiss, schemas.announcementsDismiss, ({ id }) => {
     dismissAnnouncement(id)

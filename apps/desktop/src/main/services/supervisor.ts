@@ -35,6 +35,7 @@ import {
   sshTunnelArgs,
 } from './ssh'
 import { pushDiagnostic } from './diagnostics'
+import { pushLocalNotification } from './desktopNotifications'
 import {
   LineSplitter,
   exitRule,
@@ -128,8 +129,29 @@ function snapshot(job: JobRecord): JobRecord {
 }
 
 function update(job: JobRecord, patch: Partial<JobRecord>): void {
+  const previousState = job.state
   Object.assign(job, patch)
   emit(Events.job, snapshot(job))
+  if (
+    previousState !== job.state &&
+    job.mode !== 'simulate' &&
+    (job.state === 'succeeded' || job.state === 'failed')
+  ) {
+    const training = job.kind === 'training' || job.mode === 'training'
+    const label = training ? '训练' : '生成'
+    const target = training
+      ? job.trainerRunName ?? job.instanceName
+      : job.caseName ?? job.instanceName
+    pushLocalNotification({
+      title: job.state === 'succeeded' ? `${label}完成` : `${label}失败`,
+      body:
+        job.state === 'succeeded'
+          ? `${target} · 点击查看终端`
+          : `${target} · ${job.error?.message ?? '查看诊断了解原因'}`,
+      windowKind: job.state === 'succeeded' ? 'terminal' : 'launcher',
+      route: job.state === 'succeeded' ? undefined : '/diagnostics',
+    })
+  }
   void saveJobs()
 }
 

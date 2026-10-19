@@ -9,6 +9,7 @@ import type { JobRecord } from '@shared/types'
 import { buildGradioArgs, gradioCommandPreview, gradioSummary, normalizeGradioConfig } from '@shared/launch'
 import { compareSemver, findInstaller, parseReleaseMarkdown } from '@shared/release'
 import { downloadUpdate } from './services/updateDownload'
+import { localNotificationsSupported, pushTestNotification } from './services/desktopNotifications'
 import WebSocket from 'ws'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, deleteInstance, listInstances, updateInstance } from './services/instances'
@@ -50,6 +51,7 @@ if (isDev) {
   app.setPath('userData', join(app.getAppPath(), '..', '..', '.dev-data'))
 }
 app.setName('CloverMoss')
+if (process.platform === 'win32') app.setAppUserModelId('com.clovermoss.launcher')
 nativeTheme.themeSource = 'dark'
 
 protocol.registerSchemesAsPrivileged([
@@ -171,6 +173,49 @@ app.whenReady().then(async () => {
     )
     win.destroy()
     app.exit(loadedUrl.endsWith('/health') ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'notification-test') {
+    const supported = localNotificationsSupported()
+    const shown = supported ? pushTestNotification() : false
+    console.log(JSON.stringify({ scenario: 'notification-test', supported, shown }, null, 2))
+    setTimeout(() => app.exit(shown ? 0 : 1), 1200)
+    return
+  }
+
+  if (scenario === 'model-catalog-fp16') {
+    try {
+      const catalog = await getCatalog(getSettings(), true)
+      const entries = catalog.models.filter((model) => model.id.includes('fp16-fixed'))
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'model-catalog-fp16',
+            models: catalog.models.length,
+            entries: entries.map((model) => ({
+              id: model.id,
+              role: model.role,
+              precision: model.precision,
+              sizeBytes: model.sizeBytes,
+              files: model.files,
+              installed: model.installed,
+            })),
+          },
+          null,
+          2,
+        ),
+      )
+      app.exit(
+        entries.length === 4 &&
+          entries.every((entry) => entry.role === 'dit' && entry.precision === 'fp16' && entry.files?.length === 1)
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
     return
   }
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-19T02:00:00Z",
+  "updated_at": "2026-10-19T09:48:26Z",
   "models": [
     {
       "id": "moss-sft",
@@ -13,7 +13,11 @@
       "size_bytes": 27200000000,
       "size_estimated": true,
       "license": "Apache-2.0",
-      "tags": ["official", "sft", "recommended"],
+      "tags": [
+        "official",
+        "sft",
+        "recommended"
+      ],
       "preview": "https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/resolve/main/assets/teaser.webp",
       "notes": "官方 SFT 权重，含 transformer / text_encoder / vae / tokenizer / scheduler。"
     },
@@ -28,8 +32,111 @@
       "size_bytes": 27200000000,
       "size_estimated": true,
       "license": "Apache-2.0",
-      "tags": ["official", "base"],
+      "tags": [
+        "official",
+        "base"
+      ],
       "notes": "官方 Base 权重，适合继续微调或作为 LoRA 基座。"
+    },
+    {
+      "id": "moss-base-fp16-fixed",
+      "name": "MOSS-Image Base FP16-fixed (社区)",
+      "provider": "hf",
+      "repo": "KBlueLeaf/MOSS-Image-FP16-fixed",
+      "revision": "main",
+      "role": "dit",
+      "precision": "fp16",
+      "size_bytes": 10164704750,
+      "files": [
+        "base/transformer/*"
+      ],
+      "license": "Apache-2.0",
+      "tags": [
+        "community",
+        "fp16",
+        "fixed",
+        "base",
+        "diffusers",
+        "2080ti",
+        "v100"
+      ],
+      "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/base_diffusers_p3_s11.webp",
+      "notes": "社区 FP16 修复版，只包含 DiT transformer；需搭配官方 TE/VAE/tokenizer/pipeline。模型卡称 residual stream 余量约 16.9×，更接近 fp32；社区反馈 2080 Ti/V100 无需特殊处理。下载后使用 base/transformer。"
+    },
+    {
+      "id": "moss-sft-fp16-fixed",
+      "name": "MOSS-Image SFT FP16-fixed (社区)",
+      "provider": "hf",
+      "repo": "KBlueLeaf/MOSS-Image-FP16-fixed",
+      "revision": "main",
+      "role": "dit",
+      "precision": "fp16",
+      "size_bytes": 10164704750,
+      "files": [
+        "sft/transformer/*"
+      ],
+      "license": "Apache-2.0",
+      "tags": [
+        "community",
+        "fp16",
+        "fixed",
+        "sft",
+        "diffusers",
+        "2080ti",
+        "v100"
+      ],
+      "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/sft_diffusers_p3_s11.webp",
+      "notes": "社区 FP16 修复版，只包含 DiT transformer；需搭配官方 TE/VAE/tokenizer/pipeline。模型卡称 residual stream 余量约 16.9×，更接近 fp32；社区反馈 2080 Ti/V100 无需特殊处理。下载后使用 sft/transformer。"
+    },
+    {
+      "id": "moss-base-fp16-fixed-comfy",
+      "name": "MOSS-Image Base FP16-fixed · ComfyUI (社区)",
+      "provider": "hf",
+      "repo": "KBlueLeaf/MOSS-Image-FP16-fixed",
+      "revision": "main",
+      "role": "dit",
+      "precision": "fp16",
+      "size_bytes": 10164655600,
+      "files": [
+        "comfyui/moss_image_base_fp16_fixed.safetensors"
+      ],
+      "license": "Apache-2.0",
+      "tags": [
+        "community",
+        "fp16",
+        "fixed",
+        "base",
+        "comfyui",
+        "2080ti",
+        "v100"
+      ],
+      "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/base_comfyui_p3_s11.webp",
+      "notes": "ComfyUI 单文件 FP16-fixed DiT；搭配官方 Qwen3.5 文本编码器与 Flux2 VAE，启动需 --fp16-unet。2080 Ti/V100 社区反馈无需特殊处理。"
+    },
+    {
+      "id": "moss-sft-fp16-fixed-comfy",
+      "name": "MOSS-Image SFT FP16-fixed · ComfyUI (社区)",
+      "provider": "hf",
+      "repo": "KBlueLeaf/MOSS-Image-FP16-fixed",
+      "revision": "main",
+      "role": "dit",
+      "precision": "fp16",
+      "size_bytes": 10164655600,
+      "files": [
+        "comfyui/moss_image_sft_fp16_fixed.safetensors"
+      ],
+      "license": "Apache-2.0",
+      "tags": [
+        "community",
+        "fp16",
+        "fixed",
+        "sft",
+        "comfyui",
+        "2080ti",
+        "v100"
+      ],
+      "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/sft_comfyui_p3_s11.webp",
+      "notes": "ComfyUI 单文件 FP16-fixed DiT；搭配官方 Qwen3.5 文本编码器与 Flux2 VAE，启动需 --fp16-unet。2080 Ti/V100 社区反馈无需特殊处理。"
     },
     {
       "id": "moss-sft-int8",
@@ -42,7 +149,12 @@
       "size_bytes": 5400000000,
       "size_estimated": true,
       "license": "Apache-2.0",
-      "tags": ["community", "quantized", "int8", "low-memory"],
+      "tags": [
+        "community",
+        "quantized",
+        "int8",
+        "low-memory"
+      ],
       "notes": "第三方量化 DiT；文本编码器与 VAE 仍需搭配官方组件。"
     },
     {
@@ -56,7 +168,13 @@
       "size_bytes": 3000000000,
       "size_estimated": true,
       "license": "Apache-2.0",
-      "tags": ["community", "quantized", "int4", "low-memory", "comfy"],
+      "tags": [
+        "community",
+        "quantized",
+        "int4",
+        "low-memory",
+        "comfy"
+      ],
       "notes": "ComfyUI 键位的 INT4 DiT，启动器会做键位映射；质量请自行对比。"
     },
     {
@@ -70,7 +188,10 @@
       "size_bytes": 27000000000,
       "size_estimated": true,
       "license": "Apache-2.0",
-      "tags": ["community", "comfy"],
+      "tags": [
+        "community",
+        "comfy"
+      ],
       "notes": "ComfyUI 分发格式（unet/te/vae 分开），适合与 ComfyUI 共用缓存。"
     }
   ],
@@ -92,7 +213,11 @@
       "size_bytes": 1271000000,
       "size_estimated": true,
       "requires_profile": "dmd8",
-      "tags": ["few-step", "recommended", "8-step"],
+      "tags": [
+        "few-step",
+        "recommended",
+        "8-step"
+      ],
       "notes": "data-space DMD：8 次前向、无 CFG、fp32；必须使用专用采样器，不是普通 LoRA。"
     },
     {
@@ -112,7 +237,10 @@
       "size_bytes": 1271000000,
       "size_estimated": true,
       "requires_profile": "dmd8",
-      "tags": ["few-step", "8-step"],
+      "tags": [
+        "few-step",
+        "8-step"
+      ],
       "notes": "Base 版 DMD 适配器。"
     }
   ]

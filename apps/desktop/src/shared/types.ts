@@ -120,6 +120,7 @@ export interface Settings {
   modelsRoot: string | null
   pythonPath: string | null
   autoCheckUpdates: boolean
+  desktopNotifications: boolean
   updateChannel: 'stable' | 'beta'
   dismissedAnnouncements: string[]
   dismissedUpdateVersion: string | null

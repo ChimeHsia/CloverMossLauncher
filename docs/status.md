@@ -38,9 +38,9 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 实例 | 🟡 | 本机 mirror/worktree/固定 SHA/删除/隔离；远端 placement/mirror/worktree/venv/删除/切版本（fake ssh）；真实 host 未验收 |
 | 远端实例部署 | 🟡 | SSH mirror/worktree/venv、删除/切版本、远端模型缓存检查；fake ssh 验证，真实 host 未验收 |
 | 运行时 | ✅ | 共享/独立/远端 venv、lock hash、uv/pip、安装日志 |
-| 模型/适配器 | 🟡 | 目录/下载/HF 缓存；适配器绑定/启用/强度 UI 已接；模型包绑定未做 |
+| 模型/适配器 | 🟡 | 目录/下载/HF 缓存；支持 `files` 子集下载组件（FP16-fixed Base/SFT）；适配器绑定/启用/强度 UI 已接；模型包绑定未做 |
 | 画廊 | ✅ | 全局入口、自定义根、分页、元数据、`clover://` |
-| 通知 | ✅ | 右上角单矩形、默认展开、非首页收起 |
+| 通知 | 🟡 | 应用内单矩形；桌面通知（任务完成/失败、发现更新）与测试入口已接；真实任务触发/Windows 未验收 |
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |
 | 启动条/运行栈 | ✅ | Case/工作台/实例/设备/Gradio 参数或档位/Case 设置；运行态锁定 |
 | Gradio 启动参数 | 🟡 | 侧滑面板、命令预览、打开方式/监听/端口、旧数据迁移；真实 Gradio 启动未验收 |
@@ -110,9 +110,11 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Gradio 应用内窗口 | `--scenario=gradio-window` | 独立 BrowserWindow 加载本地 URL，标题正确 |
 | 设备管理器库存 | `--scenario=device-manager` | fake ssh 探测出远端 GPU；本机 MPS/CPU 与远端设备同列；instanceRoot/modelsRoot 持久化 |
 | 设备管理器 UI | `--screenshot` | 第五窗口、host 列表、设备卡、测试/使用入口渲染 |
+| FP16-fixed 目录 | `--scenario=model-catalog-fp16` | 4 个 dit/fp16 条目（diffusers/ComfyUI）、files 子集、10.16 GB 声明 |
 | Release 解析 | `--scenario=release-parse` | `json clover-release` 块、semver/prerelease、平台 installer 与正文解析 |
 | Release 首页文案 | `--scenario=release-parse` | 首页篇章文案可读取；缺少可选字段的旧文档仍能解析 |
 | 更新下载校验 | `--scenario=update-download` | 本地测试 HTTP 包下载完成，sha256 与源一致 |
+| 桌面通知 | `--scenario=notification-test` | macOS Notification supported/shown；测试通知可显示 |
 | 更新弹窗 | `--scenario=update-dialog` | 9.9.9 预览数据渲染更新弹窗、平台安装包摘要与发布说明 |
 | Release 文档生成 | `pnpm release:md:check` | manifest/models 生成 `release.md` 且可重复校验 |
 | 缺权重预检 | 首页点击启动 | 生成 `E_MODEL` 诊断 + toast，不误下载 |
@@ -157,6 +159,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 12. **开发 CSP 仍允许 `unsafe-eval`**：打包前必须收紧。
 13. **浅色主题已移除**：设置 schema 里仍有 `theme`，UI 固定深色；属于迁移残留。
 14. **终端保留已完成任务**：便于回看日志，不是只显示运行中。
+15. **桌面通知未全平台验收**：macOS 测试通知可显示；任务完成/失败触发、Windows/Linux、系统权限拒绝路径未验收。
 15. **工具链仍依赖系统**：Git/Python/uv 只做扫描与报错；官方安装引导、PATH 接管、OOBE 运行环境行仍是 ADR-0006 待实现设计。
 15. **远端模型下载未实现**：远端 Instance 会检查默认 SFT 缓存，但不会自动下载/上传 27 GB；需预先准备或改用自定义模型。
 16. **远端结果回传只验证官方 Gradio 目录同步**：fake ssh 下 `find + scp` 到本地实例 outputs；远端 runner 结果回传、真实 host 大文件同步未验收。

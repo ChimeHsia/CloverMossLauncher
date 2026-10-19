@@ -41,6 +41,7 @@ export const schemas = {
       modelsRoot: z.string().max(4096).nullable(),
       pythonPath: z.string().max(4096).nullable(),
       autoCheckUpdates: z.boolean(),
+      desktopNotifications: z.boolean(),
       updateChannel: z.enum(['stable', 'beta']),
       dismissedUpdateVersion: z.string().max(80).nullable(),
       sidebarCollapsed: z.boolean(),

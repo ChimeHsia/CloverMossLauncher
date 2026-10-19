@@ -1,4 +1,5 @@
 import {
+  Bell,
   ExternalLink,
   FolderOpen,
   HardDrive,
@@ -111,6 +112,23 @@ export function SettingsPage(): React.JSX.Element {
       toast.push(result.error, 'error')
     } else {
       toast.push('当前已是最新版本', 'success')
+    }
+  }
+
+  async function testNotification(): Promise<void> {
+    if (!draft?.desktopNotifications) {
+      toast.push('先开启桌面通知', 'info')
+      return
+    }
+    try {
+      await saveSettings({ desktopNotifications: true })
+      const shown = await call<boolean>(Ipc.notificationTest)
+      toast.push(
+        shown ? '测试通知已发送' : '系统通知不可用，请检查系统通知权限',
+        shown ? 'success' : 'info',
+      )
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
     }
   }
 
@@ -439,7 +457,7 @@ export function SettingsPage(): React.JSX.Element {
         </Card>
 
         <Card className="px-5 py-4">
-          <h2 className="text-[13px] font-semibold">更新与公告</h2>
+          <h2 className="text-[13px] font-semibold">更新、公告与通知</h2>
           <div className="mt-3 space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -452,6 +470,29 @@ export function SettingsPage(): React.JSX.Element {
                 checked={draft.autoCheckUpdates}
                 onCheckedChange={(value: boolean) => patch({ autoCheckUpdates: value })}
               />
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
+              <div>
+                <div className="text-[12px] font-medium">桌面通知</div>
+                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  任务完成/失败、发现新版本时发送系统通知
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  tone="ghost"
+                  onClick={() => void testNotification()}
+                  disabled={!draft.desktopNotifications}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Bell className="size-3.5" /> 测试
+                  </span>
+                </Button>
+                <Switch
+                  checked={draft.desktopNotifications}
+                  onCheckedChange={(value: boolean) => patch({ desktopNotifications: value })}
+                />
+              </div>
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
               <div>

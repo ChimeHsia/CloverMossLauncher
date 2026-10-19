@@ -515,6 +515,24 @@ async function runModelDownload(task: DownloadTask, entry: ModelEntry, settings:
 
   await mkdir(join(cacheDir, 'refs'), { recursive: true })
   await writeFile(join(cacheDir, 'refs', 'main'), sha, 'utf8')
+  if (entry.files?.length) {
+    await writeFile(
+      modelSentinel(settings, entry),
+      JSON.stringify(
+        {
+          id: entry.id,
+          repo: entry.repo,
+          sha,
+          files: selected.map((file) => file.path),
+          totalBytes: total,
+          completedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    )
+  }
   invalidateCatalog()
   touch(task, { state: 'done', bytes: total, speedBps: 0, currentFile: undefined })
 }
@@ -646,7 +664,15 @@ export async function deleteModel(kind: 'model' | 'adapter', targetId: string, s
   const entry = kind === 'model' ? catalog.models.find((m) => m.id === targetId) : catalog.adapters.find((a) => a.id === targetId)
   if (!entry) return
   if (kind === 'model') {
-    await rm(join(paths.hub(settings.modelsRoot), `models--${(entry as ModelEntry).repo.replace('/', '--')}`), {
+    const model = entry as ModelEntry
+    if (model.files?.length) {
+      // Variant downloads share an HF repo cache with sibling entries. Remove
+      // only this variant's completion marker; files stay for the other variant.
+      await unlink(modelSentinel(settings, model)).catch(() => undefined)
+      invalidateCatalog()
+      return
+    }
+    await rm(join(paths.hub(settings.modelsRoot), `models--${model.repo.replace('/', '--')}`), {
       recursive: true,
       force: true,
     })

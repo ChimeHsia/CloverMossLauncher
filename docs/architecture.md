@@ -71,7 +71,7 @@ apps/desktop/
     ipc.ts               IPC handler + zod
     lib/                 paths / run / events
     services/            env / network / git / runtimes / instances / models /
-                         release / updates / updateDownload / gallery / supervisor / parsers /
+                         release / updates / updateDownload / desktopNotifications / gallery / supervisor / parsers /
                          diagnostics / devices / cases / onboarding / trainerGit / trainers /
                          trainingHosts / remoteTrainer / remoteInstances / ssh / launchQueue /
                          trainerArtifacts / projects / backend
@@ -103,6 +103,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `models.ts` | HF 兼容缓存、下载、Range 续传、LFS sha256、适配器 |
 | `release.ts` | GitHub Release/本地/cache/legacy 发布文档加载与回退 |
 | `updates.ts` | 公告、版本比较、平台 installer 匹配 |
+| `desktopNotifications.ts` | Electron 系统通知、点击聚焦、设置开关；任务/更新事件触发 |
 | `updateDownload.ts` | 安装包下载、进度、sha256 校验、打开安装程序 |
 | `gallery.ts` | outputs/自定义根、分页、元数据、`clover://` |
 | `supervisor.ts` | 推理/训练 Job、spawn、日志、进度、readiness、取消 |
@@ -408,7 +409,7 @@ trainerRoot/
 - `.glass-thin` 用于标题栏/侧栏，`.content-surface` 用于内容，`.glass` 卡片；
 - 只保留深色：`nativeTheme.themeSource = 'dark'`；
 - 背景以 inline style 同时给启动器 main、Creator、Terminal、Trainer；
-- 通知是右上角单矩形，默认展开。
+- 应用内通知是右上角单矩形，默认展开；任务完成/失败与发现更新走 Electron 系统通知，设置可关闭。
 
 ## 15. 开发与验证
 

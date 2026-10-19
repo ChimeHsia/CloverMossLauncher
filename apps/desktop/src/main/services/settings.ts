@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   modelsRoot: null,
   pythonPath: null,
   autoCheckUpdates: true,
+  desktopNotifications: true,
   updateChannel: 'stable',
   dismissedAnnouncements: [],
   dismissedUpdateVersion: null,

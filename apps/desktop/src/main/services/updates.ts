@@ -6,8 +6,11 @@ import { compareSemver, findInstaller } from '@shared/release'
 import { paths } from '../lib/paths'
 import { loadReleaseDocument, localReleaseDir } from './release'
 import { getSettings, updateSettings } from './settings'
+import { pushLocalNotification } from './desktopNotifications'
 
 export { localReleaseDir }
+
+let lastNotifiedUpdateVersion: string | null = null
 
 async function fetchText(url: string, timeoutMs = 6000): Promise<string> {
   const response = await fetch(url, {
@@ -74,11 +77,12 @@ export async function checkUpdates(settings?: Settings): Promise<UpdateState> {
     }
     announcements.sort((a, b) => Number(b.pinned) - Number(a.pinned))
 
-    return {
+    const updateAvailable = compareSemver(doc.app.version, currentVersion) > 0
+    const state: UpdateState = {
       checkedAt,
       currentVersion,
       latestVersion: doc.app.version,
-      updateAvailable: compareSemver(doc.app.version, currentVersion) > 0,
+      updateAvailable,
       channel: doc.app.channel,
       manifestSource: loaded.source,
       home: doc.home,
@@ -89,6 +93,25 @@ export async function checkUpdates(settings?: Settings): Promise<UpdateState> {
       installer: findInstaller(doc.installers, process.platform, process.arch),
       mandatory: doc.app.mandatory ?? false,
     }
+    const quiet =
+      process.argv.includes('--smoke') ||
+      process.argv.includes('--screenshot') ||
+      process.argv.some((arg) => arg.startsWith('--scenario='))
+    if (
+      updateAvailable &&
+      doc.app.version !== lastNotifiedUpdateVersion &&
+      doc.app.version !== effective.dismissedUpdateVersion &&
+      !quiet
+    ) {
+      const shown = pushLocalNotification({
+        title: `发现新版本 ${doc.app.version}`,
+        body: '打开启动器查看更新说明并选择是否安装。',
+        windowKind: 'launcher',
+        route: '/settings',
+      })
+      if (shown) lastNotifiedUpdateVersion = doc.app.version
+    }
+    return state
   } catch (error) {
     return {
       checkedAt,

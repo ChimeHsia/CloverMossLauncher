@@ -7,7 +7,7 @@
 - 通道：**stable**
 - 发布：2026-10-19T02:00:00Z
 - 最低版本：0.1.0
-- 模型目录：2026-10-19T02:00:00Z · `sha256:6b4b0c781588…`
+- 模型目录：2026-10-19T09:48:26Z · `sha256:8e08446b803e…`
 
 ## 安装包
 
@@ -19,6 +19,10 @@ _当前发布未附带安装包。_
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `moss-sft` | MOSS-Image SFT | `OpenMOSS-Team/MOSS-Image-SFT` | full | bf16 | 27.2 GB | Apache-2.0 | `official` `sft` `recommended` |
 | `moss-base` | MOSS-Image Base | `OpenMOSS-Team/MOSS-Image-Base` | full | bf16 | 27.2 GB | Apache-2.0 | `official` `base` |
+| `moss-base-fp16-fixed` | MOSS-Image Base FP16-fixed (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `base` `diffusers` `2080ti` `v100` |
+| `moss-sft-fp16-fixed` | MOSS-Image SFT FP16-fixed (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `sft` `diffusers` `2080ti` `v100` |
+| `moss-base-fp16-fixed-comfy` | MOSS-Image Base FP16-fixed · ComfyUI (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `base` `comfyui` `2080ti` `v100` |
+| `moss-sft-fp16-fixed-comfy` | MOSS-Image SFT FP16-fixed · ComfyUI (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `sft` `comfyui` `2080ti` `v100` |
 | `moss-sft-int8` | MOSS-Image SFT INT8 (社区) | `Abiray/MOSS-Image-SFT-INT8-convrot` | dit | int8 | 5.4 GB | Apache-2.0 | `community` `quantized` `int8` `low-memory` |
 | `moss-sft-int4` | MOSS-Image SFT INT4 (社区) | `toxicdog/MOSS-Image-SFT-INT4-ConvRot-ComfyUI` | dit | int4 | 3.0 GB | Apache-2.0 | `community` `quantized` `int4` `low-memory` `comfy` |
 | `moss-comfy-repack` | MOSS-Image (Comfy-Org 重打包) | `Comfy-Org/MOSS-Image` | full | mixed | 27.0 GB | Apache-2.0 | `community` `comfy` |
@@ -139,9 +143,9 @@ _当前发布未附带安装包。_
     "subtitle": "选好工作台、实例与设备，开始今天的创作。"
   },
   "catalog": {
-    "updated_at": "2026-10-19T02:00:00Z",
+    "updated_at": "2026-10-19T09:48:26Z",
     "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
-    "models_sha256": "6b4b0c781588c8e32178b057fa521626e6ff75632e96fb254a9bf4fbbfe6d358"
+    "models_sha256": "8e08446b803eaa48782e82953a285d4baf0a93c78b9932acb9792d14c11551cf"
   },
   "announcements": [
     {
