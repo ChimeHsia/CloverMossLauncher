@@ -18,6 +18,7 @@ try {
     configFile: false,
     root: resolve(root, 'tools/ui-fixture'),
     base: './',
+    define: { 'process.env.NODE_ENV': JSON.stringify(process.argv.includes('--development') ? 'development' : 'production') },
     resolve: {
       alias: {
         '@shared': resolve(root, 'apps/desktop/src/shared'),

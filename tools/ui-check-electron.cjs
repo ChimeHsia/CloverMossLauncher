@@ -5,6 +5,7 @@ const { mkdirSync, writeFileSync } = require('node:fs')
 const desktopRequire = createRequire(join(__dirname, '../apps/desktop/package.json'))
 const { app, BrowserWindow } = desktopRequire('electron')
 const output = process.argv[2]
+const checkMotion = require('./ui-motion-checks.cjs')
 
 app.setPath('userData', join(output, 'profile'))
 app.disableHardwareAcceleration()
@@ -36,7 +37,10 @@ app.whenReady().then(async () => {
   const waitFor = async (code) => {
     const deadline = Date.now() + 5000
     while (!(await evaluate(code))) {
-      if (Date.now() > deadline) throw new Error(`Timed out: ${code}`)
+      if (Date.now() > deadline) {
+        const state = await evaluate('({ dialogs: Array.from(document.querySelectorAll("dialog")).map(dialog => ({ open: dialog.open, state: dialog.dataset.motionState })), focus: document.activeElement.id, animations: document.getAnimations().length })')
+        throw new Error(`Timed out: ${code}; ${JSON.stringify(state)}`)
+      }
       await new Promise((resolve) => setTimeout(resolve, 20))
     }
   }
@@ -137,6 +141,7 @@ app.whenReady().then(async () => {
     await evaluate('document.querySelector("[aria-controls=launch-stack]").click()')
     await waitFor('document.querySelector("[aria-controls=launch-stack]").getAttribute("aria-expanded") === "false"')
     await capture('home')
+    await checkMotion({ evaluate, waitFor, webContents: win.webContents, capture })
     console.log(`UI checks passed at ${scale * 100}%: typography, shared controls, modal focus/top layer, nested Escape, backdrop gesture, settings draft/save, task sorting/disclosure, motion preferences, surface radii`)
     app.exit(0)
   } catch (error) {

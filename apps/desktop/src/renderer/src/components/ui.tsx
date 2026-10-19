@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -15,6 +16,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import type { CheckStatus } from '@shared/types'
+import { Presence, useMotionPresence } from './motion'
 
 export { Field, Input, Select, Switch, Textarea } from './form'
 
@@ -219,21 +221,53 @@ function Dialog({
   const backdropPressed = useRef(false)
   const titleId = useId()
   const descriptionId = useId()
+  const { present, ref: panel } = useMotionPresence(open, sheet ? 'sheet' : 'dialog')
+  const content = useRef<ReactNode>(null)
+  const trigger = useRef<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
     const element = dialog.current
-    if (!open || !element) return
-    const trigger = document.activeElement
+    // A browser close request may be non-cancelable. Reopening during the
+    // retained exit must re-enter the native top layer even if presence stayed true.
+    if (!open || !element || element.open) return
+    trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    element.showModal()
+  })
+
+  useLayoutEffect(() => {
+    const element = dialog.current
+    if (!present || !element) return
     // Native modal dialogs own the top layer, background inertness, focus trap
     // and focus restoration, including when another dialog opens above them.
-    element.showModal()
     return () => {
       element.close()
-      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
+      if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true })
     }
-  }, [open])
+  }, [present])
 
-  if (!open) return null
+  const body = (
+    <>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
+        <div className="min-w-0 break-words">
+          <h2 id={titleId} className="text-[15px] font-semibold">{title}</h2>
+          {description ? (
+            <p id={descriptionId} className="mt-1 break-all text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
+          ) : null}
+        </div>
+        <IconButton label="关闭" onClick={onClose}>
+          <X className="size-4" />
+        </IconButton>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+      {footer ? (
+        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
+          {footer}
+        </footer>
+      ) : null}
+    </>
+  )
+  if (open) content.current = body
+  if (!present) return null
 
   return createPortal(
     <dialog
@@ -242,44 +276,35 @@ function Dialog({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={cn('app-dialog', sheet && 'app-dialog-sheet')}
+      data-motion-state={open ? 'open' : 'closed'}
+      onClose={(event) => {
+        event.stopPropagation()
+        if (open && !event.currentTarget.open) onClose()
+      }}
       onCancel={(event) => {
         event.preventDefault()
         event.stopPropagation()
-        onClose()
+        if (open) onClose()
       }}
       onMouseDown={(event) => {
         backdropPressed.current = event.target === event.currentTarget
       }}
       onClick={(event) => {
         event.stopPropagation()
-        if (backdropPressed.current && event.target === event.currentTarget) onClose()
+        if (open && backdropPressed.current && event.target === event.currentTarget) onClose()
         backdropPressed.current = false
       }}
     >
       <div
+        ref={panel}
+        inert={!open}
         className={cn(
           'app-dialog-panel glass-strong flex w-full flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-2xl',
           sheet ? 'h-full border-l' : 'max-h-[82vh]',
           width ?? (sheet ? 'max-w-[520px]' : 'max-w-2xl'),
         )}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <div className="min-w-0 break-words">
-            <h2 id={titleId} className="text-[15px] font-semibold">{title}</h2>
-            {description ? (
-              <p id={descriptionId} className="mt-1 break-all text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
-            ) : null}
-          </div>
-          <IconButton label="关闭" onClick={onClose}>
-            <X className="size-4" />
-          </IconButton>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? (
-          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
-            {footer}
-          </footer>
-        ) : null}
+        {content.current}
       </div>
     </dialog>,
     document.body,
@@ -300,6 +325,7 @@ interface ToastItem {
   id: string
   message: string
   tone: ToastTone
+  open: boolean
 }
 
 const ToastContext = createContext<{ push: (message: string, tone?: ToastTone) => void }>({
@@ -318,12 +344,28 @@ const toastIcon: Record<ToastTone, ReactNode> = {
 
 export function ToastProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [items, setItems] = useState<ToastItem[]>([])
+  const timers = useRef(new Map<string, number>())
+  useEffect(() => () => {
+    timers.current.forEach((timer) => window.clearTimeout(timer))
+    timers.current.clear()
+  }, [])
+  useEffect(() => {
+    const retained = new Set(items.map((item) => item.id))
+    for (const [id, timer] of timers.current) {
+      if (!retained.has(id)) {
+        window.clearTimeout(timer)
+        timers.current.delete(id)
+      }
+    }
+  }, [items])
   const push = useCallback((message: string, tone: ToastTone = 'info') => {
     const id = crypto.randomUUID()
-    setItems((previous) => [...previous.slice(-2), { id, message, tone }])
-    window.setTimeout(() => {
-      setItems((previous) => previous.filter((item) => item.id !== id))
+    setItems((previous) => [...previous.slice(-2), { id, message, tone, open: true }])
+    const timer = window.setTimeout(() => {
+      timers.current.delete(id)
+      setItems((previous) => previous.map((item) => item.id === id ? { ...item, open: false } : item))
     }, 5000)
+    timers.current.set(id, timer)
   }, [])
   const value = useMemo(() => ({ push }), [push])
 
@@ -332,13 +374,17 @@ export function ToastProvider({ children }: { children: ReactNode }): React.JSX.
       {children}
       <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[300px] flex-col gap-1.5">
         {items.map((item) => (
-          <div
+          <Presence
             key={item.id}
+            open={item.open}
+            preset="toast"
+            onExited={() => setItems((previous) => previous.filter((entry) => entry.id !== item.id))}
+            role="status"
             className="glass-strong pointer-events-auto flex items-start gap-2 rounded-[6px] border border-[var(--color-border-subtle)] px-2.5 py-2 text-[11.5px] shadow-lg"
           >
             {toastIcon[item.tone]}
             <span className="leading-5">{item.message}</span>
-          </div>
+          </Presence>
         ))}
       </div>
     </ToastContext.Provider>

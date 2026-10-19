@@ -4,6 +4,7 @@ import type { AdapterEntry, DownloadTask, ModelEntry } from '@shared/types'
 import { bytes, percent } from '../lib/format'
 import { t } from '../lib/i18n'
 import { useApp } from '../store'
+import { MotionPanel } from '../components/motion'
 import {
   Button,
   Card,
@@ -177,204 +178,206 @@ export function ModelsPage(): React.JSX.Element {
         </div>
       </div>
 
-      {active.length > 0 ? (
-        <Card className="overflow-hidden">
-          <div className="border-b border-[var(--color-border-subtle)] px-4 py-2.5 text-[12.5px] font-medium">
-            下载队列
-          </div>
-          <div className="divide-y divide-[var(--color-border-subtle)]">
-            {active.map((task) => (
-              <div key={task.id} className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-[12.5px] font-medium">{task.label}</span>
-                      <Pill
-                        tone={
-                          task.state === 'error'
-                            ? 'red'
-                            : task.state === 'paused'
-                              ? 'amber'
-                              : task.state === 'done'
-                                ? 'accent'
-                                : 'blue'
-                        }
-                      >
-                        {stateLabel[task.state]}
-                      </Pill>
-                      {task.filesTotal > 0 ? (
-                        <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
-                          {task.filesDone}/{task.filesTotal} 文件
+      <MotionPanel transitionKey={tab} className="space-y-4">
+        {active.length > 0 ? (
+          <Card className="overflow-hidden">
+            <div className="border-b border-[var(--color-border-subtle)] px-4 py-2.5 text-[12.5px] font-medium">
+              下载队列
+            </div>
+            <div className="divide-y divide-[var(--color-border-subtle)]">
+              {active.map((task) => (
+                <div key={task.id} className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[12.5px] font-medium">{task.label}</span>
+                        <Pill
+                          tone={
+                            task.state === 'error'
+                              ? 'red'
+                              : task.state === 'paused'
+                                ? 'amber'
+                                : task.state === 'done'
+                                  ? 'accent'
+                                  : 'blue'
+                          }
+                        >
+                          {stateLabel[task.state]}
+                        </Pill>
+                        {task.filesTotal > 0 ? (
+                          <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
+                            {task.filesDone}/{task.filesTotal} 文件
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <ProgressBar value={percent(task.bytes, task.totalBytes)} className="flex-1" />
+                        <span className="w-24 text-right text-[10.5px] text-[var(--color-text-tertiary)]">
+                          {bytes(task.bytes)} / {bytes(task.totalBytes)}
                         </span>
+                      </div>
+                      {task.currentFile ? (
+                        <div className="mt-1 truncate text-[10.5px] text-[var(--color-text-tertiary)]">
+                          {task.currentFile}
+                        </div>
+                      ) : null}
+                      {task.error ? (
+                        <div className="mt-1 text-[10.5px] text-red-500">{task.error}</div>
                       ) : null}
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3">
-                      <ProgressBar value={percent(task.bytes, task.totalBytes)} className="flex-1" />
-                      <span className="w-24 text-right text-[10.5px] text-[var(--color-text-tertiary)]">
-                        {bytes(task.bytes)} / {bytes(task.totalBytes)}
-                      </span>
-                    </div>
-                    {task.currentFile ? (
-                      <div className="mt-1 truncate text-[10.5px] text-[var(--color-text-tertiary)]">
-                        {task.currentFile}
-                      </div>
-                    ) : null}
-                    {task.error ? (
-                      <div className="mt-1 text-[10.5px] text-red-500">{task.error}</div>
+                    {task.state === 'running' ? (
+                      <IconButton label="暂停下载" onClick={() => void pauseDownload(task.id)} disabled={busy === task.id}>
+                        <Pause className="size-3.5" />
+                      </IconButton>
+                    ) : task.state === 'paused' || task.state === 'error' ? (
+                      <IconButton label="继续下载" onClick={() => void resume(task)} disabled={busy === task.id}>
+                        <Play className="size-3.5" />
+                      </IconButton>
                     ) : null}
                   </div>
-                  {task.state === 'running' ? (
-                    <IconButton label="暂停下载" onClick={() => void pauseDownload(task.id)} disabled={busy === task.id}>
-                      <Pause className="size-3.5" />
-                    </IconButton>
-                  ) : task.state === 'paused' || task.state === 'error' ? (
-                    <IconButton label="继续下载" onClick={() => void resume(task)} disabled={busy === task.id}>
-                      <Play className="size-3.5" />
-                    </IconButton>
-                  ) : null}
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ) : null}
-
-      {tab === 'downloading' && active.length === 0 ? (
-        <EmptyState icon={<Download className="size-7" />} title="没有进行中的下载" description="从模型或适配器卡片开始下载。" />
-      ) : (
-        <>
-          <section className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[13px] font-semibold">模型</h2>
-              <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
-                下载会写入 HF 兼容缓存，官方代码可直接命中
-              </span>
+              ))}
             </div>
-            {filteredModels.length === 0 ? (
-              <EmptyState icon={<Package className="size-7" />} title="没有匹配的模型" />
-            ) : (
-              <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2">
-                {filteredModels.map((model) => (
-                  <Card key={model.id} className="flex h-full flex-col px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium">{model.name}</div>
-                        <div className="mt-0.5 truncate font-mono text-[10.5px] text-[var(--color-text-tertiary)]">
-                          {model.repo}
+          </Card>
+        ) : null}
+
+        {tab === 'downloading' && active.length === 0 ? (
+          <EmptyState icon={<Download className="size-7" />} title="没有进行中的下载" description="从模型或适配器卡片开始下载。" />
+        ) : (
+          <>
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[13px] font-semibold">模型</h2>
+                <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
+                  下载会写入 HF 兼容缓存，官方代码可直接命中
+                </span>
+              </div>
+              {filteredModels.length === 0 ? (
+                <EmptyState icon={<Package className="size-7" />} title="没有匹配的模型" />
+              ) : (
+                <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2">
+                  {filteredModels.map((model) => (
+                    <Card key={model.id} className="flex h-full flex-col px-4 py-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-medium">{model.name}</div>
+                          <div className="mt-0.5 truncate font-mono text-[10.5px] text-[var(--color-text-tertiary)]">
+                            {model.repo}
+                          </div>
+                        </div>
+                        {model.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <Pill tone="neutral">{model.precision}</Pill>
+                        {model.tags
+                          .filter((tag) => tag !== model.precision)
+                          .map((tag) => (
+                            <Pill key={tag} tone={tagTone(tag)}>
+                              {tag}
+                            </Pill>
+                          ))}
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-[var(--color-text-secondary)]">
+                        {model.notes ?? '—'}
+                      </p>
+                      <div className="mt-auto flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-2.5">
+                        <div className="text-[10.5px] text-[var(--color-text-tertiary)]">
+                          {model.installed ? `已占 ${bytes(model.installedBytes)}` : `${bytes(model.sizeBytes)} · ${model.license}`}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {model.installed ? (
+                            <IconButton
+                              label="删除模型"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  kind: 'model',
+                                  id: model.id,
+                                  name: model.name,
+                                  sizeBytes: model.sizeBytes,
+                                  repo: model.repo,
+                                  license: model.license,
+                                })
+                              }
+                            >
+                              <Trash2 className="size-3.5" />
+                            </IconButton>
+                          ) : (
+                            <Button tone="primary" className="min-w-[72px]" onClick={() => askModel(model)}>
+                              下载
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      {model.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      <Pill tone="neutral">{model.precision}</Pill>
-                      {model.tags
-                        .filter((tag) => tag !== model.precision)
-                        .map((tag) => (
-                          <Pill key={tag} tone={tagTone(tag)}>
-                            {tag}
-                          </Pill>
-                        ))}
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-[var(--color-text-secondary)]">
-                      {model.notes ?? '—'}
-                    </p>
-                    <div className="mt-auto flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-2.5">
-                      <div className="text-[10.5px] text-[var(--color-text-tertiary)]">
-                        {model.installed ? `已占 ${bytes(model.installedBytes)}` : `${bytes(model.sizeBytes)} · ${model.license}`}
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[13px] font-semibold">适配器</h2>
+                <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
+                  LoRA / LyCORIS / DMD；DMD 需要专用采样器
+                </span>
+              </div>
+              {filteredAdapters.length === 0 ? (
+                <EmptyState icon={<ShieldCheck className="size-7" />} title="目录里还没有适配器" />
+              ) : (
+                <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2">
+                  {filteredAdapters.map((adapter) => (
+                    <Card key={adapter.id} className="flex h-full flex-col px-4 py-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-medium">{adapter.name}</div>
+                          <div className="mt-0.5 truncate font-mono text-[10.5px] text-[var(--color-text-tertiary)]">
+                            {adapter.repo}
+                          </div>
+                        </div>
+                        {adapter.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
                       </div>
-                      <div className="flex items-center gap-1">
-                        {model.installed ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <Pill tone="blue">{adapter.kind}</Pill>
+                        {adapter.base ? <Pill tone="neutral">base: {adapter.base}</Pill> : null}
+                        {adapter.requiresProfile === 'dmd8' ? <Pill tone="amber">需要 8 步 DMD</Pill> : null}
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-[var(--color-text-secondary)]">
+                        {adapter.notes ?? '—'}
+                      </p>
+                      <div className="mt-auto flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-2.5">
+                        <div className="text-[10.5px] text-[var(--color-text-tertiary)]">
+                          {adapter.installed ? `已占 ${bytes(adapter.installedBytes)}` : `${bytes(adapter.sizeBytes)} · ${adapter.license}`}
+                        </div>
+                        {adapter.installed ? (
                           <IconButton
-                            label="删除模型"
+                            label="删除适配器"
                             onClick={() =>
                               setDeleteTarget({
-                                kind: 'model',
-                                id: model.id,
-                                name: model.name,
-                                sizeBytes: model.sizeBytes,
-                                repo: model.repo,
-                                license: model.license,
+                                kind: 'adapter',
+                                id: adapter.id,
+                                name: adapter.name,
+                                sizeBytes: adapter.sizeBytes,
+                                repo: adapter.repo,
+                                license: adapter.license,
                               })
                             }
                           >
                             <Trash2 className="size-3.5" />
                           </IconButton>
                         ) : (
-                          <Button tone="primary" className="min-w-[72px]" onClick={() => askModel(model)}>
+                          <Button tone="primary" className="min-w-[72px]" onClick={() => askAdapter(adapter)}>
                             下载
                           </Button>
                         )}
                       </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[13px] font-semibold">适配器</h2>
-              <span className="text-[10.5px] text-[var(--color-text-tertiary)]">
-                LoRA / LyCORIS / DMD；DMD 需要专用采样器
-              </span>
-            </div>
-            {filteredAdapters.length === 0 ? (
-              <EmptyState icon={<ShieldCheck className="size-7" />} title="目录里还没有适配器" />
-            ) : (
-              <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2">
-                {filteredAdapters.map((adapter) => (
-                  <Card key={adapter.id} className="flex h-full flex-col px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium">{adapter.name}</div>
-                        <div className="mt-0.5 truncate font-mono text-[10.5px] text-[var(--color-text-tertiary)]">
-                          {adapter.repo}
-                        </div>
-                      </div>
-                      {adapter.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      <Pill tone="blue">{adapter.kind}</Pill>
-                      {adapter.base ? <Pill tone="neutral">base: {adapter.base}</Pill> : null}
-                      {adapter.requiresProfile === 'dmd8' ? <Pill tone="amber">需要 8 步 DMD</Pill> : null}
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-[var(--color-text-secondary)]">
-                      {adapter.notes ?? '—'}
-                    </p>
-                    <div className="mt-auto flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-2.5">
-                      <div className="text-[10.5px] text-[var(--color-text-tertiary)]">
-                        {adapter.installed ? `已占 ${bytes(adapter.installedBytes)}` : `${bytes(adapter.sizeBytes)} · ${adapter.license}`}
-                      </div>
-                      {adapter.installed ? (
-                        <IconButton
-                          label="删除适配器"
-                          onClick={() =>
-                            setDeleteTarget({
-                              kind: 'adapter',
-                              id: adapter.id,
-                              name: adapter.name,
-                              sizeBytes: adapter.sizeBytes,
-                              repo: adapter.repo,
-                              license: adapter.license,
-                            })
-                          }
-                        >
-                          <Trash2 className="size-3.5" />
-                        </IconButton>
-                      ) : (
-                        <Button tone="primary" className="min-w-[72px]" onClick={() => askAdapter(adapter)}>
-                          下载
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )}
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </MotionPanel>
 
       <Modal
         open={Boolean(pending)}

@@ -34,6 +34,7 @@ import { openGradioUi } from '../lib/openGradio'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
 import { GradioSettingsSheet } from '../components/GradioSettingsSheet'
+import { Collapse, Presence } from '../components/motion'
 import { Button, Field, IconButton, Input, Pill, Select, Spinner, cn, useToast } from '../components/ui'
 
 const stateLabel: Record<LaunchRow['state'], string> = {
@@ -290,100 +291,100 @@ export function HomePage(): React.JSX.Element {
           </button>
         </div>
 
-            <div id="launch-stack" hidden={collapsed || activeRows.length === 0} className="border-t border-[var(--color-border-subtle)]">
-              {activeRows.map((row) => {
-                const running = row.state === 'running' || row.state === 'starting'
-                const queued = row.state === 'queued'
-                const job = rowJob(row)
-                return (
-                  <div
-                    key={row.id}
-                    className="flex h-11 items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 last:border-0"
-                  >
-                    <span
-                      className={cn(
-                        'size-1.5 shrink-0 rounded-full',
-                        queued ? 'bg-neutral-500' : running ? 'bg-accent-400' : 'bg-red-400',
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="truncate text-[10.5px] font-medium">{row.caseName}</span>
-                        <span className="shrink-0 text-[9px] text-[var(--color-text-tertiary)]">
-                          {stateLabel[row.state]}
-                        </span>
-                      </div>
-                      <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
-                        {row.instanceName} · {deviceName(row.deviceId)}
-                        {job?.url ? ' · 已就绪' : ''}
-                      </div>
+        <Collapse id="launch-stack" open={!collapsed && activeRows.length > 0}>
+          <div className="border-t border-[var(--color-border-subtle)]">
+            {activeRows.map((row) => {
+              const running = row.state === 'running' || row.state === 'starting'
+              const queued = row.state === 'queued'
+              const job = rowJob(row)
+              return (
+                <div
+                  key={row.id}
+                  className="flex h-11 items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 last:border-0"
+                >
+                  <span
+                    className={cn(
+                      'size-1.5 shrink-0 rounded-full',
+                      queued ? 'bg-neutral-500' : running ? 'bg-accent-400' : 'bg-red-400',
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-[10.5px] font-medium">{row.caseName}</span>
+                      <span className="shrink-0 text-[9px] text-[var(--color-text-tertiary)]">
+                        {stateLabel[row.state]}
+                      </span>
                     </div>
-                    {row.state === 'running' && job?.progress.percent ? (
-                      <div className="hidden w-16 shrink-0 sm:block">
-                        <div className="h-px overflow-hidden rounded-full bg-white/[0.08]">
-                          <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
-                        </div>
-                      </div>
-                    ) : null}
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      {job?.url ? (
-                        <IconButton
-                          label="打开界面"
-                          className="size-6"
-                          onClick={() =>
-                            openGradioInterface(
-                              job.url!,
-                              job.gradio?.openMode ?? 'browser',
-                              job.caseName,
-                            )
-                          }
-                        >
-                          <ExternalLink className="size-3" />
-                        </IconButton>
-                      ) : null}
-                      <IconButton
-                        label="终端"
-                        className="size-6"
-                        onClick={() => openTerminal(row)}
-                        disabled={!row.jobId}
-                      >
-                        <SquareTerminal className="size-3" />
-                      </IconButton>
-                      <IconButton
-                        label={queued ? '取消排队' : '停止'}
-                        className="size-6 text-red-300 hover:bg-red-500/10"
-                        onClick={() => void stopLaunch(row.id)}
-                      >
-                        <Square className="size-2.5" />
-                      </IconButton>
+                    <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
+                      {row.instanceName} · {deviceName(row.deviceId)}
+                      {job?.url ? ' · 已就绪' : ''}
                     </div>
                   </div>
-                )
-              })}
-            </div>
+                  {row.state === 'running' && job?.progress.percent ? (
+                    <div className="hidden w-16 shrink-0 sm:block">
+                      <div className="h-px overflow-hidden rounded-full bg-white/[0.08]">
+                        <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {job?.url ? (
+                      <IconButton
+                        label="打开界面"
+                        className="size-6"
+                        onClick={() =>
+                          openGradioInterface(
+                            job.url!,
+                            job.gradio?.openMode ?? 'browser',
+                            job.caseName,
+                          )
+                        }
+                      >
+                        <ExternalLink className="size-3" />
+                      </IconButton>
+                    ) : null}
+                    <IconButton
+                      label="终端"
+                      className="size-6"
+                      onClick={() => openTerminal(row)}
+                      disabled={!row.jobId}
+                    >
+                      <SquareTerminal className="size-3" />
+                    </IconButton>
+                    <IconButton
+                      label={queued ? '取消排队' : '停止'}
+                      className="size-6 text-red-300 hover:bg-red-500/10"
+                      onClick={() => void stopLaunch(row.id)}
+                    >
+                      <Square className="size-2.5" />
+                    </IconButton>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Collapse>
       </section>
 
       <div className="sticky bottom-0 z-20 mt-3">
-        {advancedOpen ? (
-          <div className="app-popover glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 border border-[var(--color-border)] p-3 shadow-2xl">
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="Case 名称">
-                <Input
-                  value={caseName}
-                  onChange={(event) => setCaseName(event.target.value)}
-                  placeholder="例如：日常 1024 / 官方 Gradio"
-                  className="w-[240px]"
-                />
-              </Field>
-              <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
-                {selectedCase ? '保存 Case' : '保存为 Case'}
-              </Button>
-              <p className="w-full text-[9px] leading-4 text-[var(--color-text-tertiary)]">
-                Gradio 的启动参数在启动条上的「Gradio」按钮里配置；这里只管理 Case 本身。
-              </p>
-            </div>
+        <Presence open={advancedOpen} preset="flyout" className="app-popover glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 border border-[var(--color-border)] p-3 shadow-2xl">
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Case 名称">
+              <Input
+                value={caseName}
+                onChange={(event) => setCaseName(event.target.value)}
+                placeholder="例如：日常 1024 / 官方 Gradio"
+                className="w-[240px]"
+              />
+            </Field>
+            <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
+              {selectedCase ? '保存 Case' : '保存为 Case'}
+            </Button>
+            <p className="w-full text-[9px] leading-4 text-[var(--color-text-tertiary)]">
+              Gradio 的启动参数在启动条上的「Gradio」按钮里配置；这里只管理 Case 本身。
+            </p>
           </div>
-        ) : null}
+        </Presence>
 
         <div className="glass-strong flex flex-wrap items-end gap-2 rounded-[6px] border border-[var(--color-border)] p-2">
           <Field label="Case" className="w-[110px]">

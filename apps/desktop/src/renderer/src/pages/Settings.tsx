@@ -23,6 +23,7 @@ import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
 import { clearSavedSettings, pendingSettings } from '../lib/settingsDraft'
 import { useApp } from '../store'
+import { Presence } from '../components/motion'
 import { Button, Card, IconButton, Input, Pill, Segmented, Select, StatusDot, Switch, useToast } from '../components/ui'
 
 export function SettingsPage(): React.JSX.Element {
@@ -592,15 +593,15 @@ export function SettingsPage(): React.JSX.Element {
         </Card>
       </div>
 
-      {dirty ? createPortal(
-        <div role="status" className="glass-strong fixed bottom-4 left-1/2 z-30 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 px-3 py-2 shadow-lg">
+      {createPortal(
+        <Presence open={dirty} preset="toast" role="status" className="glass-strong fixed bottom-4 left-1/2 z-30 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 px-3 py-2 shadow-lg">
           <span className="text-[11px] text-[var(--color-text-secondary)]">有未保存的更改</span>
           <Button tone="primary" size="sm" onClick={() => void save()} disabled={saving}>
             {saving ? '保存中…' : '保存'}
           </Button>
-        </div>,
+        </Presence>,
         document.body,
-      ) : null}
+      )}
     </div>
   )
 }

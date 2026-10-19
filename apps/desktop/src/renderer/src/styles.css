@@ -5,6 +5,8 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme {
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--motion-ease);
   --font-sans: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, -apple-system, BlinkMacSystemFont,
     "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "Cascadia Code", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -56,7 +58,7 @@
   --radius-dialog: 10px;
   --motion-fast: 120ms;
   --motion-normal: 180ms;
-  --motion-ease: ease-out;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 html,
@@ -145,6 +147,16 @@ body {
 .app-dialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
+  opacity: 1;
+  transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+.app-dialog[data-motion-state="closed"]::backdrop {
+  opacity: 0;
+}
+
+@starting-style {
+  .app-dialog[open]::backdrop { opacity: 0; }
 }
 
 .app-dialog-sheet {
@@ -160,22 +172,23 @@ body {
   border-radius: var(--radius-dialog);
 }
 
-.app-dialog-panel {
-  animation: dialog-enter var(--motion-normal) var(--motion-ease);
+.app-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition: grid-template-rows var(--motion-normal) var(--motion-ease), opacity var(--motion-normal) var(--motion-ease);
 }
 
-.app-dialog-sheet .app-dialog-panel {
-  animation-name: sheet-enter;
+.app-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
 }
 
-@keyframes dialog-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes sheet-enter {
-  from { opacity: 0; transform: translateX(8px); }
-  to { opacity: 1; transform: translateX(0); }
+.app-collapse-inner {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 @layer components {
@@ -377,7 +390,8 @@ main::-webkit-scrollbar {
 /* CSS media queries follow system changes immediately, in every window. */
 html[data-ui-animation="off"] *,
 html[data-ui-animation="off"] *::before,
-html[data-ui-animation="off"] *::after {
+html[data-ui-animation="off"] *::after,
+html[data-ui-animation="off"] *::backdrop {
   animation-duration: 0s !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0s !important;
@@ -387,7 +401,8 @@ html[data-ui-animation="off"] *::after {
 @media (prefers-reduced-motion: reduce) {
   html:not([data-ui-animation="on"]) *,
   html:not([data-ui-animation="on"]) *::before,
-  html:not([data-ui-animation="on"]) *::after {
+  html:not([data-ui-animation="on"]) *::after,
+  html:not([data-ui-animation="on"]) *::backdrop {
     animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0s !important;

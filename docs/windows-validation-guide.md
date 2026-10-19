@@ -54,12 +54,15 @@ pnpm dev
 ```powershell
 node tools/test-settings-draft.mjs
 node tools/test-ui.mjs --scaled
+# 开发模式 React / StrictMode 生命周期检查
+node tools/test-ui.mjs --development
 # 可选：保存受控页面截图（此目录不入库）
 node tools/test-ui.mjs --scaled --screenshots=docs/assets/ui-review
 ```
 
 UI 检查使用临时构建、独立 Electron 配置目录和内存 IPC fixtures，不读写 `.dev-data/`。
-覆盖控件计算样式、弹层焦点与 Escape、设置草稿、排序/折叠、动效偏好和 100%/150%/200% renderer 缩放。
+覆盖控件计算样式、弹层焦点与 Escape、设置草稿、排序/折叠、动效偏好和 100%/150%/200% renderer 缩放；
+包括退场中重开、内容保留、暂停动画的清理兜底、折叠中间高度、Toast 到期与上限、快速页面切换。
 这些检查不替代 §4 的操作系统 DPI、原生窗口以及真实任务验收。
 
 先构建，再从仓库根目录运行。每条场景的最终退出码必须为 `0`；保存完整输出，不要只截取末尾。

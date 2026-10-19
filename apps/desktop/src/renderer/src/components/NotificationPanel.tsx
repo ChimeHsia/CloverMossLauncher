@@ -4,6 +4,7 @@ import { call } from '../lib/api'
 import { relative } from '../lib/format'
 import { useApp } from '../store'
 import { cn, IconButton } from './ui'
+import { Presence } from './motion'
 
 const toneIcon = {
   info: <Info className="size-3.5 text-accent-300" />,
@@ -29,12 +30,10 @@ export function NotificationPanel(): React.JSX.Element | null {
   const checkForUpdates = useApp((state) => state.checkForUpdates)
   const unread = notifications.filter((item) => !item.read).length
 
-  if (!open) return null
-
   const announcements = (updates?.announcements ?? []).slice(0, 4)
 
   return (
-    <div className="app-popover glass-strong fixed right-3 top-[52px] z-40 flex max-h-[calc(100vh-64px)] w-[340px] flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+    <Presence open={open} preset="flyout" className="app-popover glass-strong fixed right-3 top-[52px] z-40 flex max-h-[calc(100vh-64px)] w-[340px] flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
       <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-2.5">
         <div className="flex items-baseline gap-2">
           <span className="text-[12.5px] font-semibold">通知</span>
@@ -162,6 +161,6 @@ export function NotificationPanel(): React.JSX.Element | null {
           )}
         </section>
       </div>
-    </div>
+    </Presence>
   )
 }
