@@ -6,7 +6,7 @@ import type { Diagnostic, DiagnosticSolution } from '@shared/types'
 import { call } from '../lib/api'
 import { relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, cn, useToast } from '../components/ui'
+import { Button, Card, EmptyState, IconButton, Pill, cn, useToast } from '../components/ui'
 
 const severityMeta = {
   error: { icon: <XCircle className="size-4 text-red-500" />, label: '错误', tone: 'red' as const },
@@ -96,9 +96,9 @@ export function DiagnosticsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button tone="ghost" onClick={() => void refreshDiagnostics()}>
+          <IconButton label="刷新" onClick={() => void refreshDiagnostics()}>
             <RefreshCw className="size-3.5" />
-          </Button>
+          </IconButton>
           <Button
             tone="secondary"
             onClick={() => {

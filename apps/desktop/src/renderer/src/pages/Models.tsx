@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   EmptyState,
+  IconButton,
   Modal,
   Pill,
   ProgressBar,
@@ -141,9 +142,9 @@ export function ModelsPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {catalog ? <Pill tone="neutral">目录：{catalog.source}</Pill> : null}
-          <Button tone="ghost" onClick={() => void refreshCatalog()}>
+          <IconButton label="刷新" onClick={() => void refreshCatalog()}>
             <RefreshCw className="size-3.5" />
-          </Button>
+          </IconButton>
         </div>
       </header>
 
@@ -223,13 +224,13 @@ export function ModelsPage(): React.JSX.Element {
                     ) : null}
                   </div>
                   {task.state === 'running' ? (
-                    <Button tone="ghost" onClick={() => void pauseDownload(task.id)} disabled={busy === task.id}>
+                    <IconButton label="暂停下载" onClick={() => void pauseDownload(task.id)} disabled={busy === task.id}>
                       <Pause className="size-3.5" />
-                    </Button>
+                    </IconButton>
                   ) : task.state === 'paused' || task.state === 'error' ? (
-                    <Button tone="ghost" onClick={() => void resume(task)} disabled={busy === task.id}>
+                    <IconButton label="继续下载" onClick={() => void resume(task)} disabled={busy === task.id}>
                       <Play className="size-3.5" />
-                    </Button>
+                    </IconButton>
                   ) : null}
                 </div>
               </div>
@@ -283,8 +284,8 @@ export function ModelsPage(): React.JSX.Element {
                       </div>
                       <div className="flex items-center gap-1">
                         {model.installed ? (
-                          <Button
-                            tone="ghost"
+                          <IconButton
+                            label="删除模型"
                             onClick={() =>
                               setDeleteTarget({
                                 kind: 'model',
@@ -297,7 +298,7 @@ export function ModelsPage(): React.JSX.Element {
                             }
                           >
                             <Trash2 className="size-3.5" />
-                          </Button>
+                          </IconButton>
                         ) : (
                           <Button tone="primary" className="min-w-[72px]" onClick={() => askModel(model)}>
                             下载
@@ -346,8 +347,8 @@ export function ModelsPage(): React.JSX.Element {
                         {adapter.installed ? `已占 ${bytes(adapter.installedBytes)}` : `${bytes(adapter.sizeBytes)} · ${adapter.license}`}
                       </div>
                       {adapter.installed ? (
-                        <Button
-                          tone="ghost"
+                        <IconButton
+                          label="删除适配器"
                           onClick={() =>
                             setDeleteTarget({
                               kind: 'adapter',
@@ -360,7 +361,7 @@ export function ModelsPage(): React.JSX.Element {
                           }
                         >
                           <Trash2 className="size-3.5" />
-                        </Button>
+                        </IconButton>
                       ) : (
                         <Button tone="primary" className="min-w-[72px]" onClick={() => askAdapter(adapter)}>
                           下载

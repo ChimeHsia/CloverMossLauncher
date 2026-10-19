@@ -7,7 +7,7 @@ import { call } from '../lib/api'
 import { cloverUrl } from '../lib/clover'
 import { dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, ProgressBar, Spinner, cn, useToast } from '../components/ui'
+import { Button, Card, EmptyState, IconButton, Input, Pill, ProgressBar, Spinner, cn, useToast } from '../components/ui'
 
 const stageLabel: Record<JobStage, string> = {
   idle: '等待',
@@ -310,18 +310,18 @@ export function RunPage(): React.JSX.Element {
             </pre>
             {running ? (
               <div className="flex items-center gap-2 border-t border-[var(--color-border-subtle)] px-3 py-2">
-                <input
+                <Input
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') void send()
                   }}
                   placeholder="向进程 stdin 发送一行（例如确认提示）"
-                  className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 font-mono text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="min-w-0 flex-1 font-mono"
                 />
-                <Button tone="secondary" onClick={() => void send()}>
+                <IconButton label="发送" onClick={() => void send()}>
                   <Send className="size-3.5" />
-                </Button>
+                </IconButton>
               </div>
             ) : null}
           </Card>

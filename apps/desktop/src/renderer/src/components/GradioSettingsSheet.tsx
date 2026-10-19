@@ -12,7 +12,7 @@ import {
   gradioCommandPreview,
   normalizeGradioConfig,
 } from '@shared/launch'
-import { Button, Pill, Sheet, cn } from './ui'
+import { Button, Field, Input, Pill, Select, Sheet, cn } from './ui'
 
 function Section({
   title,
@@ -35,27 +35,6 @@ function Section({
     </section>
   )
 }
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[10.5px] text-[var(--color-text-secondary)]">{label}</span>
-      {children}
-      {hint ? <span className="mt-1 block text-[9.5px] leading-4 text-[var(--color-text-tertiary)]">{hint}</span> : null}
-    </label>
-  )
-}
-
-const inputClass =
-  'h-8 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 text-[11px] outline-none transition focus:border-accent-500/60'
 
 export function GradioSettingsSheet({
   open,
@@ -136,19 +115,17 @@ export function GradioSettingsSheet({
 
       <Section title="模型" hint="留空则使用启动器默认的 SFT。模型路径在本机实例目录下解析。">
         <Field label="模型（HF ID 或本地目录）">
-          <input
+          <Input
             value={draft.model ?? ''}
             onChange={(event) => updateText('model', event.target.value)}
             placeholder="OpenMOSS-Team/MOSS-Image-SFT（默认）"
-            className={inputClass}
           />
         </Field>
         <Field label="模型根目录 --model-root">
-          <input
+          <Input
             value={draft.modelRoot ?? ''}
             onChange={(event) => updateText('modelRoot', event.target.value)}
             placeholder="留空使用上游默认 .."
-            className={inputClass}
           />
         </Field>
         <label className="flex items-start gap-2 text-[10.5px] leading-4 text-[var(--color-text-secondary)]">
@@ -170,20 +147,19 @@ export function GradioSettingsSheet({
       <Section title="运行与输出">
         <div className="grid grid-cols-2 gap-2">
           <Field label="显存档位 --profile">
-            <select
+            <Select
               value={draft.profile}
               onChange={(event) => update('profile', event.target.value as GradioLaunchConfig['profile'])}
-              className={inputClass}
             >
               {GRADIO_PROFILES.map((profile) => (
                 <option key={profile} value={profile}>
                   {GRADIO_PROFILE_LABELS[profile]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="端口">
-            <input
+            <Input
               inputMode="numeric"
               value={draft.port ?? ''}
               onChange={(event) => {
@@ -191,7 +167,7 @@ export function GradioSettingsSheet({
                 update('port', digits ? Number(digits) : null)
               }}
               placeholder="自动选择"
-              className={cn(inputClass, 'tabular-nums', portError && 'border-red-500/60')}
+              className={cn('tabular-nums', portError && 'border-red-500/60')}
             />
           </Field>
         </div>
@@ -204,19 +180,17 @@ export function GradioSettingsSheet({
           </p>
         ) : null}
         <Field label="输出目录 --output-dir">
-          <input
+          <Input
             value={draft.outputDir ?? ''}
             onChange={(event) => updateText('outputDir', event.target.value)}
             placeholder="outputs/gradio（默认）"
-            className={inputClass}
           />
         </Field>
         <Field label="提示词默认值 --prompt-defaults" hint="格式沿用上游 assets/prompt_defaults.txt。留空使用上游默认文件。">
-          <input
+          <Input
             value={draft.promptDefaults ?? ''}
             onChange={(event) => updateText('promptDefaults', event.target.value)}
             placeholder="留空使用上游默认文件"
-            className={inputClass}
           />
         </Field>
       </Section>
@@ -224,30 +198,28 @@ export function GradioSettingsSheet({
       <Section title="打开方式与监听" hint="计算位置不在这里改；它由 Instance 的部署位置和启动条设备决定。">
         <div className="grid grid-cols-2 gap-2">
           <Field label="界面打开位置">
-            <select
+            <Select
               value={draft.openMode}
               onChange={(event) => update('openMode', event.target.value as GradioLaunchConfig['openMode'])}
-              className={inputClass}
             >
               {GRADIO_OPEN_MODES.map((mode) => (
                 <option key={mode} value={mode}>
                   {GRADIO_OPEN_LABELS[mode]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="服务监听范围">
-            <select
+            <Select
               value={draft.listen}
               onChange={(event) => update('listen', event.target.value as GradioLaunchConfig['listen'])}
-              className={inputClass}
             >
               {GRADIO_LISTENS.map((listen) => (
                 <option key={listen} value={listen}>
                   {GRADIO_LISTEN_LABELS[listen]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         {draft.listen === 'lan' ? (
@@ -262,11 +234,11 @@ export function GradioSettingsSheet({
 
       <Section title="高级">
         <Field label="额外参数" hint="按空格拆分，支持引号包裹带空格的路径。只透传，不校验上游是否认识。">
-          <input
+          <Input
             value={draft.extraArgs ?? ''}
             onChange={(event) => updateText('extraArgs', event.target.value)}
             placeholder='例如：--share（请确认上游支持）'
-            className={cn(inputClass, 'font-mono text-[10px]')}
+            className={'font-mono text-[10px]'}
           />
         </Field>
         <div>

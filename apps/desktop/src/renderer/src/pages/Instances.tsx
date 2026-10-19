@@ -11,9 +11,12 @@ import {
   Button,
   Card,
   EmptyState,
+  IconButton,
+  Input,
   Modal,
   Pill,
   Segmented,
+  Select,
   Spinner,
   StatusDot,
   cn,
@@ -196,9 +199,9 @@ export function InstancesPage(): React.JSX.Element {
           <p className="mt-1 text-[12.5px] text-[var(--color-text-secondary)]">{t('instances.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button tone="ghost" onClick={() => void refreshInstances()}>
+          <IconButton label="刷新" onClick={() => void refreshInstances()}>
             <RefreshCw className="size-3.5" />
-          </Button>
+          </IconButton>
           <Button tone="primary" onClick={() => void openCreate()}>
             <span className="inline-flex items-center gap-1.5">
               <Plus className="size-3.5" /> {t('instances.create')}
@@ -278,13 +281,13 @@ export function InstancesPage(): React.JSX.Element {
                 ) : null}
                 <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
                   {instance.placement.kind === 'local' ? (
-                    <Button tone="ghost" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
+                    <IconButton label="打开所在目录" onClick={() => void call(Ipc.instanceOpen, { id: instance.id })}>
                       <FolderOpen className="size-3.5" />
-                    </Button>
+                    </IconButton>
                   ) : null}
-                  <Button tone="ghost" onClick={() => setDeleteTarget(instance)}>
+                  <IconButton label="删除" onClick={() => setDeleteTarget(instance)}>
                     <Trash2 className="size-3.5" />
-                  </Button>
+                  </IconButton>
                 </div>
                 <ChevronRight
                   className="size-4 cursor-pointer text-[var(--color-text-tertiary)]"
@@ -321,10 +324,10 @@ export function InstancesPage(): React.JSX.Element {
           <div className="space-y-5">
             <label className="block space-y-1.5">
               <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">运行位置</span>
-              <select
+              <Select
                 value={hostId}
                 onChange={(event) => void selectHost(event.target.value)}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
+                className="w-full"
               >
                 <option value="">本机</option>
                 {hosts.map((host) => (
@@ -332,7 +335,7 @@ export function InstancesPage(): React.JSX.Element {
                     {host.name} · {host.user}@{host.host}:{host.port ?? 22}
                   </option>
                 ))}
-              </select>
+              </Select>
               <span className="block text-[10px] leading-4 text-[var(--color-text-tertiary)]">
                 {hosts.length === 0
                   ? '还没有 SSH 设备；先在设备管理器添加并测试连接。'
@@ -345,13 +348,13 @@ export function InstancesPage(): React.JSX.Element {
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-1.5">
                 <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">分支</span>
-                <select
+                <Select
                   value={branch}
                   onChange={(event) => {
                     setBranch(event.target.value)
                     void loadCommits(event.target.value)
                   }}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
+                  className="w-full"
                 >
                   {branches.map((item) => (
                     <option key={item.name} value={item.name}>
@@ -359,15 +362,15 @@ export function InstancesPage(): React.JSX.Element {
                       {item.isStable ? '（稳定版）' : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="space-y-1.5">
                 <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">实例名称（可选）</span>
-                <input
+                <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={commit ? `moss-${branch}-${commit.slice(0, 7)}` : '自动生成'}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
+                  className="w-full"
                 />
               </label>
             </div>
@@ -427,6 +430,7 @@ export function InstancesPage(): React.JSX.Element {
                   共享运行时按依赖锁复用，省 1–5 GB；独立运行时完全隔离。
                 </div>
                 <Segmented
+                  label="运行时隔离方式"
                   value={runtimeMode}
                   onChange={setRuntimeMode}
                   options={[

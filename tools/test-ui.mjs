@@ -22,6 +22,7 @@ try {
         '@shared': resolve(root, 'apps/desktop/src/shared'),
         'react': dirname(require.resolve('react/package.json')),
         'react-dom': dirname(require.resolve('react-dom/package.json')),
+        'react-router-dom': dirname(require.resolve('react-router-dom/package.json')),
       },
     },
     plugins: [react(), tailwindcss()],

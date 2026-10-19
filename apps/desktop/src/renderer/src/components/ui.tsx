@@ -16,6 +16,8 @@ import {
 import { createPortal } from 'react-dom'
 import type { CheckStatus } from '@shared/types'
 
+export { Field, Input, Select, Switch, Textarea } from './form'
+
 export function cn(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(' ')
 }
@@ -133,7 +135,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-7 items-center justify-center rounded-[6px] text-[var(--color-text-secondary)] transition hover:bg-white/[0.07] hover:text-[var(--color-text)]',
+        'app-icon-button inline-flex size-7 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition enabled:hover:bg-white/[0.07] enabled:hover:text-[var(--color-text)] disabled:opacity-45',
         className,
       )}
       {...rest}
@@ -358,19 +360,22 @@ export function Segmented<T extends string>({
   options,
   onChange,
   className,
+  label,
 }: {
   value: T
   options: Array<{ value: T; label: string; hint?: string }>
   onChange: (value: T) => void
   className?: string
+  label?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('inline-flex rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
+    <div role="group" aria-label={label} className={cn('app-segmented inline-flex rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           title={option.hint}
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
             'rounded-[3px] px-2.5 py-1 text-[10.5px] font-medium transition',

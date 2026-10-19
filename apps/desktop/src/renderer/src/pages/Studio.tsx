@@ -34,7 +34,7 @@ import {
   type LayoutLabel,
 } from '../lib/layout'
 import { useApp } from '../store'
-import { Button, Card, Modal, Pill, Segmented, cn, useToast } from '../components/ui'
+import { Button, Card, IconButton, Input, Modal, Pill, Segmented, Select, Textarea, cn, useToast } from '../components/ui'
 
 const SIZE_PRESETS: Array<[string, number, number]> = [
   ['512²', 512, 512],
@@ -53,7 +53,6 @@ const LABEL_META: Record<LayoutLabel, { name: string; color: string; icon: React
 type DragState =
   | { kind: 'move' | 'resize'; id: string; startX: number; startY: number; origin: [number, number, number, number] }
   | null
-
 
 function draftFromProject(project: ProjectDocument): LayoutDraft {
   return {
@@ -460,19 +459,19 @@ export function StudioPage(): React.JSX.Element {
 
       <Card className="flex flex-wrap items-center gap-2 p-2.5">
         <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">Project</span>
-        <select
+        <Select
           value={projectId ?? ''}
           onChange={(event) => { if (event.target.value) void openProject(event.target.value) }}
-          className="h-7 min-w-[180px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+          className="min-w-[180px]"
         >
           <option value="">未打开</option>
           {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select>
-        <input
+        </Select>
+        <Input
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
           placeholder="Project 名称"
-          className="h-7 min-w-[160px] flex-1 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+          className="min-w-[160px] flex-1"
         />
         <Button tone="ghost" onClick={newProject}>新建</Button>
         <Button tone="secondary" onClick={() => void saveProjectNow()} disabled={projectSaving}>
@@ -488,17 +487,17 @@ export function StudioPage(): React.JSX.Element {
               <h2 className="text-[13px] font-semibold">提示词</h2>
               <span className="text-[10px] text-[var(--color-text-tertiary)]">{prompt.length} 字符</span>
             </div>
-            <textarea
+            <Textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="描述画面、文字、风格与布局。也可以粘贴编译后的 layout JSON。"
-              className="mt-2.5 h-40 w-full resize-none rounded-[6px] border border-[var(--color-border)] bg-white/55 px-3 py-2.5 text-[12px] leading-5 outline-none transition focus:border-accent-500 dark:bg-white/[0.04]"
+              className="mt-2.5 h-40 w-full resize-none leading-5"
             />
             <label className="mt-3 block text-[10.5px] text-[var(--color-text-tertiary)]">负面提示词</label>
-            <input
+            <Input
               value={negative}
               onChange={(event) => setNegative(event.target.value)}
-              className="mt-1 w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+              className="mt-1 w-full"
             />
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Button
@@ -548,26 +547,26 @@ export function StudioPage(): React.JSX.Element {
             <div className="mt-3 grid grid-cols-2 gap-2">
               <label className="space-y-1">
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">宽度（16 倍数）</span>
-                <input
+                <Input
                   type="number"
                   min={256}
                   max={2048}
                   step={16}
                   value={draft.width}
                   onChange={(event) => changeSize(Number(event.target.value) || draft.width, draft.height)}
-                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full"
                 />
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">高度（16 倍数）</span>
-                <input
+                <Input
                   type="number"
                   min={256}
                   max={2048}
                   step={16}
                   value={draft.height}
                   onChange={(event) => changeSize(draft.width, Number(event.target.value) || draft.height)}
-                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full"
                 />
               </label>
             </div>
@@ -575,6 +574,7 @@ export function StudioPage(): React.JSX.Element {
               <div className="flex items-center justify-between">
                 <span className="text-[10.5px] text-[var(--color-text-secondary)]">步数</span>
                 <Segmented
+                  label="采样步数"
                   value={String(steps)}
                   onChange={(value) => setSteps(Number(value))}
                   options={[
@@ -587,32 +587,32 @@ export function StudioPage(): React.JSX.Element {
               <div className="grid grid-cols-2 gap-2">
                 <label className="space-y-1">
                   <span className="text-[10px] text-[var(--color-text-tertiary)]">CFG</span>
-                  <input
+                  <Input
                     type="number"
                     min={0}
                     max={20}
                     step={0.5}
                     value={cfg}
                     onChange={(event) => setCfg(Number(event.target.value))}
-                    className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                    className="w-full"
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="text-[10px] text-[var(--color-text-tertiary)]">Seed</span>
-                  <input
+                  <Input
                     type="number"
                     value={seed}
                     onChange={(event) => setSeed(Number(event.target.value))}
-                    className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                    className="w-full"
                   />
                 </label>
               </div>
               <label className="block space-y-1">
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">实例</span>
-                <select
+                <Select
                   value={instanceId}
                   onChange={(event) => setInstanceId(event.target.value)}
-                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full"
                 >
                   {instances.length === 0 ? <option value="">尚未创建实例</option> : null}
                   {instances.map((instance: InstanceInfo) => (
@@ -620,7 +620,7 @@ export function StudioPage(): React.JSX.Element {
                       {instance.name} · {instance.runtimeState === 'ready' ? '就绪' : '未装依赖'}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
           </Card>
@@ -638,6 +638,7 @@ export function StudioPage(): React.JSX.Element {
               </div>
               <div className="flex items-center gap-1.5">
                 <Segmented
+                  label="画布工具"
                   value={tool}
                   onChange={(value) => setTool(value as 'select' | 'draw')}
                   options={[
@@ -655,9 +656,9 @@ export function StudioPage(): React.JSX.Element {
                   ]}
                 />
                 {background ? (
-                  <Button tone="ghost" onClick={() => setStudioBackground(null)}>
+                  <IconButton label="清除底图" onClick={() => setStudioBackground(null)}>
                     <X className="size-3.5" />
-                  </Button>
+                  </IconButton>
                 ) : null}
               </div>
             </div>
@@ -771,15 +772,15 @@ export function StudioPage(): React.JSX.Element {
                       <span className="inline-flex size-5 items-center justify-center rounded-[4px] bg-accent-500/12 text-[10px] font-semibold text-accent-700 dark:text-accent-200">
                         {index + 1}
                       </span>
-                      <select
+                      <Select
                         value={item.label}
                         onChange={(event) => setItem(item.id, { label: event.target.value as LayoutLabel })}
-                        className="rounded-[4px] border border-[var(--color-border)] bg-transparent px-1 py-0.5 text-[10.5px] outline-none"
+                        className="bg-transparent"
                       >
                         <option value="object">物体</option>
                         <option value="character">人物</option>
                         <option value="text">文字</option>
-                      </select>
+                      </Select>
                       <button
                         type="button"
                         onClick={(event) => { event.stopPropagation(); setItem(item.id, { visible: item.visible === false }) }}
@@ -810,11 +811,11 @@ export function StudioPage(): React.JSX.Element {
                         <X className="size-3" />
                       </button>
                     </div>
-                    <input
+                    <Input
                       value={item.caption}
                       onChange={(event) => setItem(item.id, { caption: event.target.value })}
                       placeholder="描述这个区域的外观、材质、动作…"
-                      className="mt-1.5 w-full rounded-[4px] border border-[var(--color-border)] bg-white/45 px-2 py-1 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.03]"
+                      className="mt-1.5 w-full"
                     />
                     <div className="mt-1 flex items-center gap-2">
                       <span className="text-[9px] text-[var(--color-text-tertiary)]">不透明度</span>
@@ -830,11 +831,11 @@ export function StudioPage(): React.JSX.Element {
                       <span className="w-8 text-right text-[9px] text-[var(--color-text-tertiary)]">{Math.round((item.opacity ?? 1) * 100)}%</span>
                     </div>
                     {item.label === 'text' ? (
-                      <input
+                      <Input
                         value={item.text ?? ''}
                         onChange={(event) => setItem(item.id, { text: event.target.value })}
                         placeholder="要渲染的文字，可包含换行"
-                        className="mt-1 w-full rounded-[4px] border border-amber-500/30 bg-amber-500/[0.05] px-2 py-1 text-[10.5px] outline-none focus:border-amber-500"
+                        className="mt-1 w-full border-amber-500/30 bg-amber-500/[0.05] focus:border-amber-500"
                       />
                     ) : null}
                   </div>
@@ -850,7 +851,7 @@ export function StudioPage(): React.JSX.Element {
             </div>
             <label className="mt-2 block space-y-1">
               <span className="text-[10px] text-[var(--color-text-tertiary)]">整体描述（summary.caption）</span>
-              <textarea
+              <Textarea
                 value={draft.summary.caption}
                 onChange={(event) =>
                   setDraft((previous) => ({
@@ -859,13 +860,13 @@ export function StudioPage(): React.JSX.Element {
                   }))
                 }
                 placeholder="一句话描述整张图的场景、风格与构图。"
-                className="h-20 w-full resize-none rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-2 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                className="h-20 w-full resize-none"
               />
             </label>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <label className="space-y-1">
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">meta（逗号分隔）</span>
-                <input
+                <Input
                   value={draft.summary.meta.join(', ')}
                   onChange={(event) =>
                     setDraft((previous) => ({
@@ -880,12 +881,12 @@ export function StudioPage(): React.JSX.Element {
                     }))
                   }
                   placeholder="poster, typography"
-                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full"
                 />
               </label>
               <label className="space-y-1">
                 <span className="text-[10px] text-[var(--color-text-tertiary)]">canvas</span>
-                <select
+                <Select
                   value={draft.summary.canvas}
                   onChange={(event) =>
                     setDraft((previous) => ({
@@ -896,12 +897,12 @@ export function StudioPage(): React.JSX.Element {
                       },
                     }))
                   }
-                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full"
                 >
                   <option value="single">single</option>
                   <option value="multi_panel">multi_panel</option>
                   <option value="collage">collage</option>
-                </select>
+                </Select>
               </label>
             </div>
             <Button tone="primary" className="mt-3" onClick={compile}>

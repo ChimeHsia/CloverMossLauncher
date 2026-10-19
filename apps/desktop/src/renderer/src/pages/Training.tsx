@@ -20,7 +20,7 @@ import { call } from '../lib/api'
 import { dateTime } from '../lib/format'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Modal, Pill, Spinner, cn, useToast } from '../components/ui'
+import { Button, Card, EmptyState, IconButton, Modal, Pill, Select, Spinner, cn, useToast } from '../components/ui'
 
 const runtimeLabel: Record<TrainerVersion['runtimeState'], string> = {
   missing: '未装环境',
@@ -303,28 +303,26 @@ export function TrainingPage(): React.JSX.Element {
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="flex min-w-[110px] flex-col gap-1">
               <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">分支</span>
-              <select
+              <Select
                 value={branch}
                 onChange={(event) => {
                   setBranch(event.target.value)
                   void loadCommits(event.target.value)
                 }}
-                className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
               >
                 {(branches.length ? branches : [{ name: 'main', sha: '', isDefault: true, isStable: false }]).map((item) => (
                   <option key={item.name} value={item.name}>
                     {item.name}{item.isStable ? ' · stable' : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex min-w-[220px] flex-1 flex-col gap-1">
               <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">提交</span>
-              <select
+              <Select
                 value={commit}
                 onChange={(event) => setCommit(event.target.value)}
                 disabled={commits.length === 0}
-                className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
               >
                 {commits.length === 0 ? <option value="">{mirror?.ready ? '正在读取提交…' : '先拉取仓库'}</option> : null}
                 {commits.map((item) => (
@@ -332,7 +330,7 @@ export function TrainingPage(): React.JSX.Element {
                     {item.short} · {item.subject.slice(0, 48)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -421,22 +419,22 @@ export function TrainingPage(): React.JSX.Element {
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="flex min-w-[180px] flex-col gap-1">
                 <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">主机</span>
-                <select value={remoteHostId} onChange={(event) => setRemoteHostId(event.target.value)} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                <Select value={remoteHostId} onChange={(event) => setRemoteHostId(event.target.value)}>
                   {sshHosts.map((host) => <option key={host.id} value={host.id}>{host.name} · {host.user}@{host.host}</option>)}
-                </select>
+                </Select>
               </label>
               <label className="flex min-w-[100px] flex-col gap-1">
                 <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">分支</span>
-                <select value={remoteBranch} onChange={(event) => { setRemoteBranch(event.target.value); void call<CommitInfo[]>(Ipc.trainerRemoteCommits, { hostId: remoteHostId, branch: event.target.value, limit: 80 }).then((rows) => { setRemoteCommits(rows); setRemoteCommit(rows[0]?.sha ?? '') }).catch(() => undefined) }} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                <Select value={remoteBranch} onChange={(event) => { setRemoteBranch(event.target.value); void call<CommitInfo[]>(Ipc.trainerRemoteCommits, { hostId: remoteHostId, branch: event.target.value, limit: 80 }).then((rows) => { setRemoteCommits(rows); setRemoteCommit(rows[0]?.sha ?? '') }).catch(() => undefined) }}>
                   {(remoteBranches.length ? remoteBranches : [{ name: 'main', sha: '', isDefault: true, isStable: false }]).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
-                </select>
+                </Select>
               </label>
               <label className="flex min-w-[220px] flex-1 flex-col gap-1">
                 <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">提交</span>
-                <select value={remoteCommit} onChange={(event) => setRemoteCommit(event.target.value)} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                <Select value={remoteCommit} onChange={(event) => setRemoteCommit(event.target.value)}>
                   {remoteCommits.length === 0 ? <option value="">先拉取远端仓库</option> : null}
                   {remoteCommits.map((item) => <option key={item.sha} value={item.sha}>{item.short} · {item.subject.slice(0, 44)}</option>)}
-                </select>
+                </Select>
               </label>
               <Button tone="secondary" onClick={() => void remoteDeploy()} disabled={!remoteHostId || remoteBusy !== null}>
                 {remoteBusy === 'deploy' ? <Spinner className="size-3" /> : <Download className="size-3" />}
@@ -479,9 +477,9 @@ export function TrainingPage(): React.JSX.Element {
             每个版本固定 commit + 独立 worktree，环境按依赖锁共享。
           </p>
         </div>
-        <Button tone="ghost" onClick={() => void refresh()}>
+        <IconButton label="刷新" onClick={() => void refresh()}>
           <RefreshCw className="size-3.5" />
-        </Button>
+        </IconButton>
       </div>
 
       {versions.length === 0 ? (
@@ -524,17 +522,17 @@ export function TrainingPage(): React.JSX.Element {
                     {busy === version.id ? <Spinner className="size-3" /> : <Download className="size-3" />}
                     {version.runtimeState === 'ready' ? '重装环境' : '安装环境'}
                   </Button>
-                  <Button tone="ghost" onClick={() => void runDoctor(version)} disabled={version.runtimeState !== 'ready'}>
+                  <IconButton label="环境体检" onClick={() => void runDoctor(version)} disabled={version.runtimeState !== 'ready'}>
                     <Stethoscope className="size-3.5" />
-                  </Button>
+                  </IconButton>
                   <Button tone="primary" onClick={() => openWindow('trainer')}>
                     <span className="inline-flex items-center gap-1.5">
                       <Play className="size-3" /> 训练窗口
                     </span>
                   </Button>
-                  <Button tone="ghost" onClick={() => void remove(version)} disabled={busy === version.id}>
+                  <IconButton label="删除" onClick={() => void remove(version)} disabled={busy === version.id}>
                     <Trash2 className="size-3.5" />
-                  </Button>
+                  </IconButton>
                 </div>
               </div>
             </Card>

@@ -12,7 +12,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Select as AppsSelect } from '@openai/apps-sdk-ui/components/Select'
 import { Events, Ipc } from '@shared/channels'
 import type {
   GradioLaunchConfig,
@@ -35,48 +34,7 @@ import { openGradioUi } from '../lib/openGradio'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
 import { GradioSettingsSheet } from '../components/GradioSettingsSheet'
-import { Button, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
-
-function Field({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <label className="flex min-w-0 flex-col gap-0.5">
-      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-tertiary)]">
-        {label}
-      </span>
-      {children}
-    </label>
-  )
-}
-
-const launchControlClass =
-  'h-[30px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[11px] text-[var(--color-text)] transition hover:border-[var(--color-border)] hover:bg-white/[0.06]'
-
-function Select({
-  value,
-  onChange,
-  options,
-  disabled,
-  className,
-}: {
-  value: string
-  onChange: (value: string) => void
-  options: Array<{ value: string; label: string; disabled?: boolean }>
-  disabled?: boolean
-  className?: string
-}): React.JSX.Element {
-  return (
-    <AppsSelect
-      size="2xs"
-      block={false}
-      side="top"
-      value={value}
-      options={options}
-      disabled={disabled}
-      onChange={(option) => onChange(option.value)}
-      triggerClassName={cn(launchControlClass, 'min-w-[92px]', className)}
-    />
-  )
-}
+import { Button, Field, IconButton, Input, Pill, Select, Spinner, cn, useToast } from '../components/ui'
 
 const stateLabel: Record<LaunchRow['state'], string> = {
   queued: '排队中',
@@ -410,11 +368,11 @@ export function HomePage(): React.JSX.Element {
           <div className="glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 rounded-[6px] border border-[var(--color-border)] p-3 shadow-2xl">
             <div className="flex flex-wrap items-end gap-2">
               <Field label="Case 名称">
-                <input
+                <Input
                   value={caseName}
                   onChange={(event) => setCaseName(event.target.value)}
                   placeholder="例如：日常 1024 / 官方 Gradio"
-                  className="h-7 w-[240px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60"
+                  className="w-[240px]"
                 />
               </Field>
               <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
@@ -428,45 +386,42 @@ export function HomePage(): React.JSX.Element {
         ) : null}
 
         <div className="glass-strong flex flex-wrap items-end gap-2 rounded-[6px] border border-[var(--color-border)] p-2">
-          <Field label="Case">
+          <Field label="Case" className="w-[110px]">
             <Select
               value={caseId}
-              onChange={chooseCase}
+              onValueChange={chooseCase}
               options={[
                 { value: 'new', label: '新建配置' },
                 ...cases.map((item) => ({ value: item.id, label: item.name })),
               ]}
-              className="min-w-[110px]"
             />
           </Field>
-          <Field label="工作台">
+          <Field label="工作台" className="w-[112px]">
             <Select
               value={workspace}
-              onChange={(value) => setWorkspace(value as WorkspaceKind)}
+              onValueChange={(value) => setWorkspace(value as WorkspaceKind)}
               options={[
                 { value: 'official', label: '官方 Gradio' },
                 { value: 'clover', label: 'Clover（暂未开放）', disabled: true },
               ]}
-              className="min-w-[112px]"
             />
           </Field>
-          <Field label="实例">
+          <Field label="实例" className="w-[140px]">
             <Select
               value={instanceId}
-              onChange={setInstanceId}
+              onValueChange={setInstanceId}
               options={
                 instances.length === 0
                   ? [{ value: '', label: '没有实例', disabled: true }]
                   : instances.map((item) => ({ value: item.id, label: item.name }))
               }
               disabled={instances.length === 0}
-              className="min-w-[140px]"
             />
           </Field>
-          <Field label="设备">
+          <Field label="设备" className="w-[110px]">
             <Select
               value={deviceId}
-              onChange={setDeviceId}
+              onValueChange={setDeviceId}
               options={
                 devices.length > 0
                   ? devices.map((item) => {
@@ -487,18 +442,18 @@ export function HomePage(): React.JSX.Element {
                       },
                     ]
               }
-              className="min-w-[110px]"
             />
           </Field>
           {workspace === 'official' ? (
-            <Field label="Gradio">
+            <Field id="gradio-launch-settings" label="Gradio">
               <button
+                id="gradio-launch-settings"
                 type="button"
                 aria-label="Gradio 启动参数"
                 onClick={() => setGradioOpen(true)}
                 title={`${gradioSummaryText} · ${gradioOpenText}`}
                 className={cn(
-                  launchControlClass,
+                  'app-input',
                   'flex w-full min-w-[178px] max-w-[224px] items-center gap-1.5',
                 )}
               >
@@ -512,15 +467,14 @@ export function HomePage(): React.JSX.Element {
               </button>
             </Field>
           ) : (
-            <Field label="档位">
+            <Field label="档位" className="w-[88px]">
               <Select
                 value={profile}
-                onChange={(value) => setProfile(value as 'base' | 'dmd8')}
+                onValueChange={(value) => setProfile(value as 'base' | 'dmd8')}
                 options={[
                   { value: 'dmd8', label: '8 步 DMD' },
                   { value: 'base', label: '50 步质量' },
                 ]}
-                className="min-w-[88px]"
               />
             </Field>
           )}

@@ -8,7 +8,7 @@ import { cloverUrl } from '../lib/clover'
 import { openWindow } from '../lib/windows'
 import { bytes, dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Modal, Pill, Spinner, useToast } from '../components/ui'
+import { Button, Card, EmptyState, IconButton, Input, Modal, Pill, Spinner, useToast } from '../components/ui'
 
 const PAGE_SIZE = 48
 
@@ -99,20 +99,20 @@ export function GalleryPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           <Pill tone="neutral">{total} 张作品</Pill>
-          <Button tone="ghost" onClick={() => void load(true, null, query)} disabled={loading}>
+          <IconButton label="刷新" onClick={() => void load(true, null, query)} disabled={loading}>
             <RefreshCw className={loading ? 'size-3.5 animate-spin' : 'size-3.5'} />
-          </Button>
+          </IconButton>
         </div>
       </header>
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
-          <input
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索文件名或路径…"
-            className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] pl-8 pr-3 text-[11px] outline-none backdrop-blur-md transition focus:border-accent-500/60"
+            className="w-full pl-8 pr-3"
           />
         </div>
         <Button

@@ -22,8 +22,7 @@ import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
 import { clearSavedSettings, pendingSettings } from '../lib/settingsDraft'
 import { useApp } from '../store'
-import { Switch } from '@openai/apps-sdk-ui/components/Switch'
-import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../components/ui'
+import { Button, Card, IconButton, Input, Pill, Segmented, Select, StatusDot, Switch, cn, useToast } from '../components/ui'
 
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
@@ -191,6 +190,7 @@ export function SettingsPage(): React.JSX.Element {
                 </div>
               </div>
               <Segmented
+                label="网络策略"
                 value={draft.networkMode}
                 onChange={(networkMode) => patch({ networkMode })}
                 options={[
@@ -214,11 +214,11 @@ export function SettingsPage(): React.JSX.Element {
             ).map(([key, label, placeholder]) => (
               <label key={String(key)} className="block space-y-1">
                 <span className="text-[10.5px] text-[var(--color-text-tertiary)]">{label}（留空自动）</span>
-                <input
+                <Input
                   value={String(draft[key] ?? '')}
                   placeholder={placeholder}
                   onChange={(event) => patch({ [key]: event.target.value || null } as Partial<Settings>)}
-                  className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
+                  className="w-full font-mono"
                 />
               </label>
             ))}
@@ -235,12 +235,12 @@ export function SettingsPage(): React.JSX.Element {
                   {env?.device.modelsPath ?? appInfo?.modelsPath ?? '—'}
                 </div>
               </div>
-              <Button
-                tone="ghost"
+              <IconButton
+                label="打开所在目录"
                 onClick={() => env && void call(Ipc.openPath, { path: env.device.modelsPath })}
               >
                 <FolderOpen className="size-3.5" />
-              </Button>
+              </IconButton>
             </div>
             <div className="flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-2.5">
               <span className="inline-flex items-center gap-1.5 text-[var(--color-text-tertiary)]">
@@ -250,11 +250,11 @@ export function SettingsPage(): React.JSX.Element {
             </div>
             <label className="block space-y-1 border-t border-[var(--color-border-subtle)] pt-2.5">
               <span className="text-[10.5px] text-[var(--color-text-tertiary)]">自定义模型根目录（留空使用默认）</span>
-              <input
+              <Input
                 value={draft.modelsRoot ?? ''}
                 placeholder="例如 /Volumes/Data/CloverMoss/models"
                 onChange={(event) => patch({ modelsRoot: event.target.value || null })}
-                className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
+                className="w-full font-mono"
               />
             </label>
             <div className="flex items-end justify-between gap-2 border-t border-[var(--color-border-subtle)] pt-2.5">
@@ -296,11 +296,11 @@ export function SettingsPage(): React.JSX.Element {
                     className="size-3 accent-[var(--color-accent)]"
                   />
                   <span className="min-w-0 flex-1">
-                    <input
+                    <Input
                       value={draft.deviceLabels?.[device.id] ?? ''}
                       placeholder={device.name}
                       onChange={(event) => patch({ deviceLabels: { ...(draft.deviceLabels ?? {}), [device.id]: event.target.value } })}
-                      className="w-full bg-transparent text-[10.5px] outline-none placeholder:text-[var(--color-text-secondary)]"
+                      className="w-full bg-transparent placeholder:text-[var(--color-text-secondary)]"
                     />
                     <span className="block text-[8.5px] text-[var(--color-text-tertiary)]">{device.detail} · {disabled ? '已禁用' : '可用'}</span>
                   </span>
@@ -317,11 +317,11 @@ export function SettingsPage(): React.JSX.Element {
           <div className="mt-3 space-y-3 text-[11.5px]">
             <label className="block space-y-1">
               <span className="text-[10.5px] text-[var(--color-text-tertiary)]">Python 解释器（留空自动发现）</span>
-              <input
+              <Input
                 value={draft.pythonPath ?? ''}
                 placeholder="/opt/homebrew/bin/python3.12"
                 onChange={(event) => patch({ pythonPath: event.target.value || null })}
-                className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
+                className="w-full font-mono"
               />
             </label>
             <div className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
@@ -374,13 +374,13 @@ export function SettingsPage(): React.JSX.Element {
                 >
                   <FolderOpen className="size-3.5 shrink-0 text-accent-500" />
                   <span className="min-w-0 flex-1 truncate font-mono text-[10px]">{root}</span>
-                  <button
-                    type="button"
+                  <IconButton
+                    label="移除画廊目录"
                     onClick={() => void removeGalleryRoot(root)}
                     className="text-[var(--color-text-tertiary)] hover:text-red-500"
                   >
                     <Trash2 className="size-3" />
-                  </button>
+                  </IconButton>
                 </div>
               ))
             )}
@@ -469,6 +469,7 @@ export function SettingsPage(): React.JSX.Element {
                 </div>
               </div>
               <Switch
+                aria-label="启动时检查更新"
                 checked={draft.autoCheckUpdates}
                 onCheckedChange={(value: boolean) => patch({ autoCheckUpdates: value })}
               />
@@ -491,6 +492,7 @@ export function SettingsPage(): React.JSX.Element {
                   </span>
                 </Button>
                 <Switch
+                  aria-label="桌面通知"
                   checked={draft.desktopNotifications}
                   onCheckedChange={(value: boolean) => patch({ desktopNotifications: value })}
                 />
@@ -503,16 +505,15 @@ export function SettingsPage(): React.JSX.Element {
                   Beta 读取 GitHub Release 的 beta pinned 资产；缺失时回退 stable
                 </div>
               </div>
-              <select
+              <Select
                 value={draft.updateChannel}
                 onChange={(event) =>
                   patch({ updateChannel: event.target.value as Settings['updateChannel'] })
                 }
-                className="h-[30px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[11px] text-[var(--color-text)] outline-none focus:border-accent-500/60"
               >
                 <option value="stable">稳定版</option>
                 <option value="beta">Beta</option>
-              </select>
+              </Select>
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
               <div>

@@ -6,7 +6,7 @@ import type { CommitInfo, RuntimeInfo } from '@shared/types'
 import { call } from '../lib/api'
 import { dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, Spinner, StatusDot, useToast } from '../components/ui'
+import { Button, Card, EmptyState, Input, Pill, Select, Spinner, StatusDot, useToast } from '../components/ui'
 
 const EMPTY_LOGS: string[] = []
 
@@ -229,10 +229,10 @@ export function InstanceDetailPage(): React.JSX.Element {
               <GitBranch className="size-3" /> 切换 pin / 回滚
             </div>
             <div className="mt-1.5 flex items-center gap-1.5">
-              <select
+              <Select
                 value={targetCommit}
                 onChange={(event) => setTargetCommit(event.target.value)}
-                className="h-7 min-w-0 flex-1 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+                className="min-w-0 flex-1"
               >
                 {commits.length === 0 ? <option value={instance.commit}>{instance.shortCommit}（当前）</option> : null}
                 {commits.map((item) => (
@@ -240,7 +240,7 @@ export function InstanceDetailPage(): React.JSX.Element {
                     {item.short} · {item.subject.slice(0, 52)}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Button
                 tone="secondary"
                 size="sm"
@@ -360,7 +360,7 @@ export function InstanceDetailPage(): React.JSX.Element {
                     />
                     <span className="min-w-0 flex-1 truncate text-[10.5px]">{adapter.name}</span>
                     <span className="text-[9px] text-[var(--color-text-tertiary)]">{adapter.kind}</span>
-                    <input
+                    <Input
                       type="number"
                       min={0}
                       max={4}
@@ -372,7 +372,7 @@ export function InstanceDetailPage(): React.JSX.Element {
                         const next = bindings.filter((item) => item.id !== adapter.id)
                         setBindings([...next, { id: adapter.id, enabled, strength: Number.isFinite(strength) ? strength : 1 }])
                       }}
-                      className="h-6 w-14 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-1.5 text-right text-[9.5px] outline-none disabled:opacity-40"
+                      className="h-6 w-14 text-right disabled:opacity-40"
                     />
                   </div>
                 )

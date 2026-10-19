@@ -310,11 +310,15 @@ steps、CFG、尺寸、生成数量、显存模式和 SLG 仍由官方 Gradio �
 | 标题栏 | 44 px；应用名居中 + `dev/release` + 版本；无侧栏 Logo |
 | 侧栏 | 200 px ↔ 56 px；选中只做灰色背景，不加蓝色提示条 |
 | 圆角 | 控件 4–6 px；卡片 8 px；弹层 10 px；不用大圆角胶囊 |
-| 控件 | 约 30–32 px 高；宽度随文字；Fluent 2 取向；Apps SDK UI |
+| 控件 | 约 30–32 px 高；宽度随文字；Fluent 2 取向；Apps SDK UI 按钮/开关，项目级表单封装 |
 | 间距 | 8 px 网格；内容区 24–28 px |
 | 动效 | 120–200 ms ease-out；侧栏宽度/进度条平滑 |
 | 空状态 | 一句解释 + 一个主行动；不放插画大图 |
 | 可访问性 | 键盘可达、焦点可见；对比度目标 ≥ 4.5:1 |
+
+公共控件从 `components/ui.tsx` 导出；`form.tsx` 统一 Field、Input、Textarea、Select 与 Switch。
+Select 统一使用原生选择行为，避免菜单 Portal 穿透模态弹层；页面只保留布局和业务特有样式。
+Modal/Sheet 共用原生 `dialog` 顶层容器，管理背景隔离、键盘焦点和关闭后的焦点恢复。
 
 ### 10.1 禁止项
 

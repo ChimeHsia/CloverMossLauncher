@@ -5,23 +5,9 @@ import type { JobRecord, TrainerVersion } from '@shared/types'
 import { call } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Modal, Pill, ProgressBar, Spinner, useToast } from '../components/ui'
+import { Button, Card, EmptyState, Field, IconButton, Input, Modal, Pill, ProgressBar, Select, Spinner, Textarea, useToast } from '../components/ui'
 
 const ALGOS = ['lora', 'locon', 'loha', 'lokr', 'dora', 'oft', 'boft', 'ia3', 'full']
-
-function Field({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <label className="flex min-w-0 flex-col gap-1">
-      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
-        {label}
-      </span>
-      {children}
-    </label>
-  )
-}
-
-const inputClass =
-  'h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60'
 
 export function TrainerWindow(): React.JSX.Element {
   const toast = useToast()
@@ -217,62 +203,62 @@ export function TrainerWindow(): React.JSX.Element {
 
             <div className="mt-3 grid grid-cols-2 gap-2.5">
               <Field label="训练版本">
-                <select value={versionId} onChange={(event) => setVersionId(event.target.value)} className={inputClass}>
+                <Select value={versionId} onChange={(event) => setVersionId(event.target.value)}>
                   {versions.map((item) => (
                     <option key={item.id} value={item.id}>{item.name} · {item.shortCommit}{item.hostId !== 'local' ? ' · SSH' : ''}</option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label="算法">
-                <select value={algo} onChange={(event) => setAlgo(event.target.value)} className={inputClass}>
+                <Select value={algo} onChange={(event) => setAlgo(event.target.value)}>
                   {ALGOS.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
+                </Select>
               </Field>
               <div className="col-span-2 grid grid-cols-[1fr_auto] gap-1">
                 <Field label="MOSS 权重目录">
-                  <input value={weights} onChange={(event) => setWeights(event.target.value)} placeholder="/path/to/MOSS-Image-Base" className={inputClass} />
+                  <Input value={weights} onChange={(event) => setWeights(event.target.value)} placeholder="/path/to/MOSS-Image-Base" />
                 </Field>
-                <button type="button" onClick={() => void pick('weights')} className="mt-4 flex size-7 items-center justify-center rounded-[4px] border border-[var(--color-border-subtle)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
+                <IconButton label="选择权重目录" onClick={() => void pick('weights')} className="mt-4">
                   <FolderOpen className="size-3.5" />
-                </button>
+                </IconButton>
               </div>
               <div className="col-span-2 grid grid-cols-[1fr_auto] gap-1">
                 <Field label="数据集目录">
-                  <input value={dataset} onChange={(event) => setDataset(event.target.value)} placeholder="/path/to/dataset（kohya 文件夹）" className={inputClass} />
+                  <Input value={dataset} onChange={(event) => setDataset(event.target.value)} placeholder="/path/to/dataset（kohya 文件夹）" />
                 </Field>
-                <button type="button" onClick={() => void pick('dataset')} className="mt-4 flex size-7 items-center justify-center rounded-[4px] border border-[var(--color-border-subtle)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
+                <IconButton label="选择数据集目录" onClick={() => void pick('dataset')} className="mt-4">
                   <FolderOpen className="size-3.5" />
-                </button>
+                </IconButton>
               </div>
               <Field label="Run 名称">
-                <input value={runName} onChange={(event) => setRunName(event.target.value.replace(/[^a-zA-Z0-9_-]/g, '-'))} className={inputClass} />
+                <Input value={runName} onChange={(event) => setRunName(event.target.value.replace(/[^a-zA-Z0-9_-]/g, '-'))} />
               </Field>
               <Field label="目标边长">
-                <input value={resolution} onChange={(event) => setResolution(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+                <Input value={resolution} onChange={(event) => setResolution(event.target.value.replace(/[^0-9]/g, ''))} />
               </Field>
               <Field label="Steps">
-                <input value={steps} onChange={(event) => setSteps(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+                <Input value={steps} onChange={(event) => setSteps(event.target.value.replace(/[^0-9]/g, ''))} />
               </Field>
               <Field label="LR">
-                <input value={lr} onChange={(event) => setLr(event.target.value)} className={inputClass} />
+                <Input value={lr} onChange={(event) => setLr(event.target.value)} />
               </Field>
               <Field label="Dim">
-                <input value={dim} onChange={(event) => setDim(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+                <Input value={dim} onChange={(event) => setDim(event.target.value.replace(/[^0-9]/g, ''))} />
               </Field>
               <Field label="Alpha">
-                <input value={alpha} onChange={(event) => setAlpha(event.target.value)} className={inputClass} />
+                <Input value={alpha} onChange={(event) => setAlpha(event.target.value)} />
               </Field>
               <Field label="Microbatch">
-                <input value={batch} onChange={(event) => setBatch(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+                <Input value={batch} onChange={(event) => setBatch(event.target.value.replace(/[^0-9]/g, ''))} />
               </Field>
             </div>
 
             <Field label="高级覆盖（每行 KEY=VALUE）">
-              <textarea
+              <Textarea
                 value={overrides}
                 onChange={(event) => setOverrides(event.target.value)}
                 placeholder={'MEMORY_PROFILE=balanced\nSAVE_EVERY=250'}
-                className="mt-0.5 h-16 w-full resize-none rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 py-1.5 font-mono text-[9.5px] leading-4 outline-none focus:border-accent-500/60"
+                className="mt-0.5 h-16 w-full resize-none font-mono leading-4"
               />
             </Field>
 
