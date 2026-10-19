@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "app": {
+    "name": "CloverMoss Launcher",
+    "channel": "stable",
+    "version": "0.1.0",
+    "min_supported": "0.1.0",
+    "published_at": "2026-10-19T02:00:00Z",
+    "notes_url": "https://github.com/CloverIris/CloverMossLauncher/releases",
+    "rollout": 1
+  },
+  "announcements": [
+    {
+      "id": "2026-10-launch",
+      "level": "info",
+      "title": "CloverMoss Launcher 内测开始",
+      "body_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/README.md",
+      "starts_at": "2026-10-19T02:00:00Z",
+      "ends_at": null,
+      "dismissible": true,
+      "pinned": true,
+      "action": {
+        "label": "查看更新",
+        "kind": "check_update"
+      }
+    }
+  ],
+  "assets": [],
+  "sources": {
+    "moss": {
+      "repo": "https://github.com/OpenMOSS/MOSS-Image",
+      "branch": "main",
+      "recommended_commit": "c1355e6b"
+    },
+    "git_mirrors": [
+      "https://ghproxy.net/https://github.com/",
+      "https://gh-proxy.com/https://github.com/",
+      "https://kkgithub.com/"
+    ],
+    "pip_indexes": [
+      "https://pypi.org/simple",
+      "https://pypi.tuna.tsinghua.edu.cn/simple",
+      "https://mirrors.aliyun.com/pypi/simple",
+      "https://mirrors.ustc.edu.cn/pypi/simple"
+    ],
+    "hf_endpoints": [
+      "https://huggingface.co",
+      "https://hf-mirror.com"
+    ],
+    "manifest_mirrors": [
+      "https://cdn.jsdelivr.net/gh/CloverIris/CloverMossLauncher@main/release/manifest.json",
+      "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/manifest.json",
+      "https://ghproxy.net/https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/manifest.json"
+    ]
+  },
+  "catalog": {
+    "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
+    "rules_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/rules.json"
+  }
+}

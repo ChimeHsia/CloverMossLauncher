@@ -1,238 +1,501 @@
-# 架构设计
+# 架构文档 · CloverMoss Launcher
 
-> 状态：M0 草案。目标是把"模型能不能跑"与"启动器好不好用"解耦，任何一层都可以单独替换。
+- 版本：v0.1（2026-10-19）
+- 状态：待评审
+- 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
-## 1. 目标与非目标
+---
 
-**目标**
+## 1. 范围与原则
 
-- 同一套 C++ 引擎在 macOS / iOS / Android / Windows / Linux 上跑 MOSS-Image；
-- 16 GB 统一内存设备可交互（分阶段加载 + int4/int8 + 逐 block 流式）；
-- 启动器与 WebUI 共用一套前端，桌面端是薄壳；
-- 数值可验证：每个组件都有对 PyTorch 参考实现的 parity 测试；
-- 训练器作为**外部可选后端**接入，不污染引擎与主仓库。
+V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。没有推理代码、没有模型图。
 
-**非目标（至少 M1–M4）**
+四条硬边界：
 
-- 不做训练内核；不复刻 KohakuMoss 的 LyCORIS/fp8/offload 体系；
-- 不在引擎里内嵌 Python；
-- 不做云端推理服务（但 headless 模式可被远程调用）；
-- 不做 img2img / edit（上游暂未发布，接口预留 400）。
+1. **渲染进程不碰 Node**：所有系统能力经 `contextBridge` 的类型化 IPC；
+2. **服务层可脱离 Electron 运行**：同一套服务同时服务桌面 IPC 与 WebUI HTTP；
+3. **外部程序只经进程边界**：不 import 用户的 Python，不执行仓库里的任意脚本；
+4. **一切自动决策可解释、可回滚**：换源、复用运行时、降档都写入事件与日志。
 
-## 2. 分层
+## 2. 进程模型
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ apps/desktop (Tauri 2, Rust)   apps/web (React, 同一份前端)          │
-│   job queue · gallery · model manager · presets · trainer console    │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │ HTTP + SSE（本地 127.0.0.1，随机端口）
-┌───────────────────────────────▼─────────────────────────────────────┐
-│ engine/src/api        请求校验、任务生命周期、进度事件、取消           │
-│ engine/src/pipeline   组件编排：TE → DiT×steps → VAE，显存 staging     │
-│ engine/src/model      manifest、safetensors mmap、权重布局、量化计划    │
-│ engine/src/dit        42-block 调度、CFG、skip、DMD、LoRA             │
-│ engine/src/text       Qwen3.5 tokenizer + 编码器封装（MNN-LLM）        │
-│ engine/src/vae        分块解码、BN 反归一化、2×2 unpatch              │
-│ engine/src/backend    Backend 接口：mnn / ref(CPU) / future: mlx      │
-└─────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ Electron Main (Node)                                               │
+│  lifecycle · window · tray · menu · updater                        │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ core services（纯 Node，可单独测试）                          │  │
+│  │ env · network · git · runtimes · instances · models ·        │  │
+│  │ adapters · downloads · supervisor · parsers · diagnostics ·  │  │
+│  │ updates · webui                                             │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│        │ ipcMain.handle / webContents.send        │ Fastify(可选)  │
+│  ┌─────▼──────────────┐                    ┌───────▼───────────┐   │
+│  │ Preload (sandbox)  │                    │ WebUI server      │   │
+│  │ contextBridge API  │                    │ static + /api+SSE │   │
+│  └─────┬──────────────┘                    └───────┬───────────┘   │
+│  ┌─────▼──────────────────────────────────────────▼───────────┐   │
+│  │ Renderer (React 19 + TS + Tailwind 4 + Apps SDK UI)        │   │
+│  └────────────────────────────────────────────────────────────┘   │
+└───────────────┬────────────────────────────────────────────────────┘
+                │ spawn（无 shell）
+     ┌──────────┼───────────┬──────────────┬──────────────┐
+     ▼          ▼           ▼              ▼              ▼
+   git       python      uv/pip       runner.py      gradio_app.py
+ (mirror)  (managed)    (install)     (NDJSON)        (HTTP 7860)
 ```
 
-**关键边界**
+- 主进程持有全部状态；渲染进程是纯视图 + 乐观更新；
+- WebUI 模式复用同一服务层，只是把 IPC 换成 HTTP/SSE；
+- 子进程统一经 `supervisor`，禁止业务代码直接 `child_process.spawn`。
 
-- `pipeline` 只认识"组件"和"张量契约"，不认识 MNN；
-- `backend` 只认识"图/算子"，不认识 MOSS 的模块名；
-- 启动器只认识 HTTP 契约，不认识模型结构。
-
-这样 M1 可以先做 `ref` 后端（纯 CPU、慢但正确）跑通端到端，再接 MNN；
-也可以在 M3 后插入 MLX 后端而不改上层。
-
-## 3. 引擎设计
-
-### 3.1 模型包（model bundle）
-
-一个模型目录 = 上游 diffusers 布局 + 我们生成的 `clover.json` 清单：
+## 3. 代码结构（monorepo）
 
 ```
-models/moss-image-sft-int8/
-  transformer/           # 或按 block 拆分的 *.mnn
-  text_encoder/          # MNN-LLM 导出目录（llm.mnn, tokenizer.mtok, ...）
-  vae/
-  scheduler/
-  tokenizer/
-  clover.json            # 组件哈希、量化档位、block 布局、推荐 profile
+apps/
+  desktop/            Electron 主进程 + preload + 打包配置（electron-vite）
+  renderer/           React 应用（桌面与 Web 共用）
+  web/                Fastify：静态资源 + /api + /events
+packages/
+  core/               领域服务（Node only）：见 §2
+  contracts/          zod schema + TS 类型（由 contracts/*.json 生成/校验）
+  parsers/            ANSI/tqdm/错误规则（纯函数，无 IO）
+  ui/                 设计系统封装、布局、通用组件
+  testing/            fake runtime、fixtures、msw handlers
+release/              manifest.json + 公告 markdown（更新源）
+runner/               薄 runner（Python，随应用分发）
+docs/  contracts/     设计与协议
 ```
 
-`clover.json` 由 `tools/convert` 生成，启动器只信清单里的哈希：
-下载后先校验再标记可用，损坏则重新下载（见 `contracts/model-manifest.schema.json`）。
+工具链：`pnpm` workspace、TypeScript strict、`electron-vite`、`vitest`、`playwright`、
+ESLint + Prettier、`zod` 运行时校验。
 
-### 3.2 逐 block 执行，而不是一张 5B 大图
+## 4. 领域模型
 
-DiT 是 42 个同构 block。我们**按 block 导出 MNN 图**，由 host 循环调度：
-
-```
-x = embed(vae_latent, text_embeds, t)
-for i in 0..41:
-    if skip(i): continue            # CFG 负分支跳过 block 22
-    x = block[i](x, rope, mod, lora[i])
-x = head(x)
-```
-
-好处：
-
-- **低内存**：同一时刻只常驻 1 个 block 的权重（fp16 226 MB / int8 113 MB）；
-- **可流式**：8 GB 设备把 block 权重放磁盘 mmap，按需换入；
-- **LoRA 天然**：adapter 按 block 绑定，不需要合并进 5B 权重；
-- **可裁剪**：CFG skip、DMD 的 prefix、未来 layer pruning 都是 host 逻辑；
-- **转换友好**：单 block ONNX 只有 ~113 M 参数，16 GB 开发机也能导出。
-
-代价：每个 block 一次图调度。按 42 次/前向、每次 <0.1 ms 估算，开销可忽略；
-真正要盯的是 attention 与 GEMM 的融合，而不是 dispatch。
-
-> 备选：整图导出（转换机器 ≥ 48 GB 内存）。保留为 `profile=monolithic`，
-> 用于对比吞吐；默认走 block 模式。
-
-### 3.3 张量契约（block 输入输出）
-
-| 名称 | 形状 | dtype | 说明 |
-| --- | --- | --- | --- |
-| `x` | `[1, T, 3072]` | fp16/bf16 | T = image tokens + text tokens |
-| `rope` | `[1, T, 128]` | fp16 | 4 轴 (r,f,h,w) 预计算，host 生成 |
-| `mod` | `[1, 6, 3072]` | fp32 | AdaLN 调制，host 用 fp32 小 MLP 算 |
-| `lora` | 每 block 一组 `A/B` | fp16 | 可选，host 侧 apply 或引擎融合 |
-
-调制与时间步在 **host 侧用 fp32** 计算（上游对数值敏感，见
-[model-notes](model-notes.md#数值约定)），再喂给 block——这样每步只算一次，
-且 block 图可以完全静态。
-
-### 3.4 文本编码器
-
-Qwen3.5-9B（32 层，24 层线性注意力 + 8 层 full attention，head_dim 256，
-24 个 KV 头 4 组）。两条路线：
-
-- **A（首选）**：复用 MNN-LLM 的 Qwen3.5 图与 Metal/Vulkan kernel，只取
-  `last_hidden_state`（不采样、不算 lm_head）。需要给 MNN 加一个"prefill 后取隐状态"的
-  入口（小改动，向上游提 PR）。
-- **B（兜底）**：单独导出 encoder-only 图（无 KV cache），文本长度按
-  256/512/1024 分桶。好处是完全可控，坏处是放弃 MNN-LLM 的量化与调度。
-
-文本长度**分桶**而不是动态 shape：MNN 的 Metal 图在固定 shape 下才能稳定拿到
-`transformerFuse` 的收益；桶外长度向上取整 + mask。
-
-### 3.5 VAE
-
-FLUX.2 VAE，decode 前要做两步上游特有处理：
-
-1. BN 反归一化：`z = z * sqrt(running_var + eps) + running_mean`；
-2. 2×2 unpatch：`[B,128,H,W] → [B,32,2H,2W]`（`reshape/permute`）。
-
-1024² 解码必须**分块**：参考实现（mlx-serve）在未分块时中间激活达 25.5 GiB。
-策略：按 latent 行带切 tile（重叠 8–16 px 防接缝），逐块解码后拼接；
-峰值与 tile 数线性相关，与整图无关。
-
-### 3.6 量化
-
-| 组件 | 默认 | 低内存 | 说明 |
-| --- | --- | --- | --- |
-| DiT linear | int8 per-channel | int4 group=64 | block 级，可逐 block 混精 |
-| 文本编码器 | int4 group=64 | int4 | MNN-LLM 原生 HQQ/AWQ 导出 |
-| VAE | int8 | int8 | 卷积对量化敏感，先 int8 |
-| time/modulation | **fp32** | fp32 | 上游明确要求，不量化 |
-
-权重量化不减少 FLOPs，只减少带宽与常驻；在 Apple GPU 上收益主要来自
-"少读 2–4 倍权重"，对 5B 模型是 2–4× 的带宽节省，但算力仍是上限。
-因此**量化解决"能不能装下"，few-step 解决"要等多久"**。
-
-### 3.7 采样器
-
-- `base`：Euler + shift-5 sigma 网格（1000 步训练网格吸附），CFG 3，
-  负分支跳过 block 22；50 步为官方推荐。
-- `dmd8`：data-space DMD，8 次前向、无 CFG、latent mix `Q`、专用
-  `time_embedding`（fp32）。**不是普通 LoRA**，必须实现独立采样循环。
-- `custom`：用户给 sigmas / steps / cfg，用于社区蒸馏适配器。
-
-采样循环在 host 侧，block 图与步数解耦；`x0`/`v` 的 fp32 累加在 host 做，
-避免 fp16 累积误差（上游同样用 fp32 合并 CFG）。
-
-### 3.8 适配器
-
-- 格式：kohya/ComfyUI key（`diffusion_model.layers.N.proj.q.lora_down.weight` 等）、
-  LyCORIS（LoHa/LoKr/DoRA/OFT）在 M2 先支持 LoRA，LyCORIS 在 M3。
-- 应用点：block 图内的 linear 旁路，`y = Wx + scale * up(down(x))`；
-  若后端支持，编译期把 LoRA 融进 block 图（每换一次 strength 重编译一次）。
-- 8 步 DMD 的 `time_embedding.safetensors` 是**替换**而非旁路，走独立 profile。
-
-### 3.9 失败与降级
-
-- 显存不足：自动降档（int8→int4、1024→768、block 流式），并把决策写进任务事件；
-- 后端不支持某算子：回落到 `ref` CPU（慢但正确），任务标记 `degraded`；
-- 取消：host 在每个 block 边界检查取消标志，保证 100 ms 内响应。
-
-## 4. 启动器设计
-
-**桌面壳**：Tauri 2（Rust）。理由：二进制小、能直接链接 C++ 静态库/动态库、
-进程与文件权限模型清晰、三平台一致；Electron 体积与内存不合适，Qt 前端复用差。
-
-**前端**：React + TypeScript，`apps/web` 与桌面共用；桌面端通过 `tauri://` 加载同一 bundle。
-
-**本地服务**：引擎内置 `http` 模式（或由 Rust 壳代理），只监听 `127.0.0.1` 随机端口，
-带一次性 token，防止本机其它进程调用。WebUI 远程模式显式开启并绑定局域网地址。
-
-**核心页面**
-
-1. 模型库：下载/校验/量化档位/磁盘占用；首次运行向导按内存推荐 profile；
-2. 生成：prompt、负面词、分辨率、步数档（50/20/8）、CFG、seed、批量、布局 JSON 编辑器；
-3. 队列：并发 1（GPU 独占），可暂停/取消/重排；进度含 stage 与 step；
-4. 画廊：PNG + 内嵌元数据（prompt/seed/model/adapter），可复现；
-5. 适配器：LoRA 列表、strength、触发词；
-6. 训练（可选）：检测外部环境、编辑配置、启动、看 loss/样例。
-
-**不做**：云端账号、模型市场后端、遥测（默认关闭）。
-
-## 5. 训练器桥接
-
-```
-launcher ──spawn──> python -m clovermoss_trainer_bridge --job job.json
-        <──NDJSON── {"event":"step","step":120,"loss":0.031,...}
+```ts
+Instance  { id, name, sourceUrl, branch, commit, channel, runtimeId,
+            launch, models{dit,te,vae}, adapters[], status, createdAt, lastUsedAt }
+Runtime   { id, pythonPath, pythonVersion, lockHash, kind: 'shared'|'isolated',
+            path, state, refCount }
+ModelPack { id, provider: 'hf'|'modelscope'|'url', repo, revision, role,
+            files[], size, sha256, license, path, metadata }
+Adapter   { id, name, kind: 'lora'|'lycoris'|'dmd', base, sha256, path, meta }
+Download  { id, url, dest, total, received, sha256, state, speed, error }
+Job       { id, instanceId, kind: 'generate'|'install'|'update', state, params, result }
+Diagnostic{ id, jobId, ruleId, severity, title, signature, count, payload }
+Announcement { id, level, title, body, startsAt, endsAt, dismissedAt }
 ```
 
-- 启动器只依赖**进程契约**：`job.json` 进，NDJSON 事件出，退出码表状态；
-- 训练环境由用户自备（venv/conda），启动器负责发现、体检、传参；
-- 不在本仓库放训练器源码，不分发其权重/内核（见 ADR-0002）；
-- 如果未来要深度集成，单独开 `clovermoss-trainer-kohaku` 仓库，独立许可。
+SQLite（`better-sqlite3`，WAL）表：`instances`、`runtimes`、`models`、`instance_models`、
+`adapters`、`instance_adapters`、`downloads`、`jobs`、`logs`、`diagnostics`、
+`announcements`、`settings`、`schema_migrations`。
 
-## 6. 磁盘布局
+> 选 `better-sqlite3` 的理由：同步 API 简化主进程事务；CI 用 prebuild + electron-rebuild。
+> 备选 `node:sqlite`（若 Electron 内置版本稳定）可去掉原生模块。
+
+## 5. 磁盘布局
 
 ```
-~/Library/Application Support/CloverMoss/     # macOS
-  models/<bundle-id>/...
-  adapters/
-  outputs/
-  logs/
-  settings.json
+<appData>/CloverMoss/            macOS: ~/Library/Application Support/CloverMoss
+                                 Windows: %APPDATA%\CloverMoss
+  config.json                   用户设置（含敏感项仅存引用）
+  state.db                      SQLite
+  git/moss-image.git/           bare 镜像（~85 MB）
+  instances/<id>/               git worktree + instance.json + outputs/
+  runtimes/
+    python/<version>/           托管 Python（python-build-standalone）
+    <py>-<platform>-<lock>/     venv（shared 或 isolated）
+  models/
+    hf/hub/models--org--name/   HF 兼容缓存（blobs/snapshots/refs）
+    adapters/<sha256>.safetensors
+  downloads/                    *.part（断点续传）
+  logs/<job>.jsonl
+  cache/
+    env-report.json
+    release/manifest.json       ETag 缓存
+    thumbnails/
 ```
 
-模型可放外置盘：设置里改 `models_root`，用绝对路径 + 哈希校验，不复制。
+所有路径可迁移：设置里改根目录，启动时校验并更新 DB 中的相对路径。
 
-## 7. 性能策略（按收益排序）
+## 6. Git 与实例生命周期
 
-1. **few-step**（8 步 DMD）：10× 以上，先做；
-2. **分辨率档位**：512² 是 1024² 的 1/4 计算；
-3. **CFG 优化**：负分支 block skip 已内置；进一步可做 CFG 缓存/蒸馏；
-4. **int8 权重 + 融合 attention**：1.5–2× 带宽收益；
-5. **block 流式**：让 8 GB 设备可跑，不直接提速；
-6. **批处理**：队列内同参数合并，但对 16 GB 设备意义有限；
-7. **预览**：每 N 步出低分辨率 latent 预览（VAE 轻量解码），提升交互感。
+### 6.1 镜像
 
-## 8. 可观测性
+```bash
+git clone --bare https://github.com/OpenMOSS/MOSS-Image.git git/moss-image.git
+git -C git/moss-image.git fetch --prune origin '+refs/heads/*:refs/heads/*'
+```
 
-- 每个任务落 `logs/<job>.jsonl`：stage、step、耗时、峰值内存、降档记录；
-- `--bench` 模式：固定 prompt/seed，输出 tokens/s、TFLOPS、峰值 RSS；
-- 数值 parity：`tests/parity` 保存 PyTorch 参考的张量夹具（小 shape），CI 里逐层比对。
+- 只保留一个 bare 仓库；默认完整克隆（85 MB）保证离线可回滚；
+- 可选 `--filter=blob:none` 加速首次克隆，但 checkout 需要网络，默认不开；
+- 分支列表：`git for-each-ref --format='%(refname:short)%x1f%(objectname)' refs/heads`；
+- 提交列表：`git log -n 100 --format='%H%x1f%h%x1f%ct%x1f%s%x1f%an' <branch>`。
 
-## 9. 安全与合规
+### 6.2 实例 = worktree + pin
 
-- 模型下载只允许 HTTPS + 允许列表域名（huggingface.co / modelscope.cn）；
-- 权重文件先写临时文件、校验哈希、再原子 rename；
-- 不执行模型包里的任意 Python（只读 safetensors/MNN）；
-- 上游许可证与 NOTICE 随安装包分发；训练器不打包。
+```bash
+git -C git/moss-image.git worktree add --detach instances/<id> <sha>
+```
+
+- worktree 共享对象库，单个实例只多占 ~100 MB（assets）；
+- `instance.json` 记录完整 SHA、分支、运行时、模型/适配器、启动参数；
+- `dirty` 通过 `git status --porcelain` 计算；有改动时更新需确认（可导出 patch）；
+- 删除：先删 DB 记录，再 `git worktree remove --force`，输出目录可选保留；
+- 回滚：直接把 pin 切到旧 SHA（对象仍在），无需重新下载。
+
+### 6.3 稳定版标记
+
+- `main` HEAD 或 `release/manifest.json.sources.moss.recommended_commit` → **稳定版**；
+- 其它 commit → **实验**；用户自填 fork → **自定义**；
+- manifest 的推荐提交可在不发版的情况下推进，用于“我们验证过的版本”。
+
+## 7. 运行时
+
+### 7.1 解释器
+
+优先级：用户指定 → 托管 Python → `uv python` → `pyenv` → `conda` → 系统
+`python3 / py -3`。接受 3.10–3.13，推荐 3.12。
+
+托管 Python：从 `astral-sh/python-build-standalone` 下载对应平台包，校验 sha256，
+解压到 `runtimes/python/<version>/`；manifest 里固定版本与哈希（可运营更新）。
+
+### 7.2 依赖安装（关键细节）
+
+官方 `requirements.txt` 是 `-e .`。**不能把它装进共享 venv**：editable install 会把
+`.pth` 指向某一个 worktree，实例一多就串。因此：
+
+1. 从实例的 `pyproject.toml` 读 `[project].dependencies`（或 `requirements.txt` 中非
+   `-e` 行）；
+2. 用 `uv pip install`（无 uv 时 `python -m pip`）装依赖；
+3. 运行脚本时 `cwd = instances/<id>`，Python 从当前目录 import `inference_runtime.py`
+   等模块，不需要安装包本身。
+
+torch 变体：
+
+| 平台 | 来源 |
+| --- | --- |
+| macOS arm64 | PyPI 默认轮子（含 MPS） |
+| Windows / Linux | 按驱动选 `cu126 / cu128 / cu130` 索引；无 NVIDIA 时 CPU 轮子 |
+
+### 7.3 锁哈希与共享
+
+```
+lockHash = sha256(json({
+  python, platform, arch, deps: sorted(requirements),
+  torchIndex, resolver: "uv@<ver>", appRuntimeRevision: <n>
+}))
+```
+
+- 同 hash 复用同一 venv；`runtimes.refCount` 由实例引用维护；
+- 依赖变化 → 新 hash → 新 venv（旧实例不受影响）；
+- “一键转独立”：用同 hash 新建带 uuid 的 venv，安装后切换实例引用；
+- “修复”：`python -c "import torch, diffusers, transformers"` + `pip check`，
+  失败则重建（保留旧目录以便回退）；
+- GC：连续 30 天无引用且非默认运行时的 venv 可清理（用户确认）。
+
+### 7.4 注入环境变量
+
+```
+PYTHONUNBUFFERED=1
+PYTHONIOENCODING=utf-8
+PYTORCH_ENABLE_MPS_FALLBACK=1        # macOS
+TOKENIZERS_PARALLELISM=false
+HF_HOME=<appData>/models/hf
+HF_HUB_CACHE=<appData>/models/hf/hub
+HF_HUB_ENABLE_HF_TRANSFER=1          # 若已安装
+HF_ENDPOINT=<选中的镜像>
+PIP_INDEX_URL / PIP_EXTRA_INDEX_URL / PIP_TRUSTED_HOST
+```
+
+另外注入 `CLOVER_JOB_ID`、`CLOVER_INSTANCE_ID`，供 runner 回传事件时带上。
+
+## 8. 模型存储与下载
+
+### 8.1 为什么写 HF 兼容缓存
+
+官方代码直接用 `DiffusionPipeline.from_pretrained("OpenMOSS-Team/MOSS-Image-SFT")`，
+只认 `HF_HOME` 下的缓存布局。我们不 patch 官方代码，而是**按 HF 布局落盘**：
+
+```
+models/hf/hub/models--OpenMOSS-Team--MOSS-Image-SFT/
+  blobs/<etag>
+  refs/main
+  snapshots/<commit>/<file>  -> ../../blobs/<etag>
+```
+
+这样下载器可以自己控制队列、镜像、断点，而官方代码仍然命中缓存。
+
+### 8.2 下载器
+
+- 文件清单：`GET https://huggingface.co/api/models/{repo}/tree/{rev}?recursive=true`
+  （含 `size`、`lfs.oid`）；
+- 下载：`resolve/{rev}/{path}`，`Range` 续传，3 并发/仓库，5 全局；
+- 校验：LFS 用 `oid`（sha256）；小文件校验 size + etag；
+- 镜像：替换 host 为 `HF_ENDPOINT`（路径不变）；
+- 暂停：`AbortController` + 保留 `.part`；恢复用 `Range: bytes=N-`；
+- 磁盘保护：所需空间 × 1.1 + 2 GB，不足则暂停并解释；
+- 失败：指数退避 3 次 → 切镜像 → 仍失败则诊断卡片（`E_NET`）。
+
+### 8.3 适配器
+
+单文件走 CAS：`models/adapters/<sha256>.safetensors`，DB 记元数据（名称、类型、基座、
+触发词、来源、强度默认值）。相同文件只存一份，多实例共享。
+
+### 8.4 注册表
+
+内置目录 `release/models.json`（由 manifest 的 `catalog` 指向）可运营更新：
+官方权重、社区量化包、DMD、常用 LoRA。每条含 `provider/repo/revision/files/license/
+size/preview/tags`。用户也可“从 HF 仓库 / 链接 / 本地文件”添加。
+
+## 9. 进程监督与适配器
+
+### 9.1 接口
+
+```ts
+interface RuntimeAdapter {
+  id: 'runner' | 'gradio'
+  prepare(instance): Promise<PreparedLaunch>       // 命令、cwd、env、端口
+  readiness: { event: 'ready'; timeoutMs: number } | { regex: RegExp }
+  capabilities: { progress: 'ndjson'|'tqdm'|'none'; preview: boolean; stdin: boolean }
+}
+```
+
+### 9.2 启动
+
+```ts
+spawn(python, args, {
+  cwd: instanceDir,
+  env: buildEnv(instance, network),
+  detached: process.platform !== 'win32',
+  windowsHide: true,
+  stdio: ['pipe', 'pipe', 'pipe'],
+})
+```
+
+- **不使用 `shell: true`**，参数一律数组传递；
+- POSIX 用进程组 kill（`process.kill(-pid)`）；Windows 用 `taskkill /PID <pid> /T /F`；
+- 退出码：0 成功；130/3221225786 取消；137/9 被系统杀（按 OOM 处理）；
+- 崩溃循环：10 min 内 3 次异常退出 → 停止自动重启并生成诊断。
+
+### 9.3 Runner 协议
+
+薄 runner（`runner/runner.py`，≤300 行）职责：
+
+1. 读取 `--job job.json`（实例、模型、prompt、尺寸、步数、seed、适配器）；
+2. 加载官方 pipeline（`diffusers` + `custom_pipeline`），一次性；
+3. 逐步采样，按协议输出事件；
+4. 写 PNG（内嵌元数据）到实例 `outputs/`；
+5. 支持 stdin 取消。
+
+事件用前缀行，避免与库日志混淆（详见 [runner-protocol.md](../contracts/runner-protocol.md)）：
+
+```
+@@CLOVER@@ {"type":"ready","protocol":1}
+@@CLOVER@@ {"type":"stage","name":"denoise"}
+@@CLOVER@@ {"type":"progress","stage":"denoise","current":5,"total":8,"percent":62.5,"eta_ms":18000}
+@@CLOVER@@ {"type":"result","images":[{"path":"outputs/0001.png","seed":42}]}
+```
+
+非前缀行原样进控制台；同时按 tqdm 规则兜底解析（官方库仍会打进度条）。
+
+### 9.4 Gradio 适配器
+
+```bash
+python gradio_app.py --host 127.0.0.1 --port <free> --model <local bundle>
+```
+
+- readiness：匹配 `Running on local URL: (http://\S+)` 或 TCP 探测；
+- 生成进度由 Gradio 自己展示；启动器只显示“由 Gradio 提供”，并解析下载/报错；
+- 展示：应用内 `WebContentsView` 或外部浏览器（用户可选）；
+- 关闭：先请求停止，再按 §9.2 终止。
+
+## 10. 日志管线与错误规则
+
+```
+stdout/stderr bytes
+  → UTF-8 解码（errors=replace）
+  → ANSI 剥离（解析用）/ 保留（控制台显示）
+  → 帧切分：\n 与 \r（tqdm 用 \r 原地刷新）
+  → 规则匹配（有序）：
+       1. runner NDJSON
+       2. tqdm / HF 下载
+       3. 错误模式
+       4. 普通日志（级别推断）
+  → 聚合与节流（进度 10 Hz，日志批量 100 ms）
+  → 渲染进程 / SQLite / 日志文件
+```
+
+### 10.1 进度
+
+```ts
+type Progress = {
+  key: string          // 进度条标识（前缀哈希），支持多 bar
+  stage: 'load'|'text'|'denoise'|'decode'|'download'
+  current: number; total: number; percent: number
+  rate?: string; etaMs?: number; message?: string
+}
+```
+
+tqdm 兼容正则（覆盖 `▌`, `█`, `?it/s`, `s/it`）：
+
+```
+^\s*(?<pct>\d{1,3})%\|.*?\|\s*(?<cur>\d+)/(?<total>\d+)\s*\[(?<elapsed>[^<\]]+)<(?<eta>[^,\]]+)(?:,\s*(?<rate>[^\]]+))?\]\s*$
+```
+
+下载条：`(?<name>.+?):\s*(?<pct>\d{1,3})%\|.*?\|\s*(?<cur>[\d.]+[KMG]?B?)/(?<total>[\d.]+[KMG]?B?)`。
+
+- 主进度取 `denoise`；下载显示在侧栏；
+- `current == total` 且收到下一阶段 → 标记完成，避免“卡在 99%”；
+- 进度只升不降（除非切换 job）。
+
+### 10.2 错误规则
+
+规则是 JSON，可热更新（内置 + `release/rules.json` + 用户自定义）：
+
+```json
+{
+  "id": "E_OOM_MPS",
+  "match": "(MPS backend out of memory|OutOfMemoryError|CUDA out of memory)",
+  "severity": "error",
+  "title": "显存/内存不足",
+  "explain": "模型在 {stage} 阶段耗尽了设备内存。",
+  "solutions": [
+    {"label": "降到 768² 重试", "action": "retry", "params": {"height": 768, "width": 768}},
+    {"label": "启用分块解码", "action": "set_option", "params": {"vae_tiling": true}},
+    {"label": "查看文档", "action": "open_url", "params": {"url": "..."}}
+  ],
+  "dedupe": {"windowSec": 60, "maxPerWindow": 1}
+}
+```
+
+- `signature = sha1(ruleId + 归一化消息)`；归一化去掉路径、数字、地址；
+- 卡片永久保留；toast 受全局预算（5 min ≤ 3 条）与单规则窗口约束；
+- 规则可“静音 1 小时 / 永久忽略”；
+- 未命中规则但进程异常退出 → `E_EXIT` 卡片，附 exit code 与最后 20 行；
+- 首批规则覆盖：OOM、缺包、版本冲突、网络/SSL、磁盘满、权限、端口占用、HF 鉴权、
+  模型损坏、MPS 不支持算子、被系统杀死。
+
+## 11. 网络探测与镜像
+
+- 探测点：GitHub（git/raw/api）、PyPI、HuggingFace、jsDelivr；
+- 方法：`GET` 一个小文件，3 s 超时，两次取中位数；失败计惩罚；
+- 缓存 10 min；启动、网络失败、用户点“重新检测”时刷新；
+- 结果：每类服务一个有序候选列表，默认取第一名；
+- 应用：
+  - git：`-c url."<mirror>".insteadOf="https://github.com/"`；
+  - pip：`PIP_INDEX_URL` + `PIP_EXTRA_INDEX_URL`（torch 索引）；
+  - HF：`HF_ENDPOINT`；
+- 镜像列表来自**签名的** `release/manifest.json`（可运营更新，不硬编码）；
+- 手动覆盖优先于自动；失败自动回退并提示，不静默改用户全局配置。
+
+## 12. 更新与公告
+
+### 12.1 更新源
+
+`release/manifest.json`（本仓库），经 jsDelivr → raw.githubusercontent → 代理 → 本地缓存
+依次尝试，带 ETag；24 h 一次，启动时异步。
+
+字段：`schema_version`、`app{channel,version,min_supported}`、`announcements[]`、
+`assets[]`、`sources{git_mirrors,pip_indexes,hf_endpoints,manifest_mirrors}`、
+`catalog{models_url}`、`signature`。
+
+### 12.2 校验
+
+1. JSON schema（zod）；
+2. `signature`：Ed25519 对规范化 JSON（键排序、无空白）签名，公钥内置；
+3. 版本：semver + 通道 + `min_supported`；
+4. 资产：平台/架构匹配，下载后校验 sha256 再执行。
+
+### 12.3 公告
+
+- `announcements[]` 支持内联 `body_markdown` 或 `body_url`（如 `release/README.md`）；
+- 首页卡片 + 公告页；按 id 记录已读/不再显示；
+- markdown 经 sanitize（禁脚本/iframe，图片仅 https，外链确认）；
+- 离线显示缓存并标注“上次检查时间”。
+
+### 12.4 安装
+
+- macOS：下载 dmg/zip → 校验 → 提示重启 → 替换并重启（Sparkle 风格）；
+- Windows：NSIS 安装包，静默参数 + 重启；
+- 失败回滚：保留上一版本，启动失败 3 次自动回退并提示；
+- 大版本（major）不静默安装，必须用户确认。
+
+## 13. WebUI
+
+- Fastify 监听 `127.0.0.1:<随机>`；静态资源来自 `apps/renderer/dist`；
+- `/api/*` 与 IPC 同构；`/events` SSE（断线重连 + Last-Event-ID）；
+- 鉴权：启动时生成一次性 token，写入 `0600` 文件；URL `?token=` → HttpOnly cookie；
+- 局域网：设置显式开启，绑定 `0.0.0.0`，显示二维码与警告；
+- 限流：每 IP 10 req/s；上传/下载路径限制在数据根目录；
+- 与桌面共用 `LauncherClient`，仅 transport 不同（IPC vs HTTP）。
+
+## 14. IPC 与类型安全
+
+```ts
+// preload 暴露的唯一表面
+window.clover = {
+  invoke<T>(channel: Channel, payload: unknown): Promise<T>
+  subscribe(channel: EventChannel, cb: (e: unknown) => void): () => void
+}
+```
+
+- 每个 channel 在 `packages/contracts` 里用 zod 定义入参/出参；
+- 主进程统一 `handle(channel, schema, fn)`，失败返回结构化 `{ok:false,error}`；
+- 事件（进度、日志、下载、更新）单向推送，渲染层用 Zustand 归约；
+- 禁止在渲染进程使用 `remote`、`shell.openPath` 等未包装能力。
+
+## 15. 安全与威胁模型
+
+| 威胁 | 缓解 |
+| --- | --- |
+| 恶意模型/实例仓库 | 只运行白名单入口（`gradio_app.py` / runner）；自定义源需二次确认；不执行安装脚本 |
+| 更新被劫持 | HTTPS + Ed25519 签名 + sha256；镜像只从签名 manifest 取 |
+| 本地 WebUI 被扫描 | 随机端口 + token + 仅 loopback；LAN 显式开启 + 限流 |
+| 命令注入 | 全部数组参数，无 shell；路径 `path.resolve` 后校验前缀 |
+| 路径穿越 | 所有用户输入路径规范化并限制在数据根目录；zip 解压校验（若支持导入包） |
+| 令牌泄漏 | HF token 存 OS Keychain（`safeStorage`），日志脱敏 |
+| 渲染进程 XSS | `contextIsolation`、`sandbox`、CSP、禁用 `nodeIntegration`；外链走系统浏览器 |
+
+## 16. 跨平台
+
+- **macOS**：arm64 优先；hardened runtime + 公证；`hiddenInset` 标题栏；
+  MPS fallback 环境变量；路径含空格需引号（spawn 数组天然安全）。
+- **Windows**：长路径（worktree 路径可能 >260）；Defender 误报（Electron 常见，
+  文档说明）；`py -3` 启动器；`taskkill /T`；CRLF 归一化。
+- **Linux**：XDG 路径；AppImage/deb；`python3` 多版本；无签名要求但保留校验。
+
+## 17. 性能预算与可观测性
+
+| 指标 | 预算 |
+| --- | --- |
+| 主窗口可见 | ≤ 1.5 s |
+| 环境扫描 | ≤ 5 s（并行，单项 2 s 超时） |
+| 实例列表 | ≤ 100 ms（本地 DB） |
+| 空闲内存 | ≤ 250 MB |
+| 日志渲染 | 5k 行/s 不卡顿（虚拟列表 + 批处理） |
+| 进度更新 | ≤ 10 Hz/条，合并后推送 |
+
+- 结构化日志：主进程 `pino`，写入 `logs/app-<date>.jsonl`，30 天轮转；
+- 任务日志：`logs/<job>.jsonl`，含 stage/step/内存/降档/退出码；
+- “导出诊断包”：环境报告 + 实例配置 + 最近日志 + 规则命中，脱敏后 zip。
+
+## 18. 测试
+
+- **单元**：parser（tqdm 变体、ANSI、OOM、pip 错误）、mirror 评分、semver、路径校验；
+- **集成**：临时目录 + 假 git 仓库 + `fake_runtime.py`（可控输出进度/错误/等待 stdin）；
+- **E2E**：Playwright + Electron，覆盖首次启动、创建实例、下载（MSW）、启动、错误卡片；
+- **契约**：JSON schema 校验 `release/manifest.json`、`instance.json`、`job.json`；
+- **模糊**：对 parser 输入随机字节，保证不崩溃、不吞日志。
+
+## 19. 里程碑映射
+
+| 里程碑 | 内容 | 验收 |
+| --- | --- | --- |
+| M0 | 文档、契约、schema、空壳仓库 | 文档评审通过 |
+| M1 | Electron 壳 + 首页 + 环境报告 | 冷启动 ≤ 1.5 s，报告准确 |
+| M2 | git 镜像 + 实例 + 运行时 | 能装 3 个不同 commit 的实例并切换 |
+| M3 | 模型/适配器 + 下载队列 | 断点续传、哈希校验、暂停恢复 |
+| M4 | Supervisor + runner + 解析 + 诊断 | 进度条与 10 类错误卡片可用 |
+| M5 | Gradio + WebUI + 更新/公告 | 双 WebUI 可访问，更新验签通过 |
+| M6 | 打包、公证、Windows、Beta | 干净机器 30 min 内出图 |

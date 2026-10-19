@@ -1,110 +1,91 @@
-# CloverMossLauncher
+# CloverMoss Launcher
 
-MOSS-Image 的跨平台启动器 + 一套**不依赖 PyTorch** 的高性能推理引擎。
+> 为 [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) 做的跨平台启动器：
+> 装得快、版本分得清、权重不迷路、进度看得懂、报错能修、更新不用盯 GitHub。
 
-> 状态：**M0 · 架构立项**。本仓库当前是技术方案、接口契约与预算工具；推理代码尚未落地。
-> 目录规划见 [docs/architecture.md](docs/architecture.md)，路线图见 [docs/roadmap.md](docs/roadmap.md)。
+**状态：M0 · 设计定稿，代码未开始。** 本仓库当前包含产品设计、架构、协议与更新源配置。
 
-## 1. 为什么需要它
+## 它解决什么
 
-MOSS-Image（[OpenMOSS/MOSS-Image](https://github.com/OpenMOSS/MOSS-Image)，Apache-2.0）是目前少见的
-"5B DiT + 强文字渲染 + JSON 布局控制" 开源模型。但官方发布形态有几个硬约束：
+MOSS-Image 是一个 5B DiT + Qwen3.5-9B 文本编码器 + FLUX.2 VAE 的文生图模型，
+官方形态是「git clone → 装 Python 依赖 → 跑 gradio_app.py」。对普通用户来说：
 
-| 事实 | 数字 | 后果 |
-| --- | --- | --- |
-| DiT 参数 | 5.082 B（10.16 GB bf16） | 单个模型就超过多数轻薄本显存 |
-| 文本编码器 | Qwen3.5-9B，8.393 B（16.79 GB bf16） | 比 DiT 还大，且是混合线性注意力 |
-| VAE | FLUX.2 小型 VAE，8× 空间 + 2×2 patch | 1024² 解码需要分块，否则中间激活爆内存 |
-| 全量权重 | 27.2 GB bf16 | 16 GB Mac 必须 int4 + 分阶段加载 |
-| 官方采样 | 50 步 + CFG 3 | 100 次 5B 前向 ≈ 5.4 PFLOP / 张 1024² |
+- 不知道自己的机器能不能跑、该用多大分辨率；
+- 多个 commit / 分支 / LoRA 互相污染；
+- 27 GB 权重下载没有队列、断点、镜像；
+- tqdm 进度只在终端里，报错是几百行 traceback；
+- 官方更新了，只能自己刷 GitHub。
 
-官方实现是 `diffusers` + `transformers` + `torch`。这带来三个产品级问题：
+启动器把这些变成**一个 960×640 的小窗口**：首页给环境报告和公告，实例页管理版本，
+模型页管理权重与 LoRA，运行页给进度和控制台，诊断页给可点击的解决方案。
 
-1. **部署面窄**：torch 装不进移动端，macOS 上只有 MPS，Windows 上绑定 CUDA 版本；
-2. **内存不可控**：三件套同时常驻，16 GB 机器直接不可用；
-3. **启动器体验差**：Python 进程、依赖冲突、首字延迟、没法定向优化。
+## 核心能力
 
-CloverMossLauncher 要把这三件事分开解决：**引擎（C++/MNN）**、**启动器（桌面 + WebUI）**、
-**训练器（可选，外部进程）**。
+| 能力 | 说明 |
+| --- | --- |
+| 环境体检 | 系统 / Metal·CUDA / 内存 / 磁盘 / Python / git / 网络，逐项给结论与修复入口 |
+| 实例管理器 | 绑定到具体 commit 的 worktree；`main` HEAD 标为稳定版；可回滚、克隆、导出 |
+| 运行时 | 默认共享 Python 环境（按依赖锁哈希），可一键转独立；支持托管 Python，无需预装 |
+| 模型 / 适配器 | 官方权重、社区量化、LoRA/DMD 的统一下载队列、哈希校验、启用/禁用 |
+| 运行 | 薄 runner（NDJSON 进度）或官方 Gradio；stdout/stderr/stdin 全接管 |
+| 日志翻译 | tqdm → 阶段化进度条；OOM/缺包/网络等 → 带解决方案的诊断卡片，防弹窗循环 |
+| WebUI | 启动器自身的浏览器模式（手机可看队列/画廊）+ 官方 Gradio 两个入口 |
+| 更新 / 公告 | 启动时读 [`release/manifest.json`](release/manifest.json)，公告来自 [`release/README.md`](release/README.md) |
+| 自动换源 | 探测 GitHub / PyPI / HuggingFace，按网络位置自动选镜像，可手动覆盖 |
 
-## 2. 三个组成部分
+## 不做什么（V1）
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ apps/desktop  Tauri + React ──┐                              │
-│ apps/web      同一套前端       ├── HTTP/SSE ── engine/ (C++) │
-│ apps/mobile   iOS / Android ──┘        MNN: Metal/Vulkan/... │
-└──────────────────────────────────────────────────────────────┘
-                                                 │ 可选
-                                      trainer bridge (外部 venv)
-                                      KohakuMoss / 其它训练器
-```
+- **不做自有推理后端**：当前运行官方 Python 代码；引擎是 V2 的事，见
+  [ADR-0003](docs/decisions/0003-launcher-first.md) 与
+  [未来引擎架构](docs/future-inference-engine.md)。
+- 不做训练 UI（训练器将以外部进程接入，见 [ADR-0002](docs/decisions/0002-trainer-backend.md)）。
+- 不做 img2img / 移动端 / 云账号。
 
-- **engine/**：C++17 核心。权重加载（safetensors/mmap）、量化、tokenizer、采样器、
-  **逐 block 调度**（支持 CFG skip、DMD、LoRA、权重流式）、MNN 后端。
-- **apps/**：桌面启动器（Tauri 2 + React）与 WebUI 共用一套前端；移动端后续复用同一 C++ 核心。
-- **trainer bridge**：**不把训练器代码放进本仓库**（原因见
-  [ADR-0002](docs/decisions/0002-trainer-backend.md)）。启动器只发现、配置、拉起外部训练环境，
-  通过 JSON 事件流汇报进度。
+## 技术栈
 
-## 3. 平台矩阵（目标）
+- **Electron + TypeScript + React 19**，`electron-vite` 构建；
+- **UI：`@openai/apps-sdk-ui`**（MIT，Tailwind 4 + Radix 底座）+ 自定义 Moss 强调色；
+- 主进程：领域服务 + SQLite（`better-sqlite3`）+ 类型化 IPC；
+- WebUI：Fastify 复用同一服务层，HTTP/SSE；
+- 外部程序：git、Python（托管或系统）、uv/pip、runner/Gradio，全部经 Supervisor。
 
-| 平台 | 后端 | 状态 |
-| --- | --- | --- |
-| macOS (Apple Silicon) | MNN + Metal | M1 目标 |
-| iOS | MNN + Metal | M5 |
-| Android | MNN + Vulkan/OpenCL | M5 |
-| Windows | MNN + Vulkan / CUDA | M4 |
-| Linux | MNN + CUDA / Vulkan | M4 |
-
-**MPS 不是产品运行时**，只作为数值 oracle 与兜底路径；理由与证据见
-[ADR-0001](docs/decisions/0001-macos-runtime.md)。
-
-## 4. 性能现实（先看数字再谈优化）
-
-`python3 tools/budget.py` 的可复现估算，校准自公开 MLX 实测（M4 Max 1024²/50 步/CFG3 = 358 s）：
-
-| 设备 | 512² 50步 | 512² 8步DMD | 1024² 50步 | 1024² 8步DMD |
-| --- | ---: | ---: | ---: | ---: |
-| M4 Max 40c（实测校准） | 90 s | 8 s | 5.8 min | 29 s |
-| M1 Max 24c（实测校准） | 4.3 min | 22 s | 16.8 min | 83 s |
-| M3 10c（估算） | 8.8 min | 45 s | 34.3 min | 2.8 min |
-| RTX 4090（估算） | 25 s | 2 s | 1.6 min | 8 s |
-
-结论：**50 步全质量档在 16 GB M3 上不可作为交互体验**；启动器必须原生支持 8 步 DMD /
-few-step 适配器、分辨率档位和分阶段加载，而不是把 50 步当默认。
-
-## 5. 仓库结构
+## 仓库结构
 
 ```
+apps/                Electron 壳、React 渲染层、Web 服务
+packages/            领域服务、解析器、契约、UI 组件
+runner/              薄 runner（Python，随应用分发）
+release/             更新源：manifest.json、公告 README、模型目录、错误规则
+contracts/           协议与 schema（release / runner / job）
 docs/
-  architecture.md          系统架构与模块边界
-  model-notes.md           已核实的模型事实、采样器、数值约定
-  roadmap.md               里程碑与验收标准
-  decisions/               ADR：运行时选型、训练器集成
-  research/upstream-survey.md  上游生态与可复用实现
-contracts/
-  engine-protocol.md       启动器 ↔ 引擎协议
-  job.schema.json          生成任务 schema
-  model-manifest.schema.json
-tools/
-  budget.py                算力/显存预算工具
-engine/  apps/             代码目录（M1 起）
+  product-design.md  产品设计文档
+  architecture.md    架构文档
+  roadmap.md         里程碑
+  decisions/         ADR：运行时分叉、训练器、启动器优先
+  model-notes.md     模型事实与数值约定（预算依据）
+  research/          上游生态与实测数据
+tools/budget.py      算力 / 显存预算工具
 ```
 
-## 6. 快速开始（当前）
+## 现在能跑什么
+
+还没有可执行的应用。可以先看文档、校验 schema、生成预算表：
 
 ```bash
-git clone https://github.com/CloverIris/CloverMossLauncher.git
-cd CloverMossLauncher
-python3 tools/budget.py --markdown   # 生成预算表
+python3 tools/budget.py --markdown
+python3 -m json.tool release/manifest.json > /dev/null   # 校验 JSON
 ```
 
-模型权重不随仓库分发，首次运行由启动器下载（Apache-2.0）。
+## 文档
 
-## 7. 许可与第三方
+- [产品设计](docs/product-design.md)：用户、界面、流程、错误策略、视觉规范；
+- [架构](docs/architecture.md)：进程模型、数据模型、git/运行时/下载/监督/解析/更新；
+- [路线图](docs/roadmap.md)：M0–M6 与验收标准；
+- [Runner 协议](contracts/runner-protocol.md)、[更新清单 schema](contracts/release-manifest.schema.json)；
+- [模型事实](docs/model-notes.md)：为什么 16 GB 机器必须用 8 步 DMD。
 
-- 本仓库代码：MIT（见 [LICENSE](LICENSE)）。
-- MOSS-Image 权重与参考代码：Apache-2.0。
-- 参考实现（mlx-serve、moss-image-swift）：MIT，仅作行为对照，不直接拷贝。
-- **不包含** KohakuMossTrainer 代码；训练器是用户自备的外部环境（见 ADR-0002）。
+## 许可
+
+本仓库代码 MIT（见 [LICENSE](LICENSE)）。MOSS-Image 权重与代码为 Apache-2.0。
+参考实现（mlx-serve、moss-image-swift）为 MIT，只做行为对照。
+不包含 KohakuMossTrainer 代码。

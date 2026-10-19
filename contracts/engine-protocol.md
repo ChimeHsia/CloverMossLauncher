@@ -1,6 +1,9 @@
-# 引擎协议 v0.1
+# 引擎协议 v0.1（V2 自研引擎，V1 不使用）
 
-启动器（桌面/WebUI）与引擎之间的唯一契约。引擎可以嵌入进程内（Tauri 直连 C ABI），
+> V1 启动器与外部 Python 运行时之间使用 [runner-protocol.md](runner-protocol.md)；
+> 本文是未来 `clover-engine` 的 HTTP 契约，保留以免重复设计。
+
+启动器（桌面/WebUI）与引擎之间的唯一契约。引擎可以嵌入进程内（桌面壳直连 C ABI），
 也可以独立进程（headless），两者行为一致。
 
 ## 1. 传输

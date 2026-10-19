@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://clovermoss.dev/schemas/job.schema.json",
+  "$comment": "V2 自研引擎（clover-engine）的任务协议。V1 启动器调用外部 Python 运行时，使用 contracts/runner-protocol.md。",
   "title": "CloverMoss generation job",
   "type": "object",
   "additionalProperties": false,

@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-19T02:00:00Z",
+  "models": [
+    {
+      "id": "moss-sft",
+      "name": "MOSS-Image SFT",
+      "provider": "hf",
+      "repo": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "main",
+      "role": "full",
+      "precision": "bf16",
+      "size_bytes": 27200000000,
+      "size_estimated": true,
+      "license": "Apache-2.0",
+      "tags": ["official", "sft", "recommended"],
+      "preview": "https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/resolve/main/assets/teaser.webp",
+      "notes": "官方 SFT 权重，含 transformer / text_encoder / vae / tokenizer / scheduler。"
+    },
+    {
+      "id": "moss-base",
+      "name": "MOSS-Image Base",
+      "provider": "hf",
+      "repo": "OpenMOSS-Team/MOSS-Image-Base",
+      "revision": "main",
+      "role": "full",
+      "precision": "bf16",
+      "size_bytes": 27200000000,
+      "size_estimated": true,
+      "license": "Apache-2.0",
+      "tags": ["official", "base"],
+      "notes": "官方 Base 权重，适合继续微调或作为 LoRA 基座。"
+    },
+    {
+      "id": "moss-sft-int8",
+      "name": "MOSS-Image SFT INT8 (社区)",
+      "provider": "hf",
+      "repo": "Abiray/MOSS-Image-SFT-INT8-convrot",
+      "revision": "main",
+      "role": "dit",
+      "precision": "int8",
+      "size_bytes": 5400000000,
+      "size_estimated": true,
+      "license": "Apache-2.0",
+      "tags": ["community", "quantized", "int8", "low-memory"],
+      "notes": "第三方量化 DiT；文本编码器与 VAE 仍需搭配官方组件。"
+    },
+    {
+      "id": "moss-sft-int4",
+      "name": "MOSS-Image SFT INT4 (社区)",
+      "provider": "hf",
+      "repo": "toxicdog/MOSS-Image-SFT-INT4-ConvRot-ComfyUI",
+      "revision": "main",
+      "role": "dit",
+      "precision": "int4",
+      "size_bytes": 3000000000,
+      "size_estimated": true,
+      "license": "Apache-2.0",
+      "tags": ["community", "quantized", "int4", "low-memory", "comfy"],
+      "notes": "ComfyUI 键位的 INT4 DiT，启动器会做键位映射；质量请自行对比。"
+    },
+    {
+      "id": "moss-comfy-repack",
+      "name": "MOSS-Image (Comfy-Org 重打包)",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "full",
+      "precision": "mixed",
+      "size_bytes": 27000000000,
+      "size_estimated": true,
+      "license": "Apache-2.0",
+      "tags": ["community", "comfy"],
+      "notes": "ComfyUI 分发格式（unet/te/vae 分开），适合与 ComfyUI 共用缓存。"
+    }
+  ],
+  "adapters": [
+    {
+      "id": "dmd8-sft",
+      "name": "8-step DMD (SFT)",
+      "provider": "hf",
+      "repo": "lodestones/MOSS-Image-SFT-8-steps-dmd",
+      "revision": "main",
+      "kind": "dmd",
+      "base": "moss-sft",
+      "license": "Apache-2.0",
+      "files": [
+        "lora.safetensors",
+        "time_embedding.safetensors",
+        "dataspace.safetensors"
+      ],
+      "size_bytes": 1271000000,
+      "size_estimated": true,
+      "requires_profile": "dmd8",
+      "tags": ["few-step", "recommended", "8-step"],
+      "notes": "data-space DMD：8 次前向、无 CFG、fp32；必须使用专用采样器，不是普通 LoRA。"
+    },
+    {
+      "id": "dmd8-base",
+      "name": "8-step DMD (Base)",
+      "provider": "hf",
+      "repo": "lodestones/MOSS-Image-Base-8-steps-dmd",
+      "revision": "main",
+      "kind": "dmd",
+      "base": "moss-base",
+      "license": "Apache-2.0",
+      "files": [
+        "lora.safetensors",
+        "time_embedding.safetensors",
+        "dataspace.safetensors"
+      ],
+      "size_bytes": 1271000000,
+      "size_estimated": true,
+      "requires_profile": "dmd8",
+      "tags": ["few-step", "8-step"],
+      "notes": "Base 版 DMD 适配器。"
+    }
+  ]
+}

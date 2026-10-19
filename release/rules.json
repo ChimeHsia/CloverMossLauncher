@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-19T02:00:00Z",
+  "rules": [
+    {
+      "id": "E_OOM",
+      "match": "(MPS backend out of memory|CUDA out of memory|OutOfMemoryError|DefaultCPUAllocator: can't allocate memory|RuntimeError:.*out of memory)",
+      "severity": "error",
+      "title": "显存/内存不足",
+      "explain": "模型在 {stage} 阶段耗尽了设备内存。16 GB 机器跑 1024² + bf16 很容易触发。",
+      "solutions": [
+        { "label": "降到 768² 重试", "action": "retry", "params": { "width": 768, "height": 768 } },
+        { "label": "改用 8 步 DMD", "action": "set_option", "params": { "profile": "dmd8" } },
+        { "label": "开启分块解码", "action": "set_option", "params": { "vae_tiling": true } }
+      ],
+      "dedupe": { "windowSec": 60, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_MODULE",
+      "match": "ModuleNotFoundError: No module named '([^']+)'",
+      "severity": "error",
+      "title": "缺少 Python 包：{1}",
+      "explain": "当前实例的运行时里没有 {1}，通常是依赖安装不完整或实例代码更新后未重建环境。",
+      "solutions": [
+        { "label": "修复运行时", "action": "repair_runtime" },
+        { "label": "重建依赖", "action": "reinstall_deps" }
+      ],
+      "dedupe": { "windowSec": 120, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_VERSION",
+      "match": "(ImportError: cannot import name|version mismatch|requires .* but you have|Incompatible .* version)",
+      "severity": "error",
+      "title": "依赖版本不兼容",
+      "explain": "实例代码与运行时里的包版本不匹配，常见于切换到旧 commit 或手动升级过包。",
+      "solutions": [
+        { "label": "按实例重建运行时", "action": "rebuild_runtime" },
+        { "label": "查看依赖详情", "action": "open_instance_tab", "params": { "tab": "deps" } }
+      ],
+      "dedupe": { "windowSec": 120, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_NET",
+      "match": "(HTTPError|SSLError|ConnectionError|Max retries exceeded|Read timed out|Failed to establish a new connection|Could not resolve host)",
+      "severity": "warning",
+      "title": "网络请求失败",
+      "explain": "下载或鉴权请求没有完成。可能是网络不可达、镜像不可用或 HF 限流。",
+      "solutions": [
+        { "label": "切换镜像重试", "action": "switch_mirror" },
+        { "label": "检查网络设置", "action": "open_settings", "params": { "tab": "network" } }
+      ],
+      "dedupe": { "windowSec": 60, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_DISK",
+      "match": "(No space left on device|ENOSPC|OSError: \\[Errno 28\\])",
+      "severity": "error",
+      "title": "磁盘空间不足",
+      "explain": "写入模型或输出时磁盘已满。bf16 全量权重需要约 27 GB。",
+      "solutions": [
+        { "label": "清理未使用模型", "action": "open_settings", "params": { "tab": "storage" } },
+        { "label": "更换模型目录", "action": "open_settings", "params": { "tab": "storage" } }
+      ],
+      "dedupe": { "windowSec": 300, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_PORT",
+      "match": "(Address already in use|OSError: \\[Errno 48\\]|WinError 10048)",
+      "severity": "warning",
+      "title": "端口被占用",
+      "explain": "另一个进程（可能是上次未退出的实例）占用了端口。",
+      "solutions": [
+        { "label": "自动换端口重试", "action": "retry_pick_port" },
+        { "label": "结束占用进程", "action": "show_port_owner" }
+      ],
+      "dedupe": { "windowSec": 60, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_AUTH",
+      "match": "(401 Client Error|403 Client Error|gated repo|Access to model .* is restricted|Invalid username or password)",
+      "severity": "warning",
+      "title": "需要 Hugging Face 授权",
+      "explain": "该模型需要登录或同意许可协议。",
+      "solutions": [
+        { "label": "配置 HF Token", "action": "open_settings", "params": { "tab": "network" } },
+        { "label": "打开模型页面", "action": "open_url" }
+      ],
+      "dedupe": { "windowSec": 300, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_KILLED",
+      "match": "(Killed|exit code 137|signal 9|SIGKILL)",
+      "severity": "error",
+      "title": "进程被系统终止",
+      "explain": "通常是系统内存压力导致的 OOM killer，而不是代码错误。",
+      "solutions": [
+        { "label": "降低分辨率重试", "action": "retry", "params": { "width": 768, "height": 768 } },
+        { "label": "查看内存占用", "action": "open_diagnostics" }
+      ],
+      "dedupe": { "windowSec": 120, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_MPS_OP",
+      "match": "(not implemented for 'MPS'|MPS backend.*not support|Placeholder storage has not been allocated)",
+      "severity": "error",
+      "title": "MPS 不支持该算子",
+      "explain": "当前 macOS 的 PyTorch MPS 后端缺少这个算子，需要回退到 CPU 或降低精度。",
+      "solutions": [
+        { "label": "启用 MPS fallback 重试", "action": "set_option", "params": { "mps_fallback": true } },
+        { "label": "改用 CPU 运行", "action": "set_option", "params": { "device": "cpu" } }
+      ],
+      "dedupe": { "windowSec": 120, "maxPerWindow": 1 }
+    },
+    {
+      "id": "E_EXIT",
+      "match": null,
+      "severity": "error",
+      "title": "程序异常退出",
+      "explain": "进程以非零状态退出，但没有匹配到已知错误。请查看原始输出的最后 20 行。",
+      "solutions": [
+        { "label": "查看日志", "action": "open_job_log" },
+        { "label": "导出诊断包", "action": "export_bundle" }
+      ],
+      "dedupe": { "windowSec": 60, "maxPerWindow": 1 }
+    }
+  ]
+}

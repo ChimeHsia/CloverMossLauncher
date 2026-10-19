@@ -1,32 +1,79 @@
-# apps/（M3 起）
+# apps/
 
-## 形态
+Electron 桌面壳 + React 渲染层 + Web 服务。V1 只做编排，不做推理。
 
-| 目录 | 技术 | 说明 |
-| --- | --- | --- |
-| `desktop/` | Tauri 2（Rust）+ React | 桌面启动器；链接引擎 C ABI，管理进程/文件/更新 |
-| `web/` | React + TypeScript | 与桌面共用同一份前端；由本地引擎托管，或连接远端 headless |
-| `mobile/` | Swift / Kotlin 壳 | 复用同一 C++ 核心，M5 |
+## 结构
 
-## 前端约定
+```
+apps/
+  desktop/        Electron 主进程
+    src/main.ts         生命周期、单实例锁、窗口（960×640，hiddenInset）
+    src/preload.ts      contextBridge：invoke / subscribe（唯一暴露面）
+    src/windows/        主窗口、Gradio WebContentsView、关于/日志窗口
+    src/menu.ts         应用菜单、快捷键
+    electron.vite.config.ts
+  renderer/       React 19 + TS + Tailwind 4 + @openai/apps-sdk-ui
+    src/app/            路由与布局（侧栏 + 内容区）
+    src/pages/          home / instances / models / adapters / run / diagnostics / settings
+    src/stores/         Zustand：instances、downloads、jobs、diagnostics、ui
+    src/lib/client.ts   LauncherClient：ipc transport（桌面）/ http transport（Web）
+  web/            Fastify：静态资源 + /api + /events（复用 packages/core）
+```
 
-- 状态：Zustand（轻量，无服务端渲染需求）；
-- 数据：`/v1` REST + SSE，类型由 `contracts/*.schema.json` 生成；
-- 不直接调用引擎 C ABI（除桌面端的文件对话框、托盘等系统能力）；
-- 所有生图参数可序列化为"可复现链接"（模型+seed+prompt+adapter）。
+## 设计系统
 
-## 页面
+- `@openai/apps-sdk-ui`（MIT，React 18/19 + Tailwind 4，Radix 底座）；
+- 全局样式：
 
-1. **模型库**：下载、校验、量化档、磁盘占用、按内存推荐；
-2. **生成**：prompt、负面词、尺寸、profile（50/20/8 步）、CFG、seed、批量、布局编辑器；
-3. **队列**：单 GPU 串行、拖拽排序、取消、ETA；
-4. **画廊**：PNG + 内嵌元数据、同参数重跑、对比视图；
-5. **适配器**：LoRA/LyCORIS 列表、strength、触发词；
-6. **设置**：模型目录、后端、内存档、语言、遥测（默认关）；
-7. **训练（可选）**：外部环境检测、配置、启动、loss/样例。
+```css
+@import "tailwindcss";
+@import "@openai/apps-sdk-ui/css";
+@source "../node_modules/@openai/apps-sdk-ui";
+```
+
+- 强调色用 “Moss” `#2F6B4F`，其余沿用设计系统 token；
+- 部分组件依赖 ChatGPT 宿主（`window.openai`），用 `PlatformProvider` 做最小 shim，
+  不引入宿主 SDK；
+- 深色跟随系统，独立 token，不简单反色。
+
+## 窗口
+
+| 项 | 值 |
+| --- | --- |
+| 默认尺寸 | 960 × 640（居中，不最大化） |
+| 最小尺寸 | 840 × 560 |
+| 记忆 | 位置/尺寸/最大化状态 |
+| 标题栏 | macOS `hiddenInset`；Windows 原生 |
+| 启动 | 先出骨架，环境扫描后台完成 |
+
+## 通信
+
+渲染层只依赖 `LauncherClient`：
+
+```ts
+interface LauncherClient {
+  invoke<T>(channel: Channel, payload: unknown): Promise<T>
+  subscribe(channel: EventChannel, cb: (e: unknown) => void): () => void
+}
+```
+
+- 桌面：`ipcRenderer.invoke` → 主进程 zod 校验；
+- Web：`fetch('/api/' + channel)` + `EventSource('/events')`；
+- 同一套 React 代码，两种 transport，页面不感知差异。
 
 ## 打包
 
-- macOS：universal2 壳 + 按架构分发的引擎 dylib/Metal 库， hardening + 公证；
-- Windows：MSI/NSIS，Vulkan 运行时随包；
-- 模型不入安装包，首次运行下载（可断点续传、可离线导入）。
+- macOS：electron-builder，arm64 + x64，签名 + 公证，dmg/zip；
+- Windows：NSIS，长路径与 Defender 说明；
+- 自动更新：读取 `release/manifest.json`，验签后下载安装；
+- 安装包不内置权重，首次运行下载。
+
+## 开发命令（M1 起）
+
+```bash
+pnpm install
+pnpm dev            # electron-vite dev
+pnpm build          # 构建 desktop + renderer
+pnpm test           # vitest
+pnpm e2e            # playwright + electron
+```

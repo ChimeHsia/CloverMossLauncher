@@ -1,130 +1,137 @@
 # 路线图
 
-> 原则：每个里程碑都有**可测的验收标准**，不达标就不进入下一阶段。
-> 估算按 1 名全职工程师计，仅供排期参考。
+> V1 是**启动器**，不是推理引擎。引擎顺延到 V2（见 [ADR-0003](decisions/0003-launcher-first.md)）。
+> 每个里程碑都有可测验收，不达标不进入下一阶段。估算按 1 名全职工程师。
 
-## M0 · 立项与可行性（1 周）
+## M0 · 设计定稿（当前）
 
-**交付**
+- [x] 产品设计、架构、ADR、协议、schema；
+- [x] `release/` 更新源（manifest + 公告 + 模型目录 + 错误规则）；
+- [x] 模型预算工具（校准到公开 MLX 实测）；
+- [ ] 设计评审 + 关键页面高保真稿。
 
-- [x] 仓库初始化、README、架构文档、ADR-0001/0002、预算工具；
-- [ ] MNN 在 M3 上的 block 级微基准（`docs/benchmarks/m0-mnn-spike.md`）；
-- [ ] 单 block ONNX → MNN 转换脚本原型（`tools/convert/`）；
-- [ ] 与 PyTorch MPS 的同 block 对照数据。
+**验收**：产品与架构文档评审通过；`release/manifest.json` 通过 schema 校验。
 
-**验收**
-
-- 能回答"5B DiT 在 M3 上单次前向要多久、峰值内存多少"；
-- 若 block 有效算力 < 1.5 TFLOP/s，重开 ADR-0001（启用 MLX 快路径）。
-
-## M1 · 引擎内核：DiT + VAE（3 周）
+## M1 · 壳与环境报告（2 周）
 
 **范围**
 
-- `engine/` C++17 骨架、CMake、MNN submodule（固定 tag）；
-- safetensors mmap 读取、`clover.json` 清单、权重布局转换（HF/ComfyUI）；
-- 42 block 调度、CFG + block-22 skip、4 轴 RoPE（host 预计算）、fp32 调制；
-- `ref` 后端（CPU 正确性）+ `mnn` 后端（Metal）；
-- VAE 分块解码 + BN 反归一化 + unpatch；
-- CLI：`clovermoss generate --prompt ... --steps 20 --size 512`（文本嵌入由夹具提供）。
+- `electron-vite` 工程、单窗口 960×640、深浅色、侧栏路由；
+- IPC 契约 + zod 校验 + preload 白名单；
+- 环境探测：OS/CPU/内存/磁盘、Metal/CUDA、Python/git/uv、网络/镜像；
+- 首页：公告卡（读 `release/`）、环境报告、推荐档位、最近实例占位；
+- 设置页骨架（网络、存储、外观）。
 
 **验收**
 
-- 与官方 diffusers 的逐层 parity：单 block cos ≥ 0.9999（fp32）、端到端 LPIPS ≤ 0.02；
-- M3 16 GB，512²/20 步，int8 权重，**≤ 4 min**，峰值 RSS ≤ 12 GB；
-- 取消请求 100 ms 内生效。
+- 冷启动 ≤ 1.5 s 出窗口，≤ 5 s 出环境报告；
+- 报告在 macOS arm64 / Intel、Windows x64 上字段正确；
+- 断网时公告与环境报告显示缓存并标注时间；
+- 渲染进程无 Node 能力（CSP + sandbox 检查通过）。
 
-## M2 · 文本编码器与端到端（3 周）
+## M2 · 实例与运行时（3 周）
 
 **范围**
 
-- Qwen3.5-9B 导出（MNN-LLM 或 encoder-only），int4；
-- tokenizer（Qwen BPE）与 chat template；
-- 文本长度分桶（128/256/512/1024/2048/4096）；
-- 组件 staging（TE 卸载 → DiT 加载 → VAE）；
-- 首次运行模型下载器（HF/ModelScope 镜像、断点续传、哈希校验）。
+- bare 镜像克隆 / fetch / 分支与提交列表；
+- worktree 创建、pin、回滚、删除、dirty 检测；
+- 运行时发现、托管 Python、uv/pip 安装、锁哈希、共享/独立、修复；
+- 新建实例向导（版本 → 运行时 → 模型 → 启动配置）；
+- 实例详情：概览 / 版本 / 依赖。
 
 **验收**
 
-- M3 16 GB，512²/20 步，**≤ 5 min**，峰值 ≤ 14 GB；
-- 同一 prompt/seed 与官方输出 LPIPS ≤ 0.03；
-- 冷启动（含 TE 加载）≤ 20 s，热启动 ≤ 5 s。
+- 同一仓库装 3 个不同 commit 的实例，切换不串环境；
+- 两个实例命中同一锁哈希时复用 venv；转独立后互不影响；
+- 从零安装（含 Python 下载）在 Mac 上 ≤ 8 min（不含权重）；
+- 回滚到旧 commit ≤ 2 s。
 
-## M3 · 启动器 v0.1（4 周）
+## M3 · 模型与适配器（3 周）
 
 **范围**
 
-- Tauri 2 + React：模型库、生成、队列、画廊、设置；
-- 本地 HTTP + SSE 协议（`contracts/`）；
-- LoRA 加载（kohya/ComfyUI 键），strength 实时调整；
-- 8 步 DMD profile（独立采样器 + fp32 time embedding）；
-- WebUI 模式（同一前端，远程连接）；
-- 打包：macOS universal（arm64 + x86_64 的 MNN 后端按需）、公证。
+- HF 兼容缓存下载器（清单、Range 续传、并发、哈希、镜像、暂停/恢复）；
+- 内容寻址的适配器存储；
+- 模型目录（`release/models.json`）、详情、校验、删除保护；
+- 适配器导入（拖拽/仓库/链接）、启用/禁用、强度、冲突提示；
+- 下载队列 UI（全局 + 单文件）、磁盘保护。
 
 **验收**
 
-- 一键安装 → 下载 → 生成，全流程无终端；
-- 队列可取消/重排，崩溃后可恢复未完成任务；
-- 512²/8 步在 M3 上 ≤ 90 s；
-- 画廊内嵌元数据可完整复现（同 seed 同图）。
+- 断点续传在杀进程后恢复，字节级一致；
+- 镜像切换后同一文件校验通过；
+- 同一模型被 3 个实例引用时只占一份磁盘；
+- 磁盘不足时暂停并给出准确原因。
 
-## M4 · 1024² 与多平台（4 周）
+## M4 · 运行、进度与诊断（3 周）
 
 **范围**
 
-- 1024²：分块 attention、VAE 分块调优、int4 DiT 选项；
-- Windows（Vulkan/D3D12）+ Linux（CUDA）；
-- 性能面板：tokens/s、TFLOPS、峰值内存、降档记录；
-- 权重流式（8 GB 档）；
-- 自适应 profile（按设备内存/带宽自动选档）。
+- Supervisor：进程组、readiness、stdin、优雅停止、崩溃循环保护；
+- 薄 runner（Python）与 NDJSON 协议；
+- 解析管线：ANSI、`\r` 帧、tqdm、HF 下载、错误规则；
+- 运行页（进度/阶段/控制台/stdin）、诊断页（卡片/筛选/导出）；
+- 画廊：PNG + 元数据 + 复现。
 
 **验收**
 
-- M3 16 GB：1024²/8 步 ≤ 4 min，峰值 ≤ 15 GB；
-- RTX 3060 12 GB：1024²/50 步 ≤ 6 min；
-- 同 seed 跨平台输出 LPIPS ≤ 0.05（允许合理的后端差异）。
+- tqdm 变体（含 `s/it`、`?it/s`、下载条）解析成功率 ≥ 95%；
+- 同一错误 60 s 内最多 1 条 toast，5 min 内 ≤ 3 条；
+- 10 类错误卡片可命中并执行解决方案；
+- 日志 5k 行/s 时 UI 不掉帧；
+- 取消 ≤ 5 s 生效。
 
-## M5 · 移动端（6 周+）
+## M5 · Gradio、WebUI 与更新（3 周）
 
 **范围**
 
-- iOS（Metal）/ Android（Vulkan/OpenCL）壳 + 同一 C++ 核心；
-- int4 权重、mmap、后台任务、热管理；
-- 分辨率档 512²/768²，8 步优先；
-- 模型按需下载（App 不内置 27 GB）。
+- Gradio 适配器（启动、端口、readiness、内嵌/外开、关闭）；
+- 启动器 Web 模式（Fastify + SSE + token + 二维码 + 局域网开关）；
+- 更新检查：manifest 多镜像、ETag、签名、通道、min_supported；
+- 公告渲染与已读/不再显示；
+- 自动更新下载与重启安装（macOS 先行）。
 
 **验收**
 
-- iPhone 16 Pro：512²/8 步 ≤ 3 min，峰值内存 ≤ 6 GB；
-- 连续 10 张不触发系统杀进程；
-- 离线可用。
+- 同一前端在桌面与浏览器行为一致（除原生文件对话框）；
+- 手机扫码可看队列与画廊；
+- 篡改 manifest 后签名校验失败并拒绝更新；
+- 更新下载可暂停/续传，安装后版本号正确。
 
-## M6 · 训练器桥接（2 周）
+## M6 · 打包与 Beta（2 周）
 
 **范围**
 
-- 环境发现与体检（外部 venv，KohakuMoss 或其它）；
-- `job.json` → NDJSON 事件；
-- 训练配置编辑器（数据集、分辨率、rank、显存档）；
-- 产物自动登记为适配器；
-- GPU 互斥与队列优先级。
+- macOS 签名、公证、dmg/zip；
+- Windows NSIS（长路径、Defender 说明、`py` 启动器）；
+- 崩溃恢复、日志轮转、诊断包脱敏；
+- 首次运行引导与文案打磨；
+- 真实设备矩阵测试（M1/M3/M4、16/32/64 GB）。
 
 **验收**
 
-- 在 Windows + RTX 4090 上完成一次 LoRA 训练并直接用于生成；
-- 训练中断可续（依赖上游 checkpoint）；
-- 启动器不打包、不修改训练器代码。
+- 干净 Mac 上从下载到出第一张图 ≤ 30 min（含权重）；
+- 16 GB M3 上 768²/8 步 ≤ 3 min；
+- 无残留进程、无权限弹窗循环；
+- Beta 渠道可回滚到 stable。
 
-## 里程碑依赖
+## V2 · 自研推理引擎（远期）
+
+复用 [未来引擎架构](future-inference-engine.md)：MNN 为主、MPS 仅 oracle、MLX 条件触发。
+启动器通过 `RuntimeAdapter` 接入，UI 与协议不变。
+
+## V2+ · 训练器桥接
+
+外部进程接入 KohakuMoss 或其它训练器（[ADR-0002](decisions/0002-trainer-backend.md)），
+不在主仓库 vendor 训练代码。
+
+## 依赖关系
 
 ```
-M0 ──> M1 ──> M2 ──> M3 ──> M4 ──> M5
-                       └────> M6（可与 M4/M5 并行）
+M0 ──> M1 ──> M2 ──> M3 ──> M4 ──> M5 ──> M6
+                        └────> M6（打包可与 M5 并行）
 ```
 
-## 明确不做（本路线图内）
+## 明确不做
 
-- 自研训练内核；
-- img2img / edit（等上游）；
-- 云端多租户服务；
-- 模型 marketplace 后端。
+- 自研推理后端（V1）、训练内核、img2img、移动端、云账号、模型市场后端。
