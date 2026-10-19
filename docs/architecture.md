@@ -243,10 +243,12 @@ MOSS-Image 没有 tag：稳定版 = `main` 分支 HEAD 或 manifest 的
 
 ## 9. 模型与下载
 
+组件化下载、组合绑定与验收方式见 [模型组件管理](model-management.md)。
+
 - 按 HuggingFace 目录布局写 `models/hf/hub`，让官方代码不 patch 也能命中；
 - 文件清单来自 HF tree API；大文件走 LFS oid（sha256）；
-- `Range` 续传、暂停/继续、3 并发/仓库、5 全局；
-- 磁盘保护：所需空间 × 1.1 + 2 GB；
+- `Range` 续传、暂停/继续，全局最多 3 个文件传输，同一 blob 串行写入；
+- 磁盘保护：缺失字节 × 1.05 + 1 GB；不能硬链接时额外检查复制空间；
 - 适配器按目录 ID 存到 `models/adapters/<id>`；
 - 目录数据来自 `release/models.json`，失败时回退内置目录；
 - 真实 27 GB 权重未在本机下载/验收。

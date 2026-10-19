@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
 import type { CommitInfo, RuntimeInfo } from '@shared/types'
 import { call } from '../lib/api'
+import { ModelBindingEditor } from '../components/ModelBindingEditor'
 import { dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
 import { Button, Card, EmptyState, Input, Pill, Select, Spinner, StatusDot, useToast } from '../components/ui'
@@ -318,21 +319,14 @@ export function InstanceDetailPage(): React.JSX.Element {
         </Card>
       </div>
 
-      <Card className="px-5 py-4">
+      <Card className="model-binding-panel px-5 py-4">
         <div className="flex items-center justify-between">
           <h2 className="text-[13px] font-semibold">模型与适配器</h2>
           <Button tone="ghost" onClick={() => navigate('/models')}>
             管理模型
           </Button>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {(['DiT', '文本编码器', 'VAE'] as const).map((label) => (
-            <div key={label} className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-3 text-center">
-              <div className="text-[11.5px] font-medium">{label}</div>
-              <div className="mt-1 text-[10.5px] text-[var(--color-text-tertiary)]">模型包绑定后续</div>
-            </div>
-          ))}
-        </div>
+        <ModelBindingEditor instance={instance} />
         <div className="mt-3 border-t border-[var(--color-border-subtle)] pt-3">
           <div className="flex items-center justify-between">
             <span className="text-[10.5px] text-[var(--color-text-tertiary)]">适配器启用与强度（记录到实例）</span>

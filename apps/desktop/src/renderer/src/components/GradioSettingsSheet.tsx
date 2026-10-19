@@ -113,11 +113,13 @@ export function GradioSettingsSheet({
         </div>
       </div>
 
-      <Section title="模型" hint="留空则使用启动器默认的 SFT。模型路径在本机实例目录下解析。">
+      <Section title="模型" hint={remote ? '远端模型仍由远端路径或 HF ID 决定。' : '使用实例绑定时会复用模型库组件；自定义配置优先。'}>
+        {!remote ? <Field label="模型来源"><Select value={draft.modelSource ?? 'instance'} onChange={(event) => update('modelSource', event.target.value as 'instance' | 'custom')}><option value="instance">实例绑定的模型组件</option><option value="custom">自定义 HF ID 或本地目录</option></Select></Field> : null}
         <Field label="模型（HF ID 或本地目录）">
           <Input
-            value={draft.model ?? ''}
-            onChange={(event) => updateText('model', event.target.value)}
+            disabled={!remote && draft.modelSource !== 'custom'}
+            value={!remote && draft.modelSource !== 'custom' ? '使用实例详情中绑定的组件' : draft.model ?? ''}
+            onChange={(event) => { updateText('model', event.target.value); update('modelSource', 'custom') }}
             placeholder="OpenMOSS-Team/MOSS-Image-SFT（默认）"
           />
         </Field>

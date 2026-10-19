@@ -5,6 +5,7 @@ const pathLike = z.string().min(1).max(4096)
 const urlLike = z.string().min(8).max(2048).regex(/^https?:\/\//)
 
 const gradioConfig = z.object({
+  modelSource: z.enum(['instance', 'custom']).optional(),
   model: z.string().max(4096).optional(),
   modelRoot: z.string().max(4096).optional(),
   localFilesOnly: z.boolean().default(false),
@@ -79,6 +80,11 @@ export const schemas = {
     keepOutputs: z.boolean().default(true),
   }),
 
+  modelBundle: z.object({ id: z.string().min(1).max(160) }),
+  instanceModelBinding: z.object({
+    id: z.string().min(1).max(120),
+    binding: z.object({ bundleId: z.string().min(1).max(160), dit: z.string().min(1).max(160), textEncoder: z.string().min(1).max(160), vae: z.string().min(1).max(160) }).nullable(),
+  }),
   instanceAdapters: z.object({
     id: z.string().min(1).max(120),
     bindings: z.array(z.object({

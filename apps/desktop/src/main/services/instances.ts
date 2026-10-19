@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { InstanceInfo, InstancePlacement, RuntimeInfo, Settings } from '@shared/types'
+import type { InstanceInfo, InstancePlacement, ModelBinding, RuntimeInfo, Settings } from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
@@ -28,6 +28,7 @@ import {
   remoteRoots,
 } from './remoteInstances'
 import { posixQuote, sshExec } from './ssh'
+import { validateBinding } from './modelBundles'
 import { getRecommendedCommit } from './updates'
 
 export interface InstanceRecord {
@@ -46,6 +47,7 @@ export interface InstanceRecord {
   runtimeMode: InstanceInfo['runtimeMode']
   placement?: InstancePlacement
   models: string[]
+  modelBinding?: ModelBinding
   adapters: string[]
   adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
   createdAt: string
@@ -109,6 +111,7 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
     placement,
     hostId: placement.kind === 'ssh' ? placement.hostId : undefined,
     models: record.models,
+    modelBinding: record.modelBinding,
     adapters: record.adapters,
     adapterBindings: record.adapterBindings ?? [],
     createdAt: record.createdAt,
@@ -193,7 +196,8 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
     runtimeId: runtime.id,
     runtimeMode: input.runtimeMode,
     placement: { kind: 'local' },
-    models: [],
+    modelBinding: { bundleId: 'moss-sft', dit: 'moss-sft-dit', textEncoder: 'qwen35-encoder', vae: 'flux2-vae-small' },
+    models: ['moss-sft-dit', 'qwen35-encoder', 'flux2-vae-small', 'moss-pipeline'],
     adapters: [],
     createdAt: new Date().toISOString(),
     lastUsedAt: null,
@@ -358,6 +362,20 @@ export async function updateAdapterBindings(
   if (!record) throw new Error('实例不存在')
   record.adapterBindings = bindings
   record.adapters = bindings.filter((item) => item.enabled).map((item) => item.id)
+  await writeRecord(record)
+  emit(Events.instancesChanged, { id })
+  return toInfo(record)
+}
+
+export async function updateModelBinding(id: string, binding: ModelBinding | null, settings: Settings): Promise<InstanceInfo> {
+  const record = await readRecord(id)
+  if (!record) throw new Error('实例不存在')
+  if (record.placement?.kind === 'ssh') throw new Error('组件绑定目前仅支持本地实例')
+  if (binding) {
+    const bundle = await validateBinding(binding, settings)
+    record.models = [binding.dit, binding.textEncoder, binding.vae, bundle.support]
+  } else record.models = []
+  record.modelBinding = binding ?? undefined
   await writeRecord(record)
   emit(Events.instancesChanged, { id })
   return toInfo(record)

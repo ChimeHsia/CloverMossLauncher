@@ -160,6 +160,8 @@ def real(job):
 
     # The instance directory is cwd; allow importing the official modules directly.
     sys.path.insert(0, os.getcwd())
+    from model_runtime import install_loader
+    install_loader()
     from inference_runtime import generate_with_progress, load_pipeline
 
     pipe = load_pipeline(model, local_files_only=False)

@@ -65,6 +65,8 @@ export const Ipc = {
   modelsCatalog: 'models:catalog',
   modelsInstalled: 'models:installed',
   modelDownload: 'models:download',
+  modelBundleInstall: 'models:install-bundle',
+  instanceModelBinding: 'instances:model-binding',
   modelPause: 'models:pause',
   modelDelete: 'models:delete',
   downloadsList: 'downloads:list',

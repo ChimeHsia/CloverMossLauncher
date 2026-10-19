@@ -7,7 +7,7 @@
 - 通道：**stable**
 - 发布：2026-10-19T02:00:00Z
 - 最低版本：0.1.0
-- 模型目录：2026-10-19T09:48:26Z · `sha256:8e08446b803e…`
+- 模型目录：2026-10-19T09:48:26Z · `sha256:64e4f5552209…`
 
 ## 安装包
 
@@ -17,15 +17,24 @@ _当前发布未附带安装包。_
 
 | ID | 名称 | 仓库 | 角色 | 精度 | 大小 | 许可 | 标签 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `moss-sft` | MOSS-Image SFT | `OpenMOSS-Team/MOSS-Image-SFT` | full | bf16 | 27.2 GB | Apache-2.0 | `official` `sft` `recommended` |
-| `moss-base` | MOSS-Image Base | `OpenMOSS-Team/MOSS-Image-Base` | full | bf16 | 27.2 GB | Apache-2.0 | `official` `base` |
+| `moss-sft-dit` | MOSS-Image SFT | `OpenMOSS-Team/MOSS-Image-SFT` | dit | bf16 | 10.2 GB | Apache-2.0 | `official` `sft` |
+| `moss-base-dit` | MOSS-Image Base | `OpenMOSS-Team/MOSS-Image-Base` | dit | bf16 | 10.2 GB | Apache-2.0 | `official` `base` |
 | `moss-base-fp16-fixed` | MOSS-Image Base FP16-fixed (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `base` `diffusers` `2080ti` `v100` |
 | `moss-sft-fp16-fixed` | MOSS-Image SFT FP16-fixed (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `sft` `diffusers` `2080ti` `v100` |
 | `moss-base-fp16-fixed-comfy` | MOSS-Image Base FP16-fixed · ComfyUI (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `base` `comfyui` `2080ti` `v100` |
 | `moss-sft-fp16-fixed-comfy` | MOSS-Image SFT FP16-fixed · ComfyUI (社区) | `KBlueLeaf/MOSS-Image-FP16-fixed` | dit | fp16 | 10.2 GB | Apache-2.0 | `community` `fp16` `fixed` `sft` `comfyui` `2080ti` `v100` |
-| `moss-sft-int8` | MOSS-Image SFT INT8 (社区) | `Abiray/MOSS-Image-SFT-INT8-convrot` | dit | int8 | 5.4 GB | Apache-2.0 | `community` `quantized` `int8` `low-memory` |
-| `moss-sft-int4` | MOSS-Image SFT INT4 (社区) | `toxicdog/MOSS-Image-SFT-INT4-ConvRot-ComfyUI` | dit | int4 | 3.0 GB | Apache-2.0 | `community` `quantized` `int4` `low-memory` `comfy` |
-| `moss-comfy-repack` | MOSS-Image (Comfy-Org 重打包) | `Comfy-Org/MOSS-Image` | full | mixed | 27.0 GB | Apache-2.0 | `community` `comfy` |
+| `qwen35-encoder` | Qwen3.5 · 文本编码器 | `OpenMOSS-Team/MOSS-Image-SFT` | text_encoder | bf16 | 16.8 GB | Apache-2.0 | `official` `shared` |
+| `flux2-vae-small` | FLUX.2 VAE · Small | `OpenMOSS-Team/MOSS-Image-SFT` | vae | fp32 | 238 MB | Apache-2.0 | `official` `shared` |
+| `moss-pipeline` | MOSS Pipeline | `OpenMOSS-Team/MOSS-Image-SFT` | support | mixed | 0 MB | Apache-2.0 |  |
+| `moss-base-comfy-bf16` | MOSS BASE · BF16 | `Comfy-Org/MOSS-Image` | dit | bf16 | 10.2 GB | Apache-2.0 | `comfyui` |
+| `moss-base-comfy-int8_convrot` | MOSS BASE · INT8_CONVROT | `Comfy-Org/MOSS-Image` | dit | int8 | 5.4 GB | Apache-2.0 | `comfyui` |
+| `moss-sft-comfy-bf16` | MOSS SFT · BF16 | `Comfy-Org/MOSS-Image` | dit | bf16 | 10.2 GB | Apache-2.0 | `comfyui` |
+| `moss-sft-comfy-int8_convrot` | MOSS SFT · INT8_CONVROT | `Comfy-Org/MOSS-Image` | dit | int8 | 5.4 GB | Apache-2.0 | `comfyui` |
+| `qwen35-comfy-bf16` | Qwen3.5 · BF16 | `Comfy-Org/MOSS-Image` | text_encoder | bf16 | 19.3 GB | Apache-2.0 | `comfyui` |
+| `qwen35-comfy-int8_convrot` | Qwen3.5 · INT8_CONVROT | `Comfy-Org/MOSS-Image` | text_encoder | int8 | 9.7 GB | Apache-2.0 | `comfyui` |
+| `qwen35-comfy-w4a8_gptq` | Qwen3.5 · W4A8_GPTQ | `Comfy-Org/MOSS-Image` | text_encoder | w4a8 | 7.3 GB | Apache-2.0 | `comfyui` |
+| `flux2-vae-comfy-small` | FLUX.2 VAE · Small | `Comfy-Org/MOSS-Image` | vae | fp32 | 238 MB | Apache-2.0 | `comfyui` |
+| `flux2-vae-comfy-full` | FLUX.2 VAE · Full | `Comfy-Org/MOSS-Image` | vae | fp32 | 321 MB | Apache-2.0 | `comfyui` |
 
 ## 适配器
 
@@ -145,7 +154,7 @@ _当前发布未附带安装包。_
   "catalog": {
     "updated_at": "2026-10-19T09:48:26Z",
     "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
-    "models_sha256": "8e08446b803eaa48782e82953a285d4baf0a93c78b9932acb9792d14c11551cf"
+    "models_sha256": "64e4f555220903f6e967053087cd62735d8b87b9b86e6e1ab1ee3e326cbd9706"
   },
   "announcements": [
     {

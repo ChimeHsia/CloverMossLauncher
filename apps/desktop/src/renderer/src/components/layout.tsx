@@ -86,7 +86,7 @@ export function Sidebar(): React.JSX.Element {
   const downloads = useApp((state) => state.downloads)
   const diagnostics = useApp((state) => state.diagnostics)
   const collapsed = settings?.sidebarCollapsed ?? false
-  const activeDownloads = downloads.filter((task) => task.state === 'running' || task.state === 'queued').length
+  const activeDownloads = downloads.filter((task) => task.state === 'running' || task.state === 'queued' || task.state === 'verifying').length
 
   return (
     <aside

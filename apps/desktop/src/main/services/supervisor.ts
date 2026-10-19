@@ -21,6 +21,8 @@ import type {
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
 import { getInstance } from './instances'
+import { prepareModelBundle } from './modelBundles'
+import { legacyModelReady } from './modelReadiness'
 import { readRuntime, venvPython } from './runtimes'
 import { getSettings } from './settings'
 import { getTrainingHost } from './trainingHosts'
@@ -571,7 +573,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   if (!instance) throw new Error('实例不存在')
   const mode = input.mode ?? 'runner'
   const workspace = input.workspace ?? (mode === 'gradio' ? 'official' : 'clover')
-  const gradio = mode === 'gradio' ? normalizeGradioConfig(input.gradio) : undefined
+  let gradio = mode === 'gradio' ? normalizeGradioConfig(input.gradio) : undefined
   const remote = instance.placement.kind === 'ssh' ? instance.placement : null
   const runtime = await readRuntime(instance.runtimeId)
   if (mode !== 'simulate' && (!runtime || runtime.state !== 'ready')) {
@@ -591,7 +593,16 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     throw new Error('运行时尚未安装依赖，请先在实例详情中安装依赖')
   }
 
-  if (mode !== 'simulate') {
+  let bundlePath: string | undefined
+  let modelSnapshot: unknown
+  const extraModel = /(?:^|\s)--model(?:[=\s]|$)/.test(gradio?.extraArgs ?? '')
+  if (mode !== 'simulate' && !remote && instance.modelBinding && (!gradio || gradio.modelSource !== 'custom') && !extraModel) {
+    bundlePath = await prepareModelBundle(instance.modelBinding, getSettings())
+    modelSnapshot = JSON.parse(await readFile(join(bundlePath, 'clover_model.json'), 'utf8'))
+    if (gradio) gradio = { ...gradio, model: bundlePath, modelRoot: dirname(bundlePath), localFilesOnly: true }
+  }
+
+  if (mode !== 'simulate' && !bundlePath) {
     const requestedModel = gradio?.model?.trim()
     const usesDefault = !requestedModel || requestedModel === 'OpenMOSS-Team/MOSS-Image-SFT'
     let modelAvailable = true
@@ -604,7 +615,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       const modelDir = join(paths.hub(getSettings().modelsRoot), 'models--OpenMOSS-Team--MOSS-Image-SFT')
       const localModel =
         requestedModel &&
-        (requestedModel.startsWith('/') ||
+        (isAbsolute(requestedModel) || requestedModel.startsWith('/') ||
           requestedModel.startsWith('./') ||
           requestedModel.startsWith('../') ||
           requestedModel.startsWith('~'))
@@ -616,7 +627,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
               ? requestedModel
               : join(instance.path, requestedModel)
           : null
-      modelAvailable = usesDefault ? existsSync(modelDir) : localModelPath ? existsSync(localModelPath) : true
+      modelAvailable = usesDefault ? await legacyModelReady(modelDir) : localModelPath ? await legacyModelReady(localModelPath) : true
     }
     if (!modelAvailable) {
       pushDiagnostic({
@@ -626,13 +637,13 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
         title: '还没有下载 MOSS-Image 权重',
         explain: remote
           ? '远端模型缓存里没有默认 SFT。请先在远端准备好模型，或在 Gradio 参数里指定可用的模型。'
-          : '运行需要约 27 GB 的 SFT 权重。请先在模型页下载，或在 Gradio 参数里指定一个可用的模型。',
+          : '所选模型不完整。请在模型库补齐组件并绑定到实例，或指定一个完整的本地模型目录。',
         solutions: [{ label: '打开模型库', action: 'open_models' }],
         raw: 'model missing',
         signature: 'E_MODEL:moss-sft',
         toast: false,
       })
-      throw new Error('尚未下载 MOSS-Image 权重（约 27 GB），请先在模型页下载')
+      throw new Error('模型权重尚未就绪，请在模型库补齐组件并在实例详情保存绑定')
     }
   }
   const python = runtime
@@ -664,6 +675,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     caseName: input.caseName,
     workspace,
     gradio,
+    modelSnapshot,
     hostId: remote?.hostId,
     deviceId: input.deviceId,
     kind: input.kind ?? 'inference',
@@ -689,7 +701,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       {
         job_id: job.id,
         instance_id: instance.id,
-        model: { repo: DEFAULT_MODEL },
+        model: bundlePath ? { path: bundlePath, snapshot: modelSnapshot } : { repo: gradio?.model ?? DEFAULT_MODEL },
         prompt: params.prompt,
         negative_prompt: params.negativePrompt,
         width: params.width,
@@ -758,7 +770,9 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       } else {
         const port = gradio?.port ?? (await freePort())
         command = python
-        args = [join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
+        args = bundlePath
+          ? [join(dirname(runnerScript()), 'gradio_launcher.py'), join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
+          : [join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
       }
     } else {
       command = python
