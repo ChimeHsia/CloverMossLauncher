@@ -67,7 +67,7 @@ apps/desktop/
     services/            env / network / git / runtimes / instances / models /
                          updates / gallery / supervisor / parsers / diagnostics /
                          devices / cases / onboarding / trainerGit / trainers /
-                         trainingHosts
+                         trainingHosts / remoteTrainer / ssh / launchQueue / trainerArtifacts
   src/preload/index.ts   contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx          按 windowKind 分流 shell
@@ -103,7 +103,11 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `onboarding.ts` | OOBE 三行状态 |
 | `trainerGit.ts` | trainer bare mirror、分支/commit、per-commit worktree |
 | `trainers.ts` | TrainerVersion、lock hash venv、doctor、训练命令拼装 |
-| `trainingHosts.ts` | local + SSH host 持久化；远端执行未接 |
+| `trainingHosts.ts` | local + SSH host 持久化、测试状态 |
+| `ssh.ts` | 系统 OpenSSH 参数、host probe、scp |
+| `remoteTrainer.ts` | 远端 mirror/worktree/venv/doctor/版本（fake ssh 验证） |
+| `launchQueue.ts` | `launch-queue.json` 队列持久化/中断标记 |
+| `trainerArtifacts.ts` | 训练产物收集与本地适配器登记 |
 
 ## 5. IPC 与安全
 
@@ -120,7 +124,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 - `setWindowOpenHandler` 只允许 https 外开，禁止新 BrowserWindow；
 - `will-navigate` 阻止应用内跳转外部地址；
 - 当前开发 CSP 允许 `'unsafe-eval'`（Vite/开发需要），**打包前必须收紧**；
-- SSH host 只存连接信息，不存密码；远端执行未接。
+- SSH host 只存连接信息，不存密码；远端代码路径已接，真实 host 未验收。
 
 ## 6. 持久化与磁盘布局
 
@@ -130,6 +134,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 <userData>/                     开发时 = .dev-data/
   settings.json                 设置
   cases.json                    Case 启动配置
+  launch-queue.json             运行/排队行（重启语义）
   diagnostics.json              诊断历史
   training-hosts.json           local + SSH host
   announcements.json            公告缓存（如使用）
@@ -144,7 +149,8 @@ docs/                    产品、架构、状态、路线图、layout 规范、
     bin/ lib/ ...
   models/
     hf/hub/models--.../         HF 兼容缓存
-    adapters/                   适配器
+    adapters/<id>/              适配器
+    adapters/index.json         本地训练产物登记
   downloads/
   jobs/
     jobs.json                   最近 Job 记录（最多 60）
@@ -160,8 +166,8 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 - 所有路径由 `lib/paths.ts` 统一生成；开发环境通过
   `app.setPath('userData', .dev-data)`；
 - 实例/训练版本永远使用**完整 SHA**；短 hash 只做展示；
-- Job 重启时 running/starting/queued 会被标为 `failed`（“应用重启，任务已中断”），
-  因此**队列不跨会话**。
+- Job 重启时 running/starting 会被标为 `failed`（“应用重启，任务已中断”）；
+  `launch-queue.json` 的 queued 行保留，启动器会尝试重排。
 
 ## 7. 核心数据模型
 
@@ -175,9 +181,9 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `ModelEntry` | repo/revision/role/size/installed |
 | `AdapterEntry` | repo/kind/base/files/installed |
 | `LaunchCase` | instanceId/backend/deviceId/profile/port/extraArgs |
-| `JobRecord` | id/instanceId/kind/mode/state/stage/progress/metrics/error/logPath |
+| `JobRecord` | id/instanceId/kind/mode/state/stage/progress/metrics/hostId/trainerVersionId/trainerRunName/error/logPath |
 | `TrainerVersion` | commit/branch/path/runtimeId/runtimeState/channel/dirty/status |
-| `TrainingHost` | id/kind/host/user/port/identityFile/trainerRoot/status |
+| `TrainingHost` | id/kind/host/user/port/identityFile/trainerRoot/status/remote/versions |
 | `Diagnostic` | ruleId/severity/title/explain/solutions/raw/signature |
 
 `JobRecord.kind` 当前为 `inference | training`；训练 Job 额外有
@@ -270,7 +276,7 @@ queued → starting → running → succeeded | failed | canceled
 - `cases.ts` 持久化 Case，不是每次 Job；
 - 首页 `Home.tsx` 维护当前会话的运行/排队视图；
 - 同设备默认只跑 1 个真实任务，其余 `queued`；
-- 排队状态在 Job 表里可见，但应用重启后不会恢复；
+- 队列行持久化到 `launch-queue.json`；重启时 queued 保留，starting/running 标 failed；
 - 官方 Gradio：`gradio_app.py --host 127.0.0.1 --port <free>`，
   可追加 extraArgs；匹配 `Running on local URL` 后显示 URL；真实权重未验收；
 - Clover 后端：没有常驻进程/HTTP/WS，仅 UI 占位。
@@ -315,8 +321,11 @@ trainerRoot/
 ### 13.4 SSH
 
 - host 配置持久化到 `training-hosts.json`；
-- 使用系统 ssh + 密钥/agent 的设计已确定；
-- 连接、host key、远端 mirror/worktree/venv、远端命令/日志：**未实现**。
+- 系统 OpenSSH + 密钥/agent + `StrictHostKeyChecking=yes` + `BatchMode=yes`；
+- host probe 读取 uname / nvidia-smi / git / uv / python / root；
+- 远端 mirror、worktree、版本、venv、doctor、train/export 命令已接；
+- 远端训练通过本地 `ssh` 子进程进入同一 Job 表；取消时再发一条 ssh kill PID；
+- **仅在 fake ssh 下验证**；真实 host、host key、远端权限/网络未验收。
 
 ## 14. UI 壳与主题
 
@@ -353,6 +362,12 @@ env -u ELECTRON_RUN_AS_NODE \
 | `--scenario=trainer-deploy` | trainer clone + worktree |
 | `--scenario=trainer-job` | 模拟训练 Job + step/loss |
 | `--scenario=trainer-host` | SSH host 保存/读取/删除 |
+| `--scenario=trainer-host-probe` | fake ssh 下检查 os/git/uv/python/root |
+| `--scenario=trainer-remote-local` | fake ssh 下远端 mirror/worktree |
+| `--scenario=trainer-remote-env` | fake uv 下远端 venv/doctor |
+| `--scenario=trainer-remote-job` | fake ssh 下远端训练 step/loss |
+| `--scenario=trainer-remote-artifact` | fake ssh 下导出并登记适配器 |
+| `--scenario=queue-persist` | queued 行落盘/读取/删除 |
 
 测试现状：**没有** vitest/playwright 套件；验证以 typecheck/build、smoke、
 scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
@@ -366,11 +381,11 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | WebUI | Fastify/SSE、token、局域网；复用服务层；未实现 |
 | 托管 Python | python-build-standalone 下载/校验未接 |
 | 更新安装 | 只检查 manifest/公告，不下载/验签/安装 |
-| SSH 远端训练 | 连接、host key、远端 mirror/worktree/venv、Job |
+| SSH 远端训练验证 | 真实 host 的 host key/权限/网络、远端 venv/Job 验收 |
 | 导出/采样执行 | 只有命令预览 |
 | Project / 图层 | 画布/草稿只存在内存 |
 | Clover 常驻后端 | 没有 HTTP/WS 服务；创作生成未接 |
-| 队列落盘 | 只存在当前 Job 表/渲染会话 |
+| 队列完整重启验收 | 已有 `launch-queue.json`，但自动重排/重启行为未验收 |
 | 设备维护/并发配额 | 未做 |
 | 打包/公证 | 未做 |
 | V2 推理引擎 | 见 [future-inference-engine.md](future-inference-engine.md) |
@@ -380,12 +395,12 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | 批次 | 内容 | 状态 |
 | --- | --- | --- |
 | M1 | Electron 壳、环境报告 | ✅ macOS 实测 |
-| M2 | git 镜像、实例、运行时 | ✅ 基础；托管 Python/更新 UI 未 |
+| M2 | git 镜像、实例、运行时 | ✅ 基础；版本切换 UI 已接；托管 Python 未 |
 | M3 | 模型/适配器、下载 | ✅ 基础；绑定 UI/大文件未验收 |
 | M4 | Supervisor、runner、解析、诊断、画廊 | ✅ 基础；真实权重未验收 |
 | UI v0.2 | 亚克力、侧栏、通知、画廊、创作台 | ✅ |
 | UI v0.3（历史阶段） | 三窗口、启动条/运行栈、OOBE、终端 | ✅（已扩展为四窗口） |
 | UI v0.4 | 四窗口、全局背景、训练页/训练窗口 | ✅ |
-| Trainer v0.4 | 外部 trainer 部署/版本/环境/训练 Job/SSH 骨架 | ✅ 基础；真实 CUDA/环境安装/SSH 未验收 |
+| Trainer v0.4 | 外部 trainer 部署/版本/环境/训练 Job/远端代码 | ✅ 基础；真实 CUDA/环境安装/真实 host 未验收 |
 | M5 | WebUI、更新安装 | ⬜ |
 | M6 | 打包、公证、Windows | ⬜ |

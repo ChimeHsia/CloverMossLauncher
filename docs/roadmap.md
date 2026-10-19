@@ -30,6 +30,9 @@
 
 **目标**：Mac 上管 Linux/Windows NVIDIA 训练机，训练日志/step/loss 回到共享终端。
 
+**当前进度**：系统 ssh host probe、远端 mirror/worktree/版本、venv/doctor、train/export
+代码路径已接，并用 fake ssh 验证；真实 host 验收未完成。
+
 范围：
 
 1. 系统 `ssh` 连接：host/user/port/identityFile/ssh config；
@@ -110,7 +113,7 @@
 
 范围：
 
-1. 队列落盘：queued/running 跨重启恢复或明确失败；
+1. 队列落盘完整验收：queued/running 跨重启行为、渲染层自动重排；
 2. 设备维护页：禁用/重命名/显存预算；
 3. 强制并发/显存配额（显式高级选项）；
 4. 官方 Gradio 真机验收（27 GB 权重）；

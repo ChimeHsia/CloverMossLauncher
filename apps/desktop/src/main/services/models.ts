@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, rm, stat, statfs, symlink, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, statfs, symlink, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, relative } from 'node:path'
 import type { AdapterEntry, Catalog, DownloadTask, ModelEntry, Settings } from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
@@ -40,6 +40,23 @@ interface RawAdapter {
   notes?: string
 }
 
+interface LocalAdapterRecord {
+  id: string
+  name: string
+  path: string
+  kind: AdapterEntry['kind']
+  base?: string
+  license: string
+  files: string[]
+  sizeBytes: number
+  createdAt: string
+}
+
+interface LocalAdapterIndex {
+  schema_version: 1
+  adapters: LocalAdapterRecord[]
+}
+
 interface RawCatalog {
   schema_version: number
   updated_at?: string
@@ -66,6 +83,61 @@ const BUILTIN: RawCatalog = {
 }
 
 let catalogCache: Catalog | null = null
+
+function localAdapterFile(settings: Settings): string {
+  return join(paths.adapters(settings.modelsRoot), 'index.json')
+}
+
+async function readLocalAdapters(settings: Settings): Promise<LocalAdapterRecord[]> {
+  try {
+    const raw = JSON.parse(await readFile(localAdapterFile(settings), 'utf8')) as LocalAdapterIndex
+    return Array.isArray(raw.adapters) ? raw.adapters : []
+  } catch {
+    return []
+  }
+}
+
+export async function registerTrainedAdapter(
+  settings: Settings,
+  input: { id: string; name: string; sourcePath: string; kind?: AdapterEntry['kind']; base?: string; license?: string },
+): Promise<AdapterEntry> {
+  const id = input.id.replace(/[^A-Za-z0-9._-]/g, '-')
+  const destDir = join(paths.adapters(settings.modelsRoot), id)
+  await mkdir(destDir, { recursive: true })
+  const file = basename(input.sourcePath)
+  await copyFile(input.sourcePath, join(destDir, file))
+  const info = await stat(join(destDir, file))
+  const record: LocalAdapterRecord = {
+    id,
+    name: input.name || id,
+    path: destDir,
+    kind: input.kind ?? 'lora',
+    base: input.base,
+    license: input.license ?? 'local',
+    files: [file],
+    sizeBytes: info.size,
+    createdAt: new Date().toISOString(),
+  }
+  const existing = (await readLocalAdapters(settings)).filter((item) => item.id !== id)
+  await writeFile(localAdapterFile(settings), JSON.stringify({ schema_version: 1, adapters: [...existing, record] }, null, 2), 'utf8')
+  invalidateCatalog()
+  return {
+    id,
+    name: record.name,
+    provider: 'local',
+    repo: record.path,
+    revision: 'local',
+    kind: record.kind,
+    base: record.base,
+    license: record.license,
+    files: record.files,
+    sizeBytes: record.sizeBytes,
+    tags: ['trained'],
+    notes: '由 Kohaku Trainer 产物登记',
+    installed: true,
+    installedBytes: record.sizeBytes,
+  }
+}
 
 async function fetchText(url: string, timeoutMs = 8000): Promise<string> {
   const response = await fetch(url, {
@@ -172,6 +244,7 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
     }
   })
 
+  const localAdapters = await readLocalAdapters(settings)
   const adapters: AdapterEntry[] = (raw.adapters ?? []).map((adapter) => {
     const installedBytes = adaptersInstalled.get(adapter.id) ?? 0
     return {
@@ -192,6 +265,25 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
       installedBytes,
     }
   })
+
+  for (const local of localAdapters) {
+    adapters.push({
+      id: local.id,
+      name: local.name,
+      provider: 'local',
+      repo: local.path,
+      revision: 'local',
+      kind: local.kind,
+      base: local.base,
+      license: local.license,
+      files: local.files,
+      sizeBytes: local.sizeBytes,
+      tags: ['trained'],
+      notes: '由 Kohaku Trainer 产物登记',
+      installed: true,
+      installedBytes: local.sizeBytes,
+    })
+  }
 
   catalogCache = {
     updatedAt: raw.updated_at ?? new Date().toISOString(),

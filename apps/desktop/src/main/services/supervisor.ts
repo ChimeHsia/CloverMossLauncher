@@ -37,12 +37,14 @@ interface RunningJob {
   killTimer?: NodeJS.Timeout
   lastLines: string[]
   cancelRequested: boolean
+  cancelCommand?: { command: string; args: string[] }
 }
 
 const jobs = new Map<string, JobRecord>()
 const logs = new Map<string, JobLogLine[]>()
 const running = new Map<string, RunningJob>()
 const seqs = new Map<string, number>()
+const completionListeners: Array<(job: JobRecord) => void> = []
 let loaded = false
 
 function jobsDir(): string {
@@ -183,11 +185,13 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
   const exitCode = code ?? -1
   if (job.state === 'succeeded' || job.state === 'canceled') {
     update(job, { endedAt: new Date().toISOString(), exitCode })
+    notifyCompleted(job)
     return
   }
 
   if (runningJob.cancelRequested) {
     update(job, { state: 'canceled', endedAt: new Date().toISOString(), exitCode })
+    notifyCompleted(job)
     return
   }
 
@@ -204,6 +208,7 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
       endedAt: new Date().toISOString(),
       exitCode,
     })
+    notifyCompleted(job)
     return
   }
 
@@ -224,6 +229,7 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
       raw: runningJob.lastLines.slice(-10).join('\n'),
       signature: `E_NO_RESULT:${job.id}`,
     })
+    notifyCompleted(job)
     return
   }
 
@@ -238,6 +244,7 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
     endedAt: new Date().toISOString(),
     exitCode,
   })
+  notifyCompleted(job)
 }
 
 function handleRunnerEvent(job: JobRecord, runningJob: RunningJob, payload: string): void {
@@ -602,12 +609,18 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
 
 export interface StartTrainingJobInput {
   versionId: string
+  hostId?: string
+  runName?: string
+  action?: string
+  weights?: string
+  algo?: string
   name: string
   cwd: string
   command: string
   args: string[]
   env?: NodeJS.ProcessEnv
   totalSteps?: number
+  cancelCommand?: { command: string; args: string[] }
 }
 
 function trainerMetrics(line: string): { step?: number; loss?: number; gradNorm?: number; lr?: number } | null {
@@ -631,6 +644,12 @@ export async function startTrainingJob(input: StartTrainingJobInput): Promise<Jo
     instanceId: input.versionId,
     instanceName: input.name,
     kind: 'training',
+    trainerVersionId: input.versionId,
+    trainerRunName: input.runName,
+    trainerAction: input.action,
+    trainerWeights: input.weights,
+    trainerAlgo: input.algo,
+    hostId: input.hostId,
     mode: 'training',
     state: 'starting',
     stage: 'denoise',
@@ -665,6 +684,7 @@ export async function startTrainingJob(input: StartTrainingJobInput): Promise<Jo
     readyTimer: setTimeout(() => undefined, 0),
     lastLines: [],
     cancelRequested: false,
+    cancelCommand: input.cancelCommand,
   }
   clearTimeout(runningJob.readyTimer)
   running.set(job.id, runningJob)
@@ -723,6 +743,17 @@ export async function cancelJob(id: string): Promise<JobRecord | null> {
   }
   runningJob.cancelRequested = true
   appendLog(job, 'system', '正在停止任务…', runningJob)
+  if (runningJob.cancelCommand) {
+    try {
+      spawn(runningJob.cancelCommand.command, runningJob.cancelCommand.args, {
+        windowsHide: true,
+        stdio: 'ignore',
+        detached: process.platform !== 'win32',
+      }).unref()
+    } catch {
+      // best effort; fall back to local signal below
+    }
+  }
   try {
     runningJob.child.stdin.write(`${PREFIX}{"cmd":"cancel"}\n`)
   } catch {
@@ -730,6 +761,20 @@ export async function cancelJob(id: string): Promise<JobRecord | null> {
   }
   runningJob.killTimer = setTimeout(() => killTree(runningJob.child), 5000)
   return snapshot(job)
+}
+
+export function onJobCompleted(listener: (job: JobRecord) => void): void {
+  completionListeners.push(listener)
+}
+
+function notifyCompleted(job: JobRecord): void {
+  for (const listener of completionListeners) {
+    try {
+      listener(snapshot(job))
+    } catch {
+      // completion listeners must not affect the job record
+    }
+  }
 }
 
 export function inputJob(id: string, text: string): void {

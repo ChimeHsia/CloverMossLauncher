@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, FolderOpen, GraduationCap, Play, Stethoscope, Terminal } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FolderOpen, GraduationCap, Play, Server, Stethoscope, Terminal } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Ipc } from '@shared/channels'
 import type { JobRecord, TrainerVersion } from '@shared/types'
@@ -46,7 +46,7 @@ export function TrainerWindow(): React.JSX.Element {
   const [auxOpen, setAuxOpen] = useState<'export' | 'sample' | null>(null)
 
   useEffect(() => {
-    void call<TrainerVersion[]>(Ipc.trainerVersions)
+    void call<TrainerVersion[]>(Ipc.trainerAllVersions)
       .then((rows) => {
         setVersions(rows)
         setVersionId((current) => current || rows[0]?.id || '')
@@ -56,7 +56,9 @@ export function TrainerWindow(): React.JSX.Element {
 
   const version = versions.find((item) => item.id === versionId)
   const hasCuda = env?.gpu.kind === 'nvidia'
+  const remote = Boolean(version && version.hostId !== 'local')
   const ready = version?.runtimeState === 'ready'
+  const canStart = Boolean(version && ready && (remote || hasCuda))
   const trainingJob = jobs.find((job) => job.kind === 'training') ?? null
 
   const configPath = `configs/user/${runName || 'moss-lora'}.py`
@@ -90,7 +92,9 @@ export function TrainerWindow(): React.JSX.Element {
     }
     setBusy(true)
     try {
-      const result = await call<{ ok: boolean; output: string }>(Ipc.trainerDoctor, { id: version.id })
+      const result = remote
+        ? await call<{ ok: boolean; output: string }>(Ipc.trainerRemoteDoctor, { hostId: version.hostId, versionId: version.id })
+        : await call<{ ok: boolean; output: string }>(Ipc.trainerDoctor, { id: version.id })
       setDoctor(result)
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -108,21 +112,23 @@ export function TrainerWindow(): React.JSX.Element {
     return `kohakumoss-config new sample --weights ${weights || '<weights>'} --adapter runs/moss/${runName || 'moss-lora'}/export/${runName || 'moss-lora'}-comfy.safetensors --name ${runName || 'moss-lora'}-sample\nkogine run scripts/sample/sample.py --config configs/user/${runName || 'moss-lora'}-sample.py --set PROMPT="a lighthouse on a rocky coast at sunset"`
   }
 
-  async function runAction(action: 'train' | 'inspect_data' | 'cache_text' | 'cache_latents'): Promise<void> {
+  async function runAction(action: 'train' | 'inspect_data' | 'cache_text' | 'cache_latents' | 'export' | 'sample'): Promise<void> {
     if (!version) {
       toast.push('先选择一个训练版本', 'error')
-      return
-    }
-    if (!hasCuda) {
-      toast.push('本机没有 CUDA；请使用 NVIDIA 机器，或下一阶段的 SSH 训练主机', 'info')
       return
     }
     if (!ready) {
       toast.push('先在训练页安装环境', 'error')
       return
     }
-    if (!weights || !dataset) {
-      toast.push('先选择 MOSS 权重目录和数据集目录', 'error')
+    if (!remote && !hasCuda) {
+      toast.push('本机没有 CUDA；请切换到 SSH 训练版本，或在 NVIDIA 机器运行', 'info')
+      return
+    }
+    if (!weights || (!dataset && (action === 'train' || action === 'inspect_data' || action === 'cache_text' || action === 'cache_latents'))) {
+      toast.push(action === 'train' || action === 'inspect_data' || action === 'cache_text' || action === 'cache_latents'
+        ? '先选择 MOSS 权重目录和数据集目录'
+        : '先选择 MOSS 权重目录', 'error')
       return
     }
     setStarting(action)
@@ -175,12 +181,17 @@ export function TrainerWindow(): React.JSX.Element {
         </div>
       </header>
 
-      {!hasCuda ? (
+      {!hasCuda && !remote ? (
         <div className="flex items-start gap-2 rounded-[6px] border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
           <p className="text-[10px] leading-4 text-[var(--color-text-secondary)]">
-            当前设备没有 CUDA，不能启动真实训练。可以编辑配置、预览命令；Linux/Windows NVIDIA 或 SSH host 在后续阶段接入。
+            当前设备没有 CUDA，不能在本机启动训练。可以编辑配置、预览命令，或在训练页选择 SSH 训练版本。
           </p>
+        </div>
+      ) : remote ? (
+        <div className="flex items-center gap-2 rounded-[6px] border border-accent-500/25 bg-accent-500/[0.06] px-3 py-2 text-[10px] text-[var(--color-text-secondary)]">
+          <Server className="size-3.5 text-accent-300" />
+          远端训练：{version?.hostName ?? version?.hostId} · 数据/权重使用远端路径
         </div>
       ) : null}
 
@@ -201,13 +212,14 @@ export function TrainerWindow(): React.JSX.Element {
             <div className="flex items-center justify-between">
               <h2 className="text-[12.5px] font-medium">训练配置</h2>
               <Pill tone={ready ? 'accent' : 'amber'}>{ready ? '环境就绪' : '环境未就绪'}</Pill>
+              {remote ? <Pill tone="neutral">{version?.hostName ?? 'SSH'}</Pill> : null}
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2.5">
               <Field label="训练版本">
                 <select value={versionId} onChange={(event) => setVersionId(event.target.value)} className={inputClass}>
                   {versions.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name} · {item.shortCommit}</option>
+                    <option key={item.id} value={item.id}>{item.name} · {item.shortCommit}{item.hostId !== 'local' ? ' · SSH' : ''}</option>
                   ))}
                 </select>
               </Field>
@@ -265,7 +277,7 @@ export function TrainerWindow(): React.JSX.Element {
             </Field>
 
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Button tone="primary" onClick={() => void runAction('train')} disabled={!version || !ready || !hasCuda || starting !== null}>
+              <Button tone="primary" onClick={() => void runAction('train')} disabled={!canStart || starting !== null}>
                 <span className="inline-flex items-center gap-1.5">
                   {starting === 'train' ? <Spinner className="size-3" /> : <Play className="size-3" />}
                   开始训练
@@ -274,13 +286,13 @@ export function TrainerWindow(): React.JSX.Element {
               <Button tone="secondary" onClick={() => void check()} disabled={!ready || busy}>
                 环境体检
               </Button>
-              <Button tone="ghost" onClick={() => void runAction('inspect_data')} disabled={!ready || !hasCuda || starting !== null}>
+              <Button tone="ghost" onClick={() => void runAction('inspect_data')} disabled={!canStart || starting !== null}>
                 检查数据
               </Button>
-              <Button tone="ghost" onClick={() => void runAction('cache_text')} disabled={!ready || !hasCuda || starting !== null}>
+              <Button tone="ghost" onClick={() => void runAction('cache_text')} disabled={!canStart || starting !== null}>
                 缓存文本
               </Button>
-              <Button tone="ghost" onClick={() => void runAction('cache_latents')} disabled={!ready || !hasCuda || starting !== null}>
+              <Button tone="ghost" onClick={() => void runAction('cache_latents')} disabled={!canStart || starting !== null}>
                 缓存潜变量
               </Button>
               <Button tone="ghost" onClick={() => setAuxOpen('export')}>
@@ -370,6 +382,19 @@ export function TrainerWindow(): React.JSX.Element {
             <Button tone="ghost" onClick={() => setAuxOpen(null)}>关闭</Button>
             <Button
               tone="primary"
+              onClick={() => {
+                const action = auxOpen
+                if (!action) return
+                setAuxOpen(null)
+                void runAction(action)
+              }}
+              disabled={starting !== null || !version || !ready}
+            >
+              {starting === auxOpen ? <Spinner className="size-3" /> : null}
+              执行
+            </Button>
+            <Button
+              tone="ghost"
               onClick={() => {
                 void navigator.clipboard.writeText(auxOpen === 'export' ? buildExport() : buildSample())
                 toast.push('命令已复制', 'success')

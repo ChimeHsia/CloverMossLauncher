@@ -35,6 +35,7 @@ export interface InstanceRecord {
   runtimeMode: InstanceInfo['runtimeMode']
   models: string[]
   adapters: string[]
+  adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
   createdAt: string
   lastUsedAt: string | null
 }
@@ -92,6 +93,7 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
     runtimeState: runtime?.state ?? 'missing',
     models: record.models,
     adapters: record.adapters,
+    adapterBindings: record.adapterBindings ?? [],
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     path: dir,
@@ -241,6 +243,19 @@ export async function isolateInstance(id: string, settings: Settings): Promise<R
   }
   emit(Events.instancesChanged, { id })
   return runtime
+}
+
+export async function updateAdapterBindings(
+  id: string,
+  bindings: Array<{ id: string; enabled: boolean; strength: number }>,
+): Promise<InstanceInfo> {
+  const record = await readRecord(id)
+  if (!record) throw new Error('实例不存在')
+  record.adapterBindings = bindings
+  record.adapters = bindings.filter((item) => item.enabled).map((item) => item.id)
+  await writeRecord(record)
+  emit(Events.instancesChanged, { id })
+  return toInfo(record)
 }
 
 export async function markUsed(id: string): Promise<void> {

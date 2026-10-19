@@ -12,6 +12,7 @@ import {
   Stethoscope,
   Trash2,
   Wand2,
+  Wifi,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Ipc } from '@shared/channels'
@@ -39,6 +40,15 @@ export function TrainingPage(): React.JSX.Element {
   const [hosts, setHosts] = useState<TrainingHost[]>([])
   const [hostOpen, setHostOpen] = useState(false)
   const [hostForm, setHostForm] = useState({ name: '', host: '', user: '', port: '22', identityFile: '', trainerRoot: '~/CloverMossTrainer' })
+  const [testingHost, setTestingHost] = useState<string | null>(null)
+  const sshHosts = hosts.filter((host) => host.kind === 'ssh')
+  const [remoteHostId, setRemoteHostId] = useState('')
+  const [remoteVersions, setRemoteVersions] = useState<TrainerVersion[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<BranchInfo[]>([])
+  const [remoteCommits, setRemoteCommits] = useState<CommitInfo[]>([])
+  const [remoteBranch, setRemoteBranch] = useState('main')
+  const [remoteCommit, setRemoteCommit] = useState('')
+  const [remoteBusy, setRemoteBusy] = useState<string | null>(null)
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [branch, setBranch] = useState('main')
@@ -67,6 +77,20 @@ export function TrainingPage(): React.JSX.Element {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (!remoteHostId && sshHosts[0]) setRemoteHostId(sshHosts[0].id)
+  }, [remoteHostId, sshHosts])
+
+  useEffect(() => {
+    if (!remoteHostId) {
+      setRemoteVersions([])
+      return
+    }
+    void call<TrainerVersion[]>(Ipc.trainerRemoteVersions, { hostId: remoteHostId })
+      .then(setRemoteVersions)
+      .catch(() => setRemoteVersions([]))
+  }, [remoteHostId])
 
   useEffect(() => {
     if (!mirror?.ready || branches.length > 0) return
@@ -160,6 +184,96 @@ export function TrainingPage(): React.JSX.Element {
     }
   }
 
+  async function remoteDeploy(): Promise<void> {
+    if (!remoteHostId) return
+    setRemoteBusy('deploy')
+    try {
+      const list = await call<BranchInfo[]>(Ipc.trainerRemoteBranches, { hostId: remoteHostId })
+      setRemoteBranches(list)
+      const name = list.find((item) => item.isDefault)?.name ?? list[0]?.name ?? 'main'
+      setRemoteBranch(name)
+      const commits = await call<CommitInfo[]>(Ipc.trainerRemoteCommits, { hostId: remoteHostId, branch: name, limit: 80 })
+      setRemoteCommits(commits)
+      setRemoteCommit(commits[0]?.sha ?? '')
+      await refresh()
+      toast.push('远端训练器仓库已更新', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setRemoteBusy(null)
+    }
+  }
+
+  async function remoteCreate(): Promise<void> {
+    if (!remoteHostId || !remoteCommit) return
+    setRemoteBusy('create')
+    try {
+      await call(Ipc.trainerRemoteCreate, { hostId: remoteHostId, branch: remoteBranch, commit: remoteCommit })
+      setRemoteVersions(await call<TrainerVersion[]>(Ipc.trainerRemoteVersions, { hostId: remoteHostId }))
+      await refresh()
+      toast.push('远端训练版本已创建', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setRemoteBusy(null)
+    }
+  }
+
+  async function remoteInstall(version: TrainerVersion): Promise<void> {
+    setRemoteBusy(version.id)
+    try {
+      await call(Ipc.trainerRemoteInstall, { hostId: version.hostId, versionId: version.id })
+      setRemoteVersions(await call<TrainerVersion[]>(Ipc.trainerRemoteVersions, { hostId: remoteHostId }))
+      await refresh()
+      toast.push('远端训练环境已就绪', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+      setRemoteVersions(await call<TrainerVersion[]>(Ipc.trainerRemoteVersions, { hostId: remoteHostId }).catch(() => remoteVersions))
+    } finally {
+      setRemoteBusy(null)
+    }
+  }
+
+  async function remoteCheck(version: TrainerVersion): Promise<void> {
+    setRemoteBusy(version.id)
+    try {
+      const result = await call<{ ok: boolean; output: string }>(Ipc.trainerRemoteDoctor, { hostId: version.hostId, versionId: version.id })
+      setDoctor({ id: version.id, ...result })
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setRemoteBusy(null)
+    }
+  }
+
+  async function remoteRemove(version: TrainerVersion): Promise<void> {
+    setRemoteBusy(version.id)
+    try {
+      await call(Ipc.trainerRemoteRemove, { hostId: version.hostId, versionId: version.id })
+      setRemoteVersions(await call<TrainerVersion[]>(Ipc.trainerRemoteVersions, { hostId: remoteHostId }))
+      await refresh()
+      toast.push('远端训练版本已删除', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setRemoteBusy(null)
+    }
+  }
+
+  async function testHost(host: TrainingHost): Promise<void> {
+    setTestingHost(host.id)
+    try {
+      const next = await call<TrainingHost>(Ipc.trainerHostTest, { id: host.id })
+      await refresh()
+      if (next.status === 'ok') toast.push(`${host.name} 连接正常`, 'success')
+      else toast.push(next.error ?? `${host.name} 连接失败`, 'error')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setTestingHost(null)
+    }
+  }
+
   async function removeHost(host: TrainingHost): Promise<void> {
     if (host.kind === 'local') return
     try {
@@ -212,7 +326,7 @@ export function TrainingPage(): React.JSX.Element {
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
           <p className="text-[10.5px] leading-5 text-[var(--color-text-secondary)]">
             当前设备没有 CUDA（macOS/MPS 不受 KohakuMossTrainer 支持）。这里可以部署版本、创建环境和编辑配置；
-            真正训练需要 Linux/Windows + NVIDIA，或下一阶段的 SSH 训练主机。
+            真正训练需要 Linux/Windows + NVIDIA，或 SSH 训练主机（真实 host 尚未验收）。
           </p>
         </div>
       ) : null}
@@ -301,18 +415,38 @@ export function TrainingPage(): React.JSX.Element {
               const local = host.kind === 'local'
               return (
                 <div key={host.id} className="flex items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-2">
-                  <span className={cn('size-1.5 rounded-full', local ? (localCuda ? 'bg-accent-400' : 'bg-amber-400') : 'bg-neutral-500')} />
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      host.status === 'ok' ? 'bg-accent-400' : host.status === 'error' ? 'bg-red-400' : local && localCuda ? 'bg-amber-400' : 'bg-neutral-500',
+                    )}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10.5px]">{host.name}</span>
                       {local ? <Pill tone="neutral">Local</Pill> : <Pill tone="neutral">SSH</Pill>}
+                      {host.status === 'ok' ? <Pill tone="accent">正常</Pill> : host.status === 'error' ? <Pill tone="red">失败</Pill> : null}
                     </div>
                     <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
                       {local
                         ? `${env?.gpu.name ?? '正在检测'} · ${localCuda ? 'CUDA 可用于训练' : '不支持 MPS 训练'}`
                         : `${host.user}@${host.host}:${host.port ?? 22} · ${host.trainerRoot}`}
                     </div>
+                    {host.error ? (
+                      <div className="mt-0.5 line-clamp-2 text-[8.5px] leading-3.5 text-red-300/80">{host.error}</div>
+                    ) : host.remote?.gpu ? (
+                      <div className="mt-0.5 truncate text-[8.5px] text-[var(--color-text-tertiary)]">{host.remote.os} · {host.remote.gpu.split('\n')[0]}</div>
+                    ) : null}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => void testHost(host)}
+                    disabled={testingHost === host.id}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-[var(--color-text-tertiary)] hover:bg-white/[0.05] hover:text-[var(--color-text)] disabled:opacity-50"
+                    title="测试连接/环境"
+                  >
+                    {testingHost === host.id ? <Spinner className="size-3" /> : <Wifi className="size-3" />}
+                  </button>
                   {!local ? (
                     <button type="button" onClick={() => void removeHost(host)} className="text-[var(--color-text-tertiary)] hover:text-red-300">
                       <Trash2 className="size-3" />
@@ -323,10 +457,81 @@ export function TrainingPage(): React.JSX.Element {
             })}
           </div>
           <p className="mt-2 text-[9px] leading-4 text-[var(--color-text-tertiary)]">
-            SSH 使用系统 ssh/密钥；远端 trainerRoot、版本与环境在下一阶段执行。
+            SSH 使用系统 OpenSSH + 密钥/agent + 严格 known_hosts；先“测试连接”；远端版本/环境/训练代码已接，真实 host 未验收。
           </p>
         </Card>
       </div>
+
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[12.5px] font-medium">
+            <Server className="size-3.5" />
+            SSH 远端训练器
+          </div>
+          <div className="flex items-center gap-1">
+            <Pill tone={sshHosts.length ? 'accent' : 'neutral'}>{sshHosts.length} SSH host</Pill>
+            <Button tone="ghost" onClick={() => setHostOpen(true)}>添加主机</Button>
+          </div>
+        </div>
+        {sshHosts.length === 0 ? (
+          <p className="mt-2 text-[10px] leading-4 text-[var(--color-text-tertiary)]">
+            还没有 SSH 主机。先在“训练主机”里添加并测试连接，再部署远端 trainer。
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="flex min-w-[180px] flex-col gap-1">
+                <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">主机</span>
+                <select value={remoteHostId} onChange={(event) => setRemoteHostId(event.target.value)} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                  {sshHosts.map((host) => <option key={host.id} value={host.id}>{host.name} · {host.user}@{host.host}</option>)}
+                </select>
+              </label>
+              <label className="flex min-w-[100px] flex-col gap-1">
+                <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">分支</span>
+                <select value={remoteBranch} onChange={(event) => { setRemoteBranch(event.target.value); void call<CommitInfo[]>(Ipc.trainerRemoteCommits, { hostId: remoteHostId, branch: event.target.value, limit: 80 }).then((rows) => { setRemoteCommits(rows); setRemoteCommit(rows[0]?.sha ?? '') }).catch(() => undefined) }} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                  {(remoteBranches.length ? remoteBranches : [{ name: 'main', sha: '', isDefault: true, isStable: false }]).map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="flex min-w-[220px] flex-1 flex-col gap-1">
+                <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">提交</span>
+                <select value={remoteCommit} onChange={(event) => setRemoteCommit(event.target.value)} className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none">
+                  {remoteCommits.length === 0 ? <option value="">先拉取远端仓库</option> : null}
+                  {remoteCommits.map((item) => <option key={item.sha} value={item.sha}>{item.short} · {item.subject.slice(0, 44)}</option>)}
+                </select>
+              </label>
+              <Button tone="secondary" onClick={() => void remoteDeploy()} disabled={!remoteHostId || remoteBusy !== null}>
+                {remoteBusy === 'deploy' ? <Spinner className="size-3" /> : <Download className="size-3" />}
+                拉取/更新
+              </Button>
+              <Button tone="primary" onClick={() => void remoteCreate()} disabled={!remoteCommit || remoteBusy !== null}>
+                {remoteBusy === 'create' ? <Spinner className="size-3" /> : <Wand2 className="size-3" />}
+                创建远端版本
+              </Button>
+            </div>
+            <p className="mt-1 text-[9px] text-[var(--color-text-tertiary)]">
+              远端路径：{sshHosts.find((host) => host.id === remoteHostId)?.trainerRoot ?? '—'} · 使用系统 ssh，不自动上传数据/权重。
+            </p>
+            {remoteVersions.length > 0 ? (
+              <div className="mt-2 space-y-1">
+                {remoteVersions.map((version) => (
+                  <div key={version.id} className="flex flex-wrap items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[10px]">{version.name}</span>
+                    <Pill tone={version.runtimeState === 'ready' ? 'accent' : 'amber'}>{runtimeLabel[version.runtimeState]}</Pill>
+                    <Button tone="ghost" onClick={() => void remoteInstall(version)} disabled={remoteBusy !== null}>
+                      {remoteBusy === version.id ? <Spinner className="size-3" /> : null}
+                      安装环境
+                    </Button>
+                    <Button tone="ghost" onClick={() => void remoteCheck(version)} disabled={version.runtimeState !== 'ready' || remoteBusy !== null}>体检</Button>
+                    <button type="button" onClick={() => void remoteRemove(version)} className="text-[var(--color-text-tertiary)] hover:text-red-300"><Trash2 className="size-3" /></button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[9px] text-[var(--color-text-tertiary)]">还没有远端版本；先拉取仓库并创建版本。</p>
+            )}
+          </>
+        )}
+      </Card>
 
       <div className="flex items-end justify-between">
         <div>

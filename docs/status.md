@@ -35,16 +35,17 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | IPC + zod | ✅ | preload 白名单、主进程校验、统一错误 |
 | 环境报告 | ✅ | 系统/GPU/内存/磁盘/Python/git/uv/网络/端口 + 推荐档位 |
 | 公告/更新检查 | ✅ | manifest/公告缓存与镜像；**不安装更新** |
-| 实例 | 🟡 | bare mirror/worktree/固定 SHA/删除/隔离；更新与回滚 UI 未做 |
+| 实例 | 🟡 | bare mirror/worktree/固定 SHA/删除/隔离；版本 pin 切换 UI 已接，未做完整回滚验收 |
 | 运行时 | ✅ | 共享/独立 venv、lock hash、uv/pip、安装日志 |
-| 模型/适配器 | 🟡 | 目录/下载/HF 缓存已实现；实例绑定、启用、强度 UI 未做 |
+| 模型/适配器 | 🟡 | 目录/下载/HF 缓存；适配器绑定/启用/强度 UI 已接；模型包绑定未做 |
 | 画廊 | ✅ | 全局入口、自定义根、分页、元数据、`clover://` |
 | 通知 | ✅ | 右上角单矩形、默认展开、非首页收起 |
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |
 | 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；运行态锁定 |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
 | Case 配置 | 🟡 | `cases.json` 持久化；未单独做保存/重载端到端验收 |
-| 队列 | 🟡 | 当前会话内同设备 1 个；重启丢失；强制并发未做 |
+| 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、starting/running 重启标 failed；未做完整重启验收 |
+| 队列运行 | 🟡 | 同设备默认 1 个；持久化行已接；强制并发未做 |
 | 官方 Gradio | 🟡 | 启动/readiness/预检代码路径；缺 27 GB 权重，未真机验收 |
 | xterm 终端 | ✅ | 推理/训练共用，stdout/stderr/stdin、停止/重启 |
 | Supervisor | ✅ | spawn、readiness、取消、进程组、失败分类、日志 |
@@ -55,13 +56,17 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Project/图层 | ⬜ | 草稿只在内存；没有 Project 持久化 |
 | 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景 |
 | Kohaku Trainer 仓库 | ✅ | runtime clone、bare mirror、commit/worktree |
-| Trainer 环境管理 | 🟡 | venv/lock hash/install/doctor 代码路径；未在 CUDA 验证 |
+| Trainer 环境管理 | 🟡 | 本机/远端 venv、lock hash、install、doctor 代码路径；fake uv 验证，真实 CUDA 未 |
 | 训练窗口 | ✅ | 表单、命令预览、doctor、状态卡 |
-| 本机训练 Job | 🟡 | `startTrainingJob` + step/loss + 终端；**模拟验证**，真实 kogine 未跑 |
+| 训练 Job | 🟡 | 本机/远端 `startTrainingJob` + step/loss + 终端；**fake ssh/模拟验证**，真实 CUDA 未跑 |
 | 训练数据入口 | 🟡 | 检查/文本/潜变量缓存命令已拼装；未真实运行 |
-| 训练导出/采样 | 🟡 | 只有可复制命令，不执行 |
-| SSH host | ✅ | CRUD + `training-hosts.json`；不存密码 |
-| SSH 远端执行 | ⬜ | 连接/host key/远端 mirror/venv/Job 均未接 |
+| 训练导出/采样 | 🟡 | 本机/远端执行代码已接；fake 导出验证；真实 CUDA 未跑 |
+| 训练产物登记 | 🟡 | 自动收集 export 文件、登记本地适配器；fake 验证；大文件/真实产物未验收 |
+| SSH 主机探测 | ✅ | `trainer:host-test` 通过 fake ssh 验证 uname/git/uv/python/GPU/root |
+| 远端仓库/版本 | 🟡 | 远端 mirror/worktree 创建/删除通过 fake ssh 验证；真实 host 未接 |
+| 远端训练/导出 | 🟡 | 系统 ssh 训练/导出/取消代码已接；fake ssh 验证 step/loss/产物；真实 host 未接 |
+| SSH host | ✅ | CRUD/测试 + `training-hosts.json`；不存密码 |
+| SSH 远端执行 | 🟡 | 系统 ssh + 密钥、host probe、远端 mirror/worktree/venv/train/export 代码已接；只有 fake ssh 验证，无真实 host |
 | WebUI | ⬜ | 没有 Fastify/SSE/HTTP API |
 | 应用内更新安装 | ⬜ | 只检查，不下载/验签/安装 |
 | 打包/公证 | ⬜ | 未做 |
@@ -79,6 +84,12 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 训练器部署 | `--scenario=trainer-deploy` | clone trainer mirror、创建 `kohaku-3bcd751` worktree |
 | 训练 Job | `--scenario=trainer-job` | `succeeded`，step 5、loss 0.1、5 行日志 |
 | SSH host | `--scenario=trainer-host` | 保存/读取/删除成功（before 2 / after 1） |
+| SSH 探测 | `--scenario=trainer-host-probe` | fake ssh 下 os/git/uv/python/root 解析成功 |
+| 远端仓库/版本 | `--scenario=trainer-remote-local` | 远端 mirror、1 个分支、3 个提交、worktree 创建/删除 |
+| 远端环境 | `--scenario=trainer-remote-env` | fake uv：runtime=ready，doctor=true |
+| 远端训练 | `--scenario=trainer-remote-job` | fake ssh 下 succeeded，step 5、loss 0.1 |
+| 远端产物 | `--scenario=trainer-remote-artifact` | 导出 Job succeeded，适配器自动登记 provider=local |
+| 队列落盘 | `--scenario=queue-persist` | queued 行写入/读取/删除 |
 | 缺权重预检 | 首页点击启动 | 生成 `E_MODEL` 诊断 + toast，不误下载 |
 | layout 编译器 | Node 直接跑 `layout.ts` | 与官方示例逐字段一致 |
 | 画廊 | `--screenshot` | 全局入口、分页、详情、背景交接 |
@@ -102,17 +113,17 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 1. **真实生成未验收**：本机没有 27 GB SFT 权重；官方 Gradio 只有代码路径和
    缺权重预检。真实 runner 生成也未跑过。
-2. **真实 CUDA 训练未验收**：训练 Job/loss 是用模拟 Python 输出验证的；
+2. **真实 CUDA 训练未验收**：训练 Job/loss 是用 fake ssh/模拟 Python 输出验证的；
    `startTrainerRun` 的 CUDA/`kogine` 路径没有在 NVIDIA 机器执行。
 3. **Trainer 环境安装未验收**：venv/uv/pip/doctor 代码存在，但本机没有安装
    CUDA 版依赖，也没有运行 trainer。
-4. **SSH 只有骨架**：host CRUD 已验证；连接、host key、远端 mirror/worktree/
-   venv、远端 Job 都没有实现。
-5. **导出/采样只有命令**：训练窗口可预览/复制，不能执行。
+4. **SSH 只有 fake ssh 验证**：真实 host 的 host key/连接/远端 mirror/worktree/
+   venv/Job 没有验收；当前代码路径已接。
+5. **导出/采样真实 CUDA 未验收**：代码已接，fake 导出/登记通过；真实 `kogine` 未跑。
 6. **Clover 常驻后端未实现**：没有本地 HTTP/WS；创作窗口“开始生成”不接任务。
 7. **Project/图层未实现**：Studio 草稿只在内存；Project 与 Case 解耦只是设计。
-8. **队列不落盘**：Case 写 `cases.json`；运行队列只存在当前 Job 表/渲染会话，
-   应用重启后 queued/running 会被标为失败。
+8. **队列落盘未完整验收**：`launch-queue.json` 已接，queued 保留、starting/running
+   重启标 failed；渲染层重启与自动重排还需要真实验收。
 9. **官方 Gradio 未真实启动**：没有权重，未验证端口/readiness/浏览器显示。
 10. **Windows/Linux 未实机验证**：目前只在 macOS arm64 测试。
 11. **更新只检查不安装**：manifest/公告读取已接；下载、签名、安装未做。
@@ -127,8 +138,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - 托管 Python；
 - 设备维护页/强制并发/显存配额；
 - DMD 8 步采样器（当前 profile 只透传，仍走官方 pipeline）；
-- SSH 远端训练；
-- 训练导出/采样执行；
+- 真实 SSH host / 真实 CUDA 验收；
 - Clover 常驻后端 / Project / 图层；
 - 打包、公证、Windows 安装器；
 - 自研推理引擎（V2）。
@@ -137,8 +147,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 按 [roadmap.md](roadmap.md) 的 P0 顺序：
 
-1. SSH 远端训练（host 连接 → 远端 mirror/worktree/venv → 远端 Job/日志）；
-2. 真实 CUDA 训练验收 + 导出/采样执行；
+1. 真实 SSH host 验收（host key/权限 → 远端 mirror/worktree/venv → 远端 Job/日志/取消）；
+2. 真实 CUDA 训练验收 + 数据缓存/导出/采样；
 3. Clover 常驻后端与 Project/图层；
-4. 队列落盘、Gradio/27 GB 验收、设备维护；
+4. 队列完整重启验收、Gradio/27 GB、设备维护；
 5. WebUI/更新、打包。

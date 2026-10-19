@@ -16,16 +16,17 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
 | 环境报告 | ✅ | 系统/GPU/内存/磁盘/Python/git/网络/端口 + 推荐档位 |
 | 实例管理 | 🟡 | bare mirror/worktree/固定 SHA/删除；更新/回滚 UI 未做 |
 | 运行时 | ✅ | 共享/独立 venv、依赖锁哈希、uv/pip、安装日志 |
-| 模型/适配器 | 🟡 | 目录、下载、HF 兼容缓存；实例绑定/启用/强度 UI 未做 |
+| 模型/适配器 | 🟡 | 目录、下载、HF 缓存；适配器绑定/强度 UI 已接；模型包绑定未做 |
 | 画廊 | ✅ | 启动器全局入口；可配置目录；分页 + `content-visibility` |
 | 通知/OOBE | ✅ | 单矩形通知抽屉；OOBE 三行环境清单，可本次跳过 |
 | 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；同设备默认排队 |
+| 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、running 重启标 failed |
 | 官方 Gradio | 🟡 | 代码路径已接；缺 27 GB 权重，未做真机验收 |
 | xterm 终端 | ✅ | 推理/训练 Case 共用；stdout/stderr/stdin、停止/重启 |
 | 创作台/布局标注 | ✅ | 画布、区域、官方 layout JSON 编译；生成入口未接 |
 | 诊断 | ✅ | 规则匹配、去重、toast 预算、解决动作 |
 | Kohaku Trainer | 🟡 | 仓库/版本/环境/表单/命令预览/本机 CUDA 训练路径；真实训练未验收 |
-| SSH 训练主机 | 🟡 | host CRUD 与持久化；连接与远端执行未接 |
+| SSH 训练主机 | 🟡 | host CRUD/测试、远端 mirror/worktree/venv/train 代码；仅 fake ssh 验证 |
 | Clover 常驻后端 | ⬜ | 未实现；创作窗口“开始生成”暂不接任务 |
 | Project/图层 | ⬜ | 创作文档仍只在内存；Project 与 Case 解耦的设计未落地 |
 | WebUI/应用内更新 | ⬜ | 未实现 |
@@ -86,7 +87,7 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
   高级覆盖、命令预览；
 - CUDA 主机上走训练/检查数据/缓存文本/潜变量路径（代码已接，真实 CUDA 未验收）；
   训练 job 进入共享终端，解析 step/loss；导出/采样目前是可复制的命令入口；
-- SSH host 可增删并持久化；计划使用系统 ssh + 密钥/agent，**连接与远端执行未接**；
+- SSH host 可增删/测试并持久化；系统 OpenSSH + 密钥/agent、远端 mirror/worktree/venv/train 代码已接，**真实 host 未验收**；
 - 本机 M3 没有 CUDA：只能部署/管理/编辑，不能真实验收训练。
 
 ![训练页](docs/assets/training.webp)
@@ -141,7 +142,8 @@ apps/desktop/
     windows.ts          启动器 / 创作 / 终端 / Kohaku Trainer 四窗口
     services/           env / network / git / runtimes / instances / models /
                         updates / gallery / supervisor / parsers / diagnostics /
-                        devices / cases / onboarding / trainerGit / trainers / trainingHosts
+                        devices / cases / onboarding / trainerGit / trainers / trainingHosts /
+                        remoteTrainer / ssh / launchQueue / trainerArtifacts
   src/preload/          contextBridge（windowKind / acrylic / channel）
   src/renderer/
     src/pages/          Home / Studio / Gallery / Terminal / Training / TrainerWindow /
@@ -175,9 +177,10 @@ docs/                   产品、架构、状态、路线图、layout 规范、A
 ## 已知边界
 
 - 真实 27 GB SFT 生成未验收；官方 Gradio 只验证了预检代码路径；
-- 真实 CUDA 训练未验收；`startTrainingJob` 用模拟输出验证过 step/loss 链路；
-- SSH 远端执行、导出/采样真实执行、Clover 常驻后端、Project/图层、队列落盘、
-  设备维护、WebUI、应用内更新、打包/公证均未实现；
+- 真实 CUDA 训练未验收；`startTrainingJob` 用模拟输出/fake ssh 验证过 step/loss 链路；
+  远端环境安装/doctor 用 fake uv 验证；
+- SSH 远端执行/导出采样只有 fake ssh 验证，真实 host/CUDA 未验收；
+  Clover 常驻后端、Project/图层、设备维护、WebUI、应用内更新、打包/公证未实现；
 - DMD 8 步 profile 目前只透传，仍走官方 pipeline；真正 8 步采样器未实现；
 - Windows 未实机验证；
 - 开发渲染 CSP 仍允许 `unsafe-eval`，打包前需要收紧。

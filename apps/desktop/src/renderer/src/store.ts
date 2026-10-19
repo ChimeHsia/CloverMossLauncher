@@ -105,6 +105,10 @@ function upsertLaunch(list: LaunchRow[], row: LaunchRow): LaunchRow[] {
   return [row, ...list.filter((item) => item.id !== row.id)]
 }
 
+function persistLaunchRow(row: LaunchRow): void {
+  void call(Ipc.launchQueueUpsert, row).catch(() => undefined)
+}
+
 async function startOfficialJob(row: LaunchRow): Promise<JobRecord> {
   return call<JobRecord>(Ipc.jobStart, {
     instanceId: row.instanceId,
@@ -181,13 +185,11 @@ export const useApp = create<AppStore>((set, get) => {
               : job.state === 'starting'
                 ? 'starting'
                 : 'running'
+        const nextRow = { ...launchRow, state: nextState as LaunchRow['state'], error: job.error?.message ?? launchRow.error }
         set((state) => ({
-          launchRows: state.launchRows.map((row) =>
-            row.id === launchRow.id
-              ? { ...row, state: nextState, error: job.error?.message ?? row.error }
-              : row,
-          ),
+          launchRows: state.launchRows.map((row) => (row.id === launchRow.id ? nextRow : row)),
         }))
+        persistLaunchRow(nextRow)
         if (nextState === 'stopped' || nextState === 'failed') {
           setTimeout(() => {
             void get().startNextQueued(launchRow.deviceId)
@@ -293,7 +295,7 @@ export const useApp = create<AppStore>((set, get) => {
         set({ settings })
         subscribe()
 
-        const [env, updates, instances, catalog, downloads, jobs, diagnostics, devices, cases, onboarding] =
+        const [env, updates, instances, catalog, downloads, jobs, diagnostics, devices, cases, onboarding, queuedRows] =
           await Promise.allSettled([
             call<EnvReport>(Ipc.envScan),
             call<UpdateState>(Ipc.updatesCheck),
@@ -305,6 +307,7 @@ export const useApp = create<AppStore>((set, get) => {
             call<LaunchDevice[]>(Ipc.devicesList),
             call<LaunchCase[]>(Ipc.casesList),
             call<OnboardingStatus>(Ipc.onboardingStatus),
+            call<LaunchRow[]>(Ipc.launchQueueList),
           ])
         set({
           env: env.status === 'fulfilled' ? env.value : null,
@@ -317,12 +320,19 @@ export const useApp = create<AppStore>((set, get) => {
           devices: devices.status === 'fulfilled' ? devices.value : [],
           cases: cases.status === 'fulfilled' ? cases.value : [],
           onboarding: onboarding.status === 'fulfilled' ? onboarding.value : null,
+          launchRows: queuedRows.status === 'fulfilled' ? queuedRows.value : [],
           activeJobId:
             jobs.status === 'fulfilled'
               ? (jobs.value.find((job) => job.state === 'running' || job.state === 'starting')?.id ?? null)
               : null,
           ready: true,
         })
+        const queued = queuedRows.status === 'fulfilled' ? queuedRows.value.filter((row) => row.state === 'queued') : []
+        for (const deviceId of new Set(queued.map((row) => row.deviceId))) {
+          setTimeout(() => {
+            void get().startNextQueued(deviceId)
+          }, 800)
+        }
         if (updates.status === 'fulfilled' && updates.value.updateAvailable) {
           get().pushNotification({
             tone: 'info',
@@ -573,15 +583,18 @@ export const useApp = create<AppStore>((set, get) => {
       if (busy) {
         const queued = { ...row, state: 'queued' as const }
         set((state) => ({ launchRows: upsertLaunch(state.launchRows, queued) }))
+        persistLaunchRow(queued)
         return queued
       }
 
       const starting: LaunchRow = { ...row, state: 'starting', startedAt: new Date().toISOString() }
       set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
+      persistLaunchRow(starting)
       try {
         const job = await startOfficialJob(starting)
         const next = { ...starting, jobId: job.id }
         set((state) => ({ launchRows: upsertLaunch(state.launchRows, next) }))
+        persistLaunchRow(next)
         return next
       } catch (error) {
         const failed: LaunchRow = {
@@ -590,6 +603,7 @@ export const useApp = create<AppStore>((set, get) => {
           error: error instanceof Error ? error.message : String(error),
         }
         set((state) => ({ launchRows: upsertLaunch(state.launchRows, failed) }))
+        persistLaunchRow(failed)
         throw error
       }
     },
@@ -599,13 +613,14 @@ export const useApp = create<AppStore>((set, get) => {
       if (!row) return
       if (row.jobId) {
         await call(Ipc.jobCancel, { id: row.jobId })
+        const stopped = { ...row, state: 'stopped' as const }
         set((state) => ({
-          launchRows: state.launchRows.map((item) =>
-            item.id === row.id ? { ...item, state: 'stopped' } : item,
-          ),
+          launchRows: state.launchRows.map((item) => (item.id === row.id ? stopped : item)),
         }))
+        persistLaunchRow(stopped)
       } else {
         set((state) => ({ launchRows: state.launchRows.filter((item) => item.id !== row.id) }))
+        await call(Ipc.launchQueueRemove, { id: row.id }).catch(() => undefined)
         void get().startNextQueued(row.deviceId)
       }
     },
@@ -621,19 +636,20 @@ export const useApp = create<AppStore>((set, get) => {
       if (!next) return
       const starting: LaunchRow = { ...next, state: 'starting', startedAt: new Date().toISOString() }
       set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
+      persistLaunchRow(starting)
       try {
         const job = await startOfficialJob(starting)
-        set((state) => ({
-          launchRows: upsertLaunch(state.launchRows, { ...starting, jobId: job.id }),
-        }))
+        const started = { ...starting, jobId: job.id }
+        set((state) => ({ launchRows: upsertLaunch(state.launchRows, started) }))
+        persistLaunchRow(started)
       } catch (error) {
-        set((state) => ({
-          launchRows: upsertLaunch(state.launchRows, {
-            ...starting,
-            state: 'failed',
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        }))
+        const failed = {
+          ...starting,
+          state: 'failed' as const,
+          error: error instanceof Error ? error.message : String(error),
+        }
+        set((state) => ({ launchRows: upsertLaunch(state.launchRows, failed) }))
+        persistLaunchRow(failed)
         void get().startNextQueued(deviceId)
       }
     },

@@ -50,7 +50,7 @@
 | **Job** | 一次进程运行：推理或训练；有 state/progress/log | 不是 Case |
 | **Runtime** | Python 解释器 + 依赖集合；按 Python 版本 + 依赖锁 + 平台/加速器共享 | 不是模型 |
 | **TrainerVersion** | Kohaku trainer 的某个 commit 的 worktree + 独立运行时 | 不是推理 Instance |
-| **TrainingHost** | 训练主机配置：local 或 SSH（host/user/port/identityFile/trainerRoot） | SSH 执行尚未接入 |
+| **TrainingHost** | 训练主机配置：local 或 SSH（host/user/port/identityFile/trainerRoot） | 远端代码路径已接，真实 host 未验收 |
 | **Model Pack** | DiT / TE / VAE 一组权重；按 HF 兼容缓存存储 | 不是适配器 |
 | **Adapter** | LoRA / LyCORIS / DMD 等增量文件 | 不是完整模型 |
 | **Diagnostic** | 从日志解析出的错误卡片：原因、解决方案、原始日志 | 不是普通 toast |
@@ -126,7 +126,7 @@ Kohaku Trainer
 
 - Case 是可复用的**启动配置**，不是一次 Job；
 - Case 配置持久化在 `cases.json`；
-- 队列由渲染层维护，**只在本次启动器会话内**；重启后队列丢失；
+- 队列行写 `launch-queue.json`；重启时 queued 保留、starting/running 标 failed；
 - 同设备默认 1 个真实任务，其余排队；
 - 运行中 Jobs 进入运行栈，同时可在终端查看日志；
 - 运行结束后 Job 历史/终端仍可回看日志；首页任务列表只显示当前会话的进行中/排队项。
@@ -187,8 +187,8 @@ Kohaku Trainer
 - 环境：`<trainerRoot>/runtimes/<lockHash>/`，按平台 + Python + 依赖锁共享；
 - 安装环境：`uv pip install -e <version>`（无 uv 时 pip），可运行
   `kohakumoss-doctor`；代码路径已接，本机无 CUDA，未验收；
-- 训练主机：local 固定一条；SSH host 可添加/删除并持久化
-  （host/user/port/identityFile/trainerRoot），**不存密码**。
+- 训练主机：local 固定一条；SSH host 可添加/删除/测试并持久化
+  （host/user/port/identityFile/trainerRoot），不存密码。
 
 ### 8.3 训练窗口
 
@@ -208,10 +208,9 @@ Kohaku Trainer
 ### 8.4 SSH（骨架）
 
 - `TrainingHost` 数据模型已落地并持久化到 `training-hosts.json`；
-- UI 支持添加/删除；
-- 系统 ssh、host key、远端 mirror/worktree/venv、远端训练执行：
-  **下一阶段**；
-- 远程路径不做自动上传；使用远端路径。
+- UI 支持添加/删除/测试；
+- 系统 OpenSSH + 密钥/agent、远端 mirror/worktree/venv/train/export 代码已接；
+- **真实 host 未验收**；远程路径不做自动上传；
 
 ## 9. 画廊、背景、设置
 
@@ -280,13 +279,14 @@ Kohaku Trainer
 
 ## 12. 当前范围与已验证边界
 
-**已实现并有本机证据：**
+**已实现并有本机/fake 证据：**
 
 - 四窗口、OOBE、通知、背景、画廊；
 - 环境报告、实例、运行时、模型/下载；
 - Supervisor、薄 runner（模拟）、解析、诊断、终端；
-- trainer mirror/worktree/版本、训练窗口；
-- 训练 Job/loss 链路（模拟输出）。
+- trainer mirror/worktree/版本、训练窗口、远端代码路径；
+- 训练 Job/loss 链路（模拟/fake ssh）；
+- 队列行/训练产物登记代码。
 
 **实现但未在目标环境验收：**
 
@@ -294,14 +294,14 @@ Kohaku Trainer
 - 真实 CUDA 训练（本机无 CUDA）；
 - trainer 环境安装（未在 CUDA 主机执行）；
 - 数据检查/缓存（命令已拼装，未真实运行）；
-- SSH host 只验证 CRUD，没有连接。
+- SSH host/远端代码只验证 fake ssh，没有真实连接。
 
 **未实现：**
 
 - Clover 常驻后端、Project 持久化/图层；
-- 队列落盘、设备维护页、强制并发/显存配额；
-- 训练导出/采样真实执行；
-- SSH 远端执行；
+- 队列完整重启验收、设备维护页、强制并发/显存配额；
+- 训练导出/采样真实 CUDA 验收；
+- SSH 远端真实 host 验收；
 - WebUI、应用内更新安装、打包/公证；
 - Windows 实机验证。
 
@@ -311,9 +311,9 @@ Kohaku Trainer
 
 1. **Clover 常驻后端**：本地 HTTP/WS；创作窗口连接；终端看服务日志；
 2. **Project + 图层**：Project 独立于 Case；持久化画布/图层/资产；
-3. **SSH 训练**：系统 ssh、host key、远端 mirror/worktree/venv、远端 Job；
-4. **训练收尾**：导出/采样执行、真实 CUDA 验收、loss 曲线；
-5. **启动器加固**：队列落盘、设备维护、Gradio 真机、27 GB 权重；
+3. **SSH 真实 host 验收**：host key/权限、远端 mirror/worktree/venv、远端 Job/日志；
+4. **训练收尾**：真实 CUDA 验收、导出/采样真实执行、loss 曲线；
+5. **启动器加固**：队列完整重启验收、设备维护、Gradio 真机、27 GB 权重；
 6. **M5 WebUI + 更新**：Fastify/SSE、token/局域网、更新下载/安装；
 7. **M6 打包**：macOS 签名/公证、Windows NSIS、设备矩阵；
 8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期。

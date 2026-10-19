@@ -19,7 +19,8 @@ apps/desktop/
     services/               env / network / git / runtimes / instances / models /
                             updates / settings / gallery / supervisor / parsers /
                             diagnostics / devices / cases / onboarding /
-                            trainerGit / trainers / trainingHosts
+                            trainerGit / trainers / trainingHosts / remoteTrainer / ssh /
+                            launchQueue / trainerArtifacts
   src/preload/index.ts      contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx             按 windowKind 分流 Launcher / Creator / Terminal / Trainer
@@ -78,6 +79,12 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | `--scenario=trainer-deploy` | trainer clone + worktree |
 | `--scenario=trainer-job` | 模拟训练 Job + step/loss |
 | `--scenario=trainer-host` | SSH host 保存/读取/删除 |
+| `--scenario=trainer-host-probe` | fake ssh 下 host 探测 |
+| `--scenario=trainer-remote-local` | fake ssh 下远端 mirror/worktree |
+| `--scenario=trainer-remote-env` | fake uv 下远端 venv/doctor |
+| `--scenario=trainer-remote-job` | fake ssh 下远端训练 |
+| `--scenario=trainer-remote-artifact` | fake ssh 下导出/产物登记 |
+| `--scenario=queue-persist` | 队列落盘 |
 
 验证结论以 [../docs/status.md](../docs/status.md) 为准，不要把 scenario 模拟
 当成真实权重/CUDA 验收。

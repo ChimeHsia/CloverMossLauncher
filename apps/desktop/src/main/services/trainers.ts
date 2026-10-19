@@ -6,6 +6,9 @@ import type { JobRecord, Settings, TrainerRunInput, TrainerRuntimeInfo, TrainerR
 import { paths } from '../lib/paths'
 import { run } from '../lib/run'
 import { startTrainingJob } from './supervisor'
+import { allRemoteVersions, remoteSetup } from './remoteTrainer'
+import { getTrainingHost } from './trainingHosts'
+import { posixQuote, sshArgs, sshCommand, sshExec } from './ssh'
 import { hasUv, parseDepsFromPyproject, pickPython, venvPython } from './runtimes'
 import {
   createTrainerWorktree,
@@ -57,7 +60,12 @@ async function writeRuntime(settings: Settings, runtime: TrainerRuntimeInfo): Pr
 
 async function readVersion(settings: Settings, id: string): Promise<TrainerVersion | null> {
   try {
-    return JSON.parse(await readFile(versionFile(settings, id), 'utf8')) as TrainerVersion
+    const raw = JSON.parse(await readFile(versionFile(settings, id), 'utf8')) as TrainerVersion
+    if (!raw.hostId) {
+      raw.hostId = 'local'
+      raw.hostName = '本机'
+    }
+    return raw
   } catch {
     return null
   }
@@ -80,6 +88,16 @@ async function syncVersion(settings: Settings, version: TrainerVersion): Promise
     version.runtimeState = runtime?.state ?? 'missing'
   }
   return version
+}
+
+export async function listAllTrainerVersions(settings: Settings): Promise<TrainerVersion[]> {
+  const local = await listTrainerVersions(settings)
+  return [...local, ...allRemoteVersions(settings)]
+}
+
+export async function findTrainerVersion(settings: Settings, id: string): Promise<TrainerVersion | null> {
+  const local = await listTrainerVersions(settings)
+  return local.find((item) => item.id === id) ?? allRemoteVersions(settings).find((item) => item.id === id) ?? null
 }
 
 export async function listTrainerVersions(settings: Settings): Promise<TrainerVersion[]> {
@@ -117,6 +135,8 @@ export async function createTrainerVersion(settings: Settings, input: CreateTrai
   const stableSha = await trainerTagSha(settings)
   const version: TrainerVersion = {
     id,
+    hostId: 'local',
+    hostName: '本机',
     name: input.name?.trim() || `Kohaku ${input.commit.slice(0, 7)}`,
     branch: input.branch,
     commit: input.commit,
@@ -249,19 +269,51 @@ function quote(value: string): string {
 }
 
 export async function startTrainerRun(settings: Settings, input: TrainerRunInput): Promise<JobRecord> {
+  const version = await findTrainerVersion(settings, input.versionId)
+  if (!version) throw new Error('训练版本不存在')
+  if (version.hostId !== 'local') return startRemoteTrainerRun(settings, input, version)
   if (process.platform === 'darwin') {
     throw new Error('KohakuMossTrainer 不支持 macOS/MPS；请使用 Linux/Windows + NVIDIA，或下一阶段的 SSH 训练主机')
   }
   const cuda = await run('nvidia-smi', ['-L'], { timeoutMs: 8000 })
   if (cuda.code !== 0) throw new Error('未检测到 NVIDIA CUDA 设备，KohakuMossTrainer 无法在本机启动')
-  const version = await readVersion(settings, input.versionId)
-  if (!version) throw new Error('训练版本不存在')
   const runtime = version.runtimeId ? await readRuntime(settings, version.runtimeId) : null
   if (!runtime || runtime.state !== 'ready' || !existsSync(runtime.python)) {
     throw new Error('训练环境尚未就绪，请先在训练页安装环境')
   }
   if (input.action === 'export' || input.action === 'sample') {
-    throw new Error('导出/采样入口将在训练完成后接入')
+    const runName = input.runName.replace(/[^A-Za-z0-9_-]/g, '-') || 'moss-lora'
+    const exportPath = `exports/${runName}.safetensors`
+    const sampleDir = `samples/${runName}`
+    const find = `ADAPTER="$(find "runs/moss/${runName}/checkpoints" -name trainable.safetensors -print 2>/dev/null | sort -V | tail -1)"`
+    const guard = 'test -n "$ADAPTER"'
+    const exportCommand = [
+      `mkdir -p exports`,
+      find,
+      guard,
+      `${quote(join(runtime.path, 'bin', process.platform === 'win32' ? 'kogine.exe' : 'kogine'))} run scripts/export/export.py --set WEIGHTS=${quote(input.weights)} --set ADAPTER="$ADAPTER" --set OUT=${quote(exportPath)}`,
+    ].join('\n')
+    const sampleCommand = [
+      'mkdir -p samples',
+      find,
+      guard,
+      `mkdir -p ${quote(sampleDir)}`,
+      `${quote(join(runtime.path, 'bin', process.platform === 'win32' ? 'kogine.exe' : 'kogine'))} run scripts/sample/sample.py --set WEIGHTS=${quote(input.weights)} --set ADAPTERS=${quote(`${exportPath}:1.0`)} --set PROMPT=${quote('a lighthouse on a rocky coast at sunset')} --set OUT=${quote(sampleDir)}`,
+    ].join('\n')
+    const script = join(version.path, `.clover-${input.action}.sh`)
+    await writeFile(script, `#!/usr/bin/env bash\nset -euo pipefail\n${input.action === 'export' ? exportCommand : sampleCommand}\n`, { encoding: 'utf8', mode: 0o755 })
+    return startTrainingJob({
+      versionId: version.id,
+      name: `Kohaku ${input.action === 'export' ? '导出' : '采样'}`,
+      cwd: version.path,
+      command: 'bash',
+      args: [script],
+      totalSteps: 0,
+      runName,
+      action: input.action,
+      weights: input.weights,
+      algo: input.algo,
+    })
   }
   const bin = process.platform === 'win32' ? join(runtime.path, 'Scripts') : join(runtime.path, 'bin')
   const configBin = join(bin, process.platform === 'win32' ? 'kohakumoss-config.exe' : 'kohakumoss-config')
@@ -327,5 +379,149 @@ export async function startTrainerRun(settings: Settings, input: TrainerRunInput
     command: win ? 'cmd' : 'bash',
     args: win ? ['/d', '/s', '/c', script] : [script],
     totalSteps: input.action === 'train' ? input.steps : 0,
+    runName,
+    action: input.action,
+    weights: input.weights,
+    algo: input.algo,
+  })
+}
+
+
+async function startRemoteTrainerRun(settings: Settings, input: TrainerRunInput, version: TrainerVersion): Promise<JobRecord> {
+  const host = getTrainingHost(settings, version.hostId)
+  if (!host || host.kind !== 'ssh') throw new Error('SSH 训练主机不存在')
+  if (!version.runtimeId) throw new Error('远端训练环境尚未创建，请先安装环境')
+  const cuda = await sshExec(host, 'nvidia-smi -L', 15_000)
+  if (cuda.code !== 0) throw new Error(`远端没有可用 NVIDIA CUDA：${(cuda.stderr || cuda.stdout).trim().slice(-600)}`)
+  const check = await sshExec(
+    host,
+    [
+      remoteSetup(host),
+      `test -x "$RUNTIMES/${version.runtimeId}/bin/kohakumoss-config"`,
+      `test -x "$RUNTIMES/${version.runtimeId}/bin/kogine"`,
+    ].join('\n'),
+    30_000,
+  )
+  if (check.code !== 0) throw new Error('远端训练环境缺少 kohakumoss-config / kogine，请重装环境')
+
+  const runName = input.runName.replace(/[^A-Za-z0-9_-]/g, '-') || 'moss-lora'
+  if (input.action === 'export' || input.action === 'sample') {
+    const exportPath = `exports/${runName}.safetensors`
+    const sampleDir = `samples/${runName}`
+    const script = [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      remoteSetup(host),
+      `VERSION="$VERSIONS/${version.id}"`,
+      `RUNTIME="$RUNTIMES/${version.runtimeId}"`,
+      'cd "$VERSION"',
+      'echo $$ > "$VERSION/.clover.pid"',
+      'trap \'rm -f "$VERSION/.clover.pid"\' EXIT',
+      `ADAPTER="$(find "runs/moss/${runName}/checkpoints" -name trainable.safetensors -print 2>/dev/null | sort -V | tail -1)"`,
+      'test -n "$ADAPTER"',
+      input.action === 'export'
+        ? `mkdir -p exports; "$RUNTIME/bin/kogine" run scripts/export/export.py --set WEIGHTS=${posixQuote(input.weights)} --set ADAPTER="$ADAPTER" --set OUT=${posixQuote(exportPath)}`
+        : `mkdir -p ${posixQuote(sampleDir)}; "$RUNTIME/bin/kogine" run scripts/sample/sample.py --set WEIGHTS=${posixQuote(input.weights)} --set ADAPTERS=${posixQuote(`${exportPath}:1.0`)} --set PROMPT=${posixQuote('a lighthouse on a rocky coast at sunset')} --set OUT=${posixQuote(sampleDir)}`,
+    ].join('\n')
+    const marker = `CLOVER_REMOTE_${Date.now()}`
+    const write = await sshExec(host, [remoteSetup(host), `VERSION="$VERSIONS/${version.id}"`, `cat > "$VERSION/.clover-${input.action}.sh" <<'${marker}'`, script, marker, `chmod +x "$VERSION/.clover-${input.action}.sh"`].join('\n'), 30_000)
+    if (write.code !== 0) throw new Error(`写入远端动作脚本失败：${(write.stderr || write.stdout).trim().slice(-1000)}`)
+    return startTrainingJob({
+      versionId: version.id,
+      hostId: host.id,
+      name: `Kohaku ${input.action === 'export' ? '导出' : '采样'} · ${host.name}`,
+      cwd: process.cwd(),
+      command: sshCommand(),
+      args: sshArgs(host, [remoteSetup(host), `VERSION="$VERSIONS/${version.id}"`, `bash "$VERSION/.clover-${input.action}.sh"`].join('\n')),
+      totalSteps: 0,
+      runName,
+      action: input.action,
+      weights: input.weights,
+      algo: input.algo,
+      cancelCommand: { command: sshCommand(), args: sshArgs(host, [remoteSetup(host), `VERSION="$VERSIONS/${version.id}"`, 'if [ -f "$VERSION/.clover.pid" ]; then kill -TERM "$(cat "$VERSION/.clover.pid")" 2>/dev/null || true; fi'].join('\n')) },
+    })
+  }
+  const configPath = `configs/user/${runName}.py`
+  const dataConfigPath = `configs/user/${runName}_data.py`
+  const overrides = input.overrides
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.includes('=') && !line.startsWith('#'))
+  const setupArgs = [
+    'new', 'train',
+    '--weights', posixQuote(input.weights),
+    '--data', posixQuote(input.dataset),
+    '--source', 'kohya',
+    '--algo', posixQuote(input.algo),
+    '--name', posixQuote(runName),
+    '--steps', String(input.steps),
+    '--force',
+  ].join(' ')
+  const setArgs = [
+    `LR=${input.lr || '1e-4'}`,
+    `DIM=${input.dim || '32'}`,
+    `ALPHA=${input.alpha || '32'}`,
+    `MICROBATCHES=${input.batch || '1'}`,
+    `TARGET_AREA=${input.resolution * input.resolution}`,
+    ...overrides,
+  ].flatMap((item) => ['--set', posixQuote(item)])
+  const runArgs = {
+    train: ['run', 'scripts/train/moss.py', '--config', posixQuote(configPath), ...setArgs],
+    inspect_data: ['run', 'scripts/data/inspect_data.py', '--config', posixQuote(dataConfigPath)],
+    cache_text: ['run', 'scripts/data/cache_text.py', '--config', posixQuote(dataConfigPath)],
+    cache_latents: ['run', 'scripts/data/cache_latents.py', '--config', posixQuote(dataConfigPath)],
+    export: [],
+    sample: [],
+  }[input.action]
+  if (!runArgs.length) throw new Error('该训练动作尚未接入')
+
+  const script = [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    remoteSetup(host),
+    `VERSION="$VERSIONS/${version.id}"`,
+    `RUNTIME="$RUNTIMES/${version.runtimeId}"`,
+    'cd "$VERSION"',
+    'echo $$ > "$VERSION/.clover.pid"',
+    'trap \'rm -f "$VERSION/.clover.pid"\' EXIT',
+    `"$RUNTIME/bin/kohakumoss-config" ${setupArgs}`,
+    `"$RUNTIME/bin/kogine" ${runArgs.join(' ')}`,
+  ].join('\n')
+  const marker = `CLOVER_REMOTE_${Date.now()}`
+  const write = await sshExec(
+    host,
+    [
+      remoteSetup(host),
+      `VERSION="$VERSIONS/${version.id}"`,
+      `cat > "$VERSION/.clover-${input.action}.sh" <<'${marker}'`,
+      script,
+      marker,
+      `chmod +x "$VERSION/.clover-${input.action}.sh"`,
+    ].join('\n'),
+    30_000,
+  )
+  if (write.code !== 0) throw new Error(`写入远端训练脚本失败：${(write.stderr || write.stdout).trim().slice(-1000)}`)
+
+  const start = [
+    remoteSetup(host),
+    `VERSION="$VERSIONS/${version.id}"`,
+    `bash "$VERSION/.clover-${input.action}.sh"`,
+  ].join('\n')
+  const cancel = [
+    remoteSetup(host),
+    `VERSION="$VERSIONS/${version.id}"`,
+    'if [ -f "$VERSION/.clover.pid" ]; then kill -TERM "$(cat "$VERSION/.clover.pid")" 2>/dev/null || true; fi',
+  ].join('\n')
+  return startTrainingJob({
+    versionId: version.id,
+    hostId: host.id,
+    name: `Kohaku ${input.action === 'train' ? '训练' : input.action} · ${host.name}`,
+    cwd: process.cwd(),
+    command: sshCommand(),
+    args: sshArgs(host, start),
+    totalSteps: input.action === 'train' ? input.steps : 0,
+    runName,
+    action: input.action,
+    cancelCommand: { command: sshCommand(), args: sshArgs(host, cancel) },
   })
 }

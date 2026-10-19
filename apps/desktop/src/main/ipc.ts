@@ -12,6 +12,7 @@ import {
   getInstance,
   isolateInstance,
   listInstances,
+  updateAdapterBindings,
   updateInstance,
 } from './services/instances'
 import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload } from './services/models'
@@ -31,6 +32,7 @@ import {
   createTrainerVersion,
   ensureTrainerRuntime,
   installTrainerRuntime,
+  listAllTrainerVersions,
   listTrainerVersions,
   removeTrainerVersion,
   trainerDoctor,
@@ -38,7 +40,18 @@ import {
   startTrainerRun,
 } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
-import { listTrainingHosts, removeTrainingHost, saveTrainingHost } from './services/trainingHosts'
+import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
+import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost } from './services/trainingHosts'
+import {
+  remoteBranches,
+  remoteCommits,
+  remoteCreateVersion,
+  remoteDoctor,
+  remoteInstallRuntime,
+  remoteRemoveVersion,
+  remoteVersion,
+  remoteVersions,
+} from './services/remoteTrainer'
 
 function toResult<T>(fn: () => Promise<T> | T): Promise<IpcResult<T>> {
   return Promise.resolve()
@@ -110,6 +123,33 @@ export function registerIpc(): void {
     return true
   })
 
+  handle(Ipc.trainerHostTest, schemas.trainerHostTest, ({ id }) => testTrainingHost(getSettings(), id))
+
+  handle(Ipc.trainerRemoteBranches, schemas.trainerRemoteHost, ({ hostId }) => remoteBranches(getSettings(), hostId))
+
+  handle(Ipc.trainerRemoteCommits, schemas.trainerRemoteCommits, ({ hostId, branch, limit }) =>
+    remoteCommits(getSettings(), hostId, branch, limit),
+  )
+
+  handle(Ipc.trainerRemoteVersions, schemas.trainerRemoteHost, ({ hostId }) => remoteVersions(getSettings(), hostId))
+
+  handle(Ipc.trainerRemoteCreate, schemas.trainerRemoteCreate, ({ hostId, ...input }) =>
+    remoteCreateVersion(getSettings(), hostId, input),
+  )
+
+  handle(Ipc.trainerRemoteInstall, schemas.trainerRemoteVersion, ({ hostId, versionId }) =>
+    remoteInstallRuntime(getSettings(), remoteVersion(getSettings(), hostId, versionId)),
+  )
+
+  handle(Ipc.trainerRemoteDoctor, schemas.trainerRemoteVersion, ({ hostId, versionId }) =>
+    remoteDoctor(getSettings(), remoteVersion(getSettings(), hostId, versionId)),
+  )
+
+  handle(Ipc.trainerRemoteRemove, schemas.trainerRemoteVersion, async ({ hostId, versionId }) => {
+    await remoteRemoveVersion(getSettings(), remoteVersion(getSettings(), hostId, versionId))
+    return true
+  })
+
   handle(Ipc.trainerBranches, null, () => listTrainerBranches(getSettings()))
 
   handle(Ipc.trainerCommits, schemas.trainerCommits, ({ branch, limit }) =>
@@ -117,6 +157,8 @@ export function registerIpc(): void {
   )
 
   handle(Ipc.trainerVersions, null, () => listTrainerVersions(getSettings()))
+
+  handle(Ipc.trainerAllVersions, null, () => listAllTrainerVersions(getSettings()))
 
   handle(Ipc.trainerCreate, schemas.trainerCreate, (input) => createTrainerVersion(getSettings(), input))
 
@@ -164,6 +206,8 @@ export function registerIpc(): void {
   handle(Ipc.instanceDelete, schemas.instanceDelete, ({ id, keepOutputs }) => deleteInstance(id, keepOutputs))
 
   handle(Ipc.instanceUpdate, schemas.instanceUpdate, ({ id, commit }) => updateInstance(id, commit))
+
+  handle(Ipc.instanceAdapters, schemas.instanceAdapters, ({ id, bindings }) => updateAdapterBindings(id, bindings))
 
   handle(Ipc.instanceOpen, schemas.instanceOpen, async ({ id }) => {
     const instance = await getInstance(id)

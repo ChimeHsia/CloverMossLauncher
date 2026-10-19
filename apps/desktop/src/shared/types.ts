@@ -193,6 +193,7 @@ export interface InstanceInfo {
   runtimeState: RuntimeState
   models: string[]
   adapters: string[]
+  adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
   createdAt: string
   lastUsedAt: string | null
   path: string
@@ -234,7 +235,7 @@ export interface ModelEntry {
 export interface AdapterEntry {
   id: string
   name: string
-  provider: 'hf'
+  provider: 'hf' | 'local'
   repo: string
   revision: string
   kind: 'lora' | 'lycoris' | 'dmd'
@@ -289,10 +290,22 @@ export interface TrainingHost {
   trainerRoot: string
   status: 'unchecked' | 'ok' | 'error'
   lastCheckedAt?: string
+  error?: string
+  remote?: {
+    os?: string
+    gpu?: string
+    git?: string
+    uv?: string
+    python?: string
+    rootReady?: boolean
+  }
+  versions?: TrainerVersion[]
 }
 
 export interface TrainerVersion {
   id: string
+  hostId: string
+  hostName?: string
   name: string
   branch: string
   commit: string
@@ -462,6 +475,12 @@ export interface JobRecord {
   deviceId?: string
   kind?: 'inference' | 'training'
   trainerVersionId?: string
+  trainerRunName?: string
+  trainerAction?: string
+  trainerWeights?: string
+  trainerAlgo?: string
+  trainerArtifact?: string
+  hostId?: string
   mode: JobMode
   state: JobState
   stage: JobStage

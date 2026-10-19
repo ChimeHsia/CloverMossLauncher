@@ -1,18 +1,30 @@
 import { app, dialog, nativeTheme, protocol } from 'electron'
-import { writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureDirs } from './lib/paths'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, listInstances } from './services/instances'
 import { installDeps } from './services/runtimes'
-import { cancelJob, getJob, getJobLogs, startJob, startTrainingJob } from './services/supervisor'
-import { createTrainerVersion, listTrainerVersions } from './services/trainers'
+import { cancelJob, getJob, getJobLogs, onJobCompleted, startJob, startTrainingJob } from './services/supervisor'
+import { createTrainerVersion, listTrainerVersions, startTrainerRun } from './services/trainers'
+import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
-import { listTrainingHosts, removeTrainingHost, saveTrainingHost } from './services/trainingHosts'
+import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost, updateTrainingHostVersions } from './services/trainingHosts'
+import {
+  remoteBranches,
+  remoteCommits,
+  remoteCreateVersion,
+  remoteDoctor,
+  remoteInstallRuntime,
+  remoteRemoveVersion,
+  remoteVersions,
+} from './services/remoteTrainer'
+import { run } from './lib/run'
 import { matchRule, parseTqdm } from './services/parsers'
 import { registerIpc } from './ipc'
 import { scanEnvironment } from './services/env'
 import { getSettings } from './services/settings'
+import { collectTrainerArtifact } from './services/trainerArtifacts'
 import { checkUpdates } from './services/updates'
 import { downloadCustomModel, getCatalog, listDownloads } from './services/models'
 import { registerGalleryProtocol } from './services/gallery'
@@ -86,6 +98,9 @@ async function runSmoke(): Promise<void> {
 
 app.whenReady().then(async () => {
   ensureDirs(getSettings().modelsRoot)
+  onJobCompleted((job) => {
+    if (job.kind === 'training' && job.state === 'succeeded') void collectTrainerArtifact(job)
+  })
   registerGalleryProtocol()
   registerIpc()
 
@@ -303,6 +318,280 @@ app.whenReady().then(async () => {
       }
       console.log(JSON.stringify(current, null, 2))
       app.exit(current.state === 'done' ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'trainer-remote-env') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-trainer-env')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'git'), { recursive: true })
+      const fakeBin = join(app.getPath('userData'), 'fake-bin-env')
+      mkdirSync(fakeBin, { recursive: true })
+      const uv = join(fakeBin, 'uv')
+      writeFileSync(uv, `#!/bin/bash
+if [ "$1" = "venv" ]; then
+  R="$2"; mkdir -p "$R/bin"
+  printf '#!/bin/bash\necho Python 3.12\n' > "$R/bin/python"
+  printf '#!/bin/bash\nexit 0\n' > "$R/bin/kohakumoss-config"
+  printf '#!/bin/bash\nexit 0\n' > "$R/bin/kogine"
+  printf '#!/bin/bash\necho doctor-ok\n' > "$R/bin/kohakumoss-doctor"
+  chmod +x "$R/bin/"*
+  exit 0
+fi
+exit 0
+`, 'utf8')
+      chmodSync(uv, 0o755)
+      const localMirror = join(app.getPath('userData'), 'trainer', 'git', 'kohaku-trainer.git')
+      cpSync(localMirror, join(root, 'git', 'kohaku-trainer.git'), { recursive: true })
+      await run('git', ['-C', join(root, 'git', 'kohaku-trainer.git'), 'remote', 'set-url', 'origin', localMirror])
+      const fake = join(app.getPath('userData'), 'fake-ssh-env.sh')
+      writeFileSync(fake, `#!/bin/bash\nexport PATH="${fakeBin}:$PATH"\nfor last; do :; done\nlast="$(printf '%s' "$last" | sed 's/^bash -lc /bash -c /')"\nexec bash -c "$last"\n`, 'utf8')
+      chmodSync(fake, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fake
+      const host = saveTrainingHost({ name: 'Fake Env', host: 'fake.local', user: 'tester', port: 22, trainerRoot: root })
+      const branches = await remoteBranches(getSettings(), host.id)
+      const branch = branches.find((item) => item.isDefault)?.name ?? 'main'
+      const commits = await remoteCommits(getSettings(), host.id, branch, 3)
+      if (!commits[0]) throw new Error('no commit')
+      const version = await remoteCreateVersion(getSettings(), host.id, { branch, commit: commits[0].sha })
+      const runtime = await remoteInstallRuntime(getSettings(), version)
+      const checked = await remoteDoctor(getSettings(), { ...version, runtimeId: runtime.id, runtimeState: 'ready' })
+      console.log(JSON.stringify({ scenario: 'trainer-remote-env', runtime: runtime.state, doctor: checked.ok, output: checked.output }, null, 2))
+      await remoteRemoveVersion(getSettings(), version)
+      removeTrainingHost(host.id)
+      app.exit(runtime.state === 'ready' && checked.ok ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'queue-persist') {
+    const row = {
+      id: `queue-test-${Date.now()}`,
+      caseName: 'Queue Test',
+      instanceId: 'moss-main-9d799c1',
+      instanceName: 'moss-main-9d799c1',
+      backend: 'official' as const,
+      deviceId: 'mps',
+      profile: 'base' as const,
+      state: 'queued' as const,
+      queuedAt: new Date().toISOString(),
+    }
+    upsertLaunchRow(row)
+    const saved = listLaunchRows().find((item) => item.id === row.id)
+    removeLaunchRow(row.id)
+    console.log(JSON.stringify({ scenario: 'queue-persist', saved: Boolean(saved), state: saved?.state, remaining: listLaunchRows().filter((item) => item.id === row.id).length }, null, 2))
+    app.exit(saved ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'trainer-remote-artifact') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-trainer-artifact')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'git'), { recursive: true })
+      const fakeBin = join(app.getPath('userData'), 'fake-bin')
+      mkdirSync(fakeBin, { recursive: true })
+      writeFileSync(join(fakeBin, 'nvidia-smi'), '#!/bin/bash\necho "Fake GPU, 24576 MiB"\n', 'utf8')
+      chmodSync(join(fakeBin, 'nvidia-smi'), 0o755)
+      const localMirror = join(app.getPath('userData'), 'trainer', 'git', 'kohaku-trainer.git')
+      cpSync(localMirror, join(root, 'git', 'kohaku-trainer.git'), { recursive: true })
+      await run('git', ['-C', join(root, 'git', 'kohaku-trainer.git'), 'remote', 'set-url', 'origin', localMirror])
+      const fakeSsh = join(app.getPath('userData'), 'fake-ssh-artifact.sh')
+      writeFileSync(fakeSsh, `#!/bin/bash\nexport PATH="${fakeBin}:$PATH"\nfor last; do :; done\nexec bash -lc "$last"\n`, 'utf8')
+      chmodSync(fakeSsh, 0o755)
+      const fakeScp = join(app.getPath('userData'), 'fake-scp-artifact.sh')
+      writeFileSync(fakeScp, '#!/bin/bash\nfor last; do :; done\nsrc="${@: -2:1}"\ndst="$last"\nsrc="${src#*:}"\ncp "$src" "$dst"\n', 'utf8')
+      chmodSync(fakeScp, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fakeSsh
+      process.env['CLOVER_SCP_BIN'] = fakeScp
+      const host = saveTrainingHost({ name: 'Fake GPU', host: 'fake.local', user: 'tester', port: 22, trainerRoot: root })
+      const branches = await remoteBranches(getSettings(), host.id)
+      const branch = branches.find((item) => item.isDefault)?.name ?? 'main'
+      const commits = await remoteCommits(getSettings(), host.id, branch, 3)
+      if (!commits[0]) throw new Error('no commit')
+      const version = await remoteCreateVersion(getSettings(), host.id, { branch, commit: commits[0].sha })
+      const bin = join(root, 'runtimes', 'fake-runtime', 'bin')
+      mkdirSync(bin, { recursive: true })
+      writeFileSync(join(bin, 'kogine'), '#!/bin/bash\necho "step 5 loss=0.1"\n', 'utf8')
+      chmodSync(join(bin, 'kogine'), 0o755)
+      writeFileSync(join(bin, 'kohakumoss-config'), '#!/bin/bash\nexit 0\n', 'utf8')
+      chmodSync(join(bin, 'kohakumoss-config'), 0o755)
+      const withRuntime = { ...version, runtimeId: 'fake-runtime', runtimeState: 'ready' as const }
+      updateTrainingHostVersions(getSettings(), host.id, [withRuntime])
+      mkdirSync(join(version.path, 'exports'), { recursive: true })
+      writeFileSync(join(version.path, 'exports', 'artifact-test.safetensors'), 'fake-adapter', 'utf8')
+      mkdirSync(join(version.path, 'runs', 'moss', 'artifact-test', 'checkpoints', 'step_00000005'), { recursive: true })
+      writeFileSync(join(version.path, 'runs', 'moss', 'artifact-test', 'checkpoints', 'step_00000005', 'trainable.safetensors'), 'fake', 'utf8')
+      const job = await startTrainerRun(getSettings(), {
+        versionId: version.id, action: 'export', runName: 'artifact-test',
+        weights: '/remote/weights', dataset: '/remote/data', algo: 'lora', steps: 5,
+        lr: '1e-4', dim: '32', alpha: '32', batch: '1', resolution: 1024, overrides: '',
+      })
+      let current = job
+      const deadline = Date.now() + 20_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        current = (await getJob(job.id)) ?? current
+        if (current.state !== 'running' && current.state !== 'starting') break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const catalog = await getCatalog(getSettings(), true)
+      const registered = catalog.adapters.find((item) => item.id === 'trained-artifact-test')
+      console.log(JSON.stringify({ scenario: 'trainer-remote-artifact', state: current.state, error: current.error, logs: (await getJobLogs(job.id)).slice(-12), registered: Boolean(registered), provider: registered?.provider, installed: registered?.installed }, null, 2))
+      await remoteRemoveVersion(getSettings(), withRuntime)
+      removeTrainingHost(host.id)
+      const adapterDir = join(getSettings().modelsRoot ?? join(app.getPath('userData'), 'models'), 'adapters')
+      rmSync(join(adapterDir, 'trained-artifact-test'), { recursive: true, force: true })
+      try {
+        const index = JSON.parse(readFileSync(join(adapterDir, 'index.json'), 'utf8')) as { adapters: Array<{ id: string }> }
+        index.adapters = index.adapters.filter((item) => item.id !== 'trained-artifact-test')
+        writeFileSync(join(adapterDir, 'index.json'), JSON.stringify(index, null, 2), 'utf8')
+      } catch {
+        // no local index
+      }
+      app.exit(current.state === 'succeeded' && registered ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'trainer-remote-job') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-trainer-job')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'git'), { recursive: true })
+      const fakeBin = join(app.getPath('userData'), 'fake-bin')
+      mkdirSync(fakeBin, { recursive: true })
+      const nvidia = join(fakeBin, 'nvidia-smi')
+      writeFileSync(nvidia, '#!/bin/bash\necho "Fake GPU, 24576 MiB"\n', 'utf8')
+      chmodSync(nvidia, 0o755)
+      const localMirror = join(app.getPath('userData'), 'trainer', 'git', 'kohaku-trainer.git')
+      const remoteMirror = join(root, 'git', 'kohaku-trainer.git')
+      cpSync(localMirror, remoteMirror, { recursive: true })
+      await run('git', ['-C', remoteMirror, 'remote', 'set-url', 'origin', localMirror])
+      const fake = join(app.getPath('userData'), 'fake-ssh-job.sh')
+      writeFileSync(fake, `#!/bin/bash\nexport PATH="${fakeBin}:$PATH"\nfor last; do :; done\nlast="$(printf '%s' "$last" | sed 's/^bash -lc /bash -c /')"\nexec bash -c "$last"\n`, 'utf8')
+      chmodSync(fake, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fake
+      const host = saveTrainingHost({
+        name: 'Fake GPU',
+        host: 'fake.local',
+        user: 'tester',
+        port: 22,
+        trainerRoot: root,
+      })
+      const branches = await remoteBranches(getSettings(), host.id)
+      const branch = branches.find((item) => item.isDefault)?.name ?? 'main'
+      const commits = await remoteCommits(getSettings(), host.id, branch, 3)
+      if (!commits[0]) throw new Error('远端没有提交')
+      const version = await remoteCreateVersion(getSettings(), host.id, { branch, commit: commits[0].sha })
+      const bin = join(root, 'runtimes', 'fake-runtime', 'bin')
+      mkdirSync(bin, { recursive: true })
+      const config = join(bin, 'kohakumoss-config')
+      writeFileSync(config, '#!/bin/bash\nexit 0\n', 'utf8')
+      chmodSync(config, 0o755)
+      const kogine = join(bin, 'kogine')
+      writeFileSync(kogine, '#!/bin/bash\nfor i in 1 2 3 4 5; do echo "step $i loss=0.$((6-i)) lr=1e-4"; sleep 0.1; done\n', 'utf8')
+      chmodSync(kogine, 0o755)
+      const withRuntime = { ...version, runtimeId: 'fake-runtime', runtimeState: 'ready' as const }
+      updateTrainingHostVersions(getSettings(), host.id, [withRuntime])
+      const job = await startTrainerRun(getSettings(), {
+        versionId: version.id,
+        action: 'train',
+        runName: 'remote-test',
+        weights: '/remote/weights',
+        dataset: '/remote/data',
+        algo: 'lora',
+        steps: 5,
+        lr: '1e-4',
+        dim: '32',
+        alpha: '32',
+        batch: '1',
+        resolution: 1024,
+        overrides: '',
+      })
+      const deadline = Date.now() + 20_000
+      let current = job
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        current = (await getJob(job.id)) ?? current
+        if (current.state !== 'running' && current.state !== 'starting') break
+      }
+      console.log(JSON.stringify({ scenario: 'trainer-remote-job', state: current.state, hostId: current.hostId, metrics: current.metrics, progress: current.progress }, null, 2))
+      await remoteRemoveVersion(getSettings(), withRuntime)
+      removeTrainingHost(host.id)
+      app.exit(current.state === 'succeeded' ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'trainer-remote-local') {
+    try {
+      const root = join(app.getPath('userData'), 'remote-trainer-test')
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(join(root, 'git'), { recursive: true })
+      const localMirror = join(app.getPath('userData'), 'trainer', 'git', 'kohaku-trainer.git')
+      const remoteMirror = join(root, 'git', 'kohaku-trainer.git')
+      cpSync(localMirror, remoteMirror, { recursive: true })
+      await run('git', ['-C', remoteMirror, 'remote', 'set-url', 'origin', localMirror])
+      const fake = join(app.getPath('userData'), 'fake-ssh.sh')
+      writeFileSync(fake, '#!/bin/bash\nfor last; do :; done\nexec bash -lc "$last"\n', 'utf8')
+      chmodSync(fake, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fake
+      const host = saveTrainingHost({
+        name: 'Fake Linux',
+        host: 'fake.local',
+        user: 'tester',
+        port: 22,
+        trainerRoot: root,
+      })
+      const branches = await remoteBranches(getSettings(), host.id)
+      const branch = branches.find((item) => item.isDefault)?.name ?? branches[0]?.name ?? 'main'
+      const commits = await remoteCommits(getSettings(), host.id, branch, 3)
+      if (!commits[0]) throw new Error('远端没有提交')
+      const version = await remoteCreateVersion(getSettings(), host.id, { branch, commit: commits[0].sha })
+      const versions = remoteVersions(getSettings(), host.id)
+      await remoteRemoveVersion(getSettings(), version)
+      removeTrainingHost(host.id)
+      console.log(JSON.stringify({ scenario: 'trainer-remote-local', branches: branches.length, commits: commits.length, version: version.id, versions: versions.length }, null, 2))
+      app.exit(0)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'trainer-host-probe') {
+    try {
+      const fake = join(app.getPath('userData'), 'fake-ssh.sh')
+      writeFileSync(fake, '#!/bin/bash\nfor last; do :; done\nexec bash -lc "$last"\n', 'utf8')
+      chmodSync(fake, 0o755)
+      process.env['CLOVER_SSH_BIN'] = fake
+      const host = saveTrainingHost({
+        name: 'Fake Linux',
+        host: 'fake.local',
+        user: 'tester',
+        port: 22,
+        trainerRoot: join(app.getPath('userData'), 'trainer'),
+      })
+      const checked = await testTrainingHost(getSettings(), host.id)
+      console.log(JSON.stringify({ scenario: 'trainer-host-probe', status: checked.status, remote: checked.remote, error: checked.error }, null, 2))
+      removeTrainingHost(host.id)
+      app.exit(checked.status === 'ok' ? 0 : 1)
     } catch (error) {
       console.error(error)
       app.exit(1)

@@ -40,6 +40,15 @@ export const schemas = {
     keepOutputs: z.boolean().default(true),
   }),
 
+  instanceAdapters: z.object({
+    id: z.string().min(1).max(120),
+    bindings: z.array(z.object({
+      id: z.string().min(1).max(160),
+      enabled: z.boolean(),
+      strength: z.number().min(0).max(4),
+    })).max(200),
+  }),
+
   instanceUpdate: z.object({
     id: z.string().min(1).max(120),
     commit: z.string().regex(/^[0-9a-f]{7,40}$/),
@@ -87,6 +96,28 @@ export const schemas = {
 
   trainerHostRemove: z.object({ id: z.string().min(1).max(80) }),
 
+  trainerHostTest: z.object({ id: z.string().min(1).max(80) }),
+
+  trainerRemoteHost: z.object({ hostId: z.string().min(1).max(80) }),
+
+  trainerRemoteCommits: z.object({
+    hostId: z.string().min(1).max(80),
+    branch: z.string().min(1).max(120),
+    limit: z.number().int().min(1).max(200).default(80),
+  }),
+
+  trainerRemoteCreate: z.object({
+    hostId: z.string().min(1).max(80),
+    branch: z.string().min(1).max(120),
+    commit: z.string().min(7).max(64),
+    name: z.string().max(120).optional(),
+  }),
+
+  trainerRemoteVersion: z.object({
+    hostId: z.string().min(1).max(80),
+    versionId: z.string().min(1).max(160),
+  }),
+
   trainerRun: z.object({
     versionId: z.string().min(1).max(120),
     action: z.enum(['train', 'inspect_data', 'cache_text', 'cache_latents', 'export', 'sample']),
@@ -110,6 +141,26 @@ export const schemas = {
   }),
 
   trainerId: z.object({ id: z.string().min(1).max(120) }),
+
+  launchRow: z.object({
+    id: z.string().min(1).max(120),
+    caseId: z.string().max(120).optional(),
+    caseName: z.string().max(240),
+    instanceId: z.string().min(1).max(160),
+    instanceName: z.string().max(240),
+    backend: z.enum(['official', 'clover']),
+    deviceId: z.string().max(160),
+    profile: z.enum(['base', 'dmd8']),
+    port: z.number().int().min(1).max(65535).nullable().optional(),
+    extraArgs: z.string().max(4000).optional(),
+    jobId: z.string().max(160).optional(),
+    state: z.enum(['queued', 'starting', 'running', 'stopped', 'failed']),
+    queuedAt: z.string(),
+    startedAt: z.string().optional(),
+    error: z.string().max(2000).optional(),
+  }),
+
+  launchRowId: z.object({ id: z.string().min(1).max(120) }),
 
   caseSave: z.object({
     id: z.string().max(80).optional(),
