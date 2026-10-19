@@ -273,6 +273,93 @@ export interface DownloadTask {
   updatedAt: string
 }
 
+export type JobMode = 'runner' | 'gradio' | 'simulate'
+export type JobState = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'canceled'
+export type JobStage = 'load' | 'text' | 'denoise' | 'decode' | 'save' | 'ready' | 'idle'
+
+export interface JobParams {
+  prompt: string
+  negativePrompt: string
+  width: number
+  height: number
+  steps: number
+  cfg: number
+  seed: number
+  profile: 'base' | 'dmd8'
+  adapters?: Array<{ path: string; strength: number }>
+}
+
+export interface JobStartInput {
+  instanceId: string
+  prompt: string
+  negativePrompt?: string
+  width: number
+  height: number
+  steps: number
+  cfg: number
+  seed: number
+  profile?: 'base' | 'dmd8'
+  mode?: 'runner' | 'gradio' | 'simulate'
+}
+
+export interface JobProgress {
+  stage: JobStage
+  current: number
+  total: number
+  percent: number
+  etaMs?: number
+  message?: string
+}
+
+export interface JobRecord {
+  id: string
+  instanceId: string
+  instanceName: string
+  mode: JobMode
+  state: JobState
+  stage: JobStage
+  params: JobParams
+  progress: JobProgress
+  startedAt: string
+  endedAt?: string
+  pid?: number
+  exitCode?: number
+  error?: { code: string; message: string }
+  outputs?: Array<{ path: string; width: number; height: number; seed: number }>
+  url?: string
+  logPath?: string
+}
+
+export interface JobLogLine {
+  jobId: string
+  seq: number
+  at: string
+  stream: 'stdout' | 'stderr' | 'system'
+  text: string
+}
+
+export interface DiagnosticSolution {
+  label: string
+  action: string
+  params?: Record<string, unknown>
+}
+
+export interface Diagnostic {
+  id: string
+  jobId?: string
+  ruleId: string
+  severity: 'error' | 'warning' | 'info'
+  title: string
+  explain: string
+  solutions: DiagnosticSolution[]
+  raw: string
+  signature: string
+  count: number
+  firstAt: string
+  lastAt: string
+  toast: boolean
+}
+
 export interface GalleryItem {
   id: string
   path: string

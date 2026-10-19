@@ -3,10 +3,14 @@ import { Events, Ipc } from '@shared/channels'
 import type {
   AppNotification,
   Catalog,
+  Diagnostic,
   DownloadTask,
   EnvReport,
   GalleryItem,
   InstanceInfo,
+  JobLogLine,
+  JobRecord,
+  JobStartInput,
   Settings,
   UpdateState,
 } from '@shared/types'
@@ -36,6 +40,10 @@ interface AppStore {
   instances: InstanceInfo[]
   catalog: Catalog | null
   downloads: DownloadTask[]
+  jobs: JobRecord[]
+  activeJobId: string | null
+  jobLogs: Record<string, JobLogLine[]>
+  diagnostics: Diagnostic[]
   notifications: AppNotification[]
   notificationsOpen: boolean
   studioPrompt: string
@@ -65,9 +73,26 @@ interface AppStore {
   downloadAdapter: (adapterId: string) => Promise<void>
   pauseDownload: (taskId: string) => Promise<void>
   deleteModel: (kind: 'model' | 'adapter', id: string) => Promise<void>
+  refreshJobs: () => Promise<void>
+  startJob: (input: JobStartInput) => Promise<JobRecord>
+  cancelJob: (id: string) => Promise<void>
+  sendJobInput: (id: string, text: string) => Promise<void>
+  setActiveJob: (id: string | null) => void
+  loadJobLogs: (id: string) => Promise<void>
+  refreshDiagnostics: () => Promise<void>
+  dismissDiagnostic: (id: string) => Promise<void>
+  clearDiagnostics: () => Promise<void>
 }
 
 let subscribed = false
+
+function upsertJob(list: JobRecord[], job: JobRecord): JobRecord[] {
+  return [job, ...list.filter((item) => item.id !== job.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
+
+function upsertDiagnostic(list: Diagnostic[], diagnostic: Diagnostic): Diagnostic[] {
+  return [diagnostic, ...list.filter((item) => item.id !== diagnostic.id)].slice(0, 200)
+}
 
 function upsertDownload(list: DownloadTask[], task: DownloadTask): DownloadTask[] {
   const next = list.filter((item) => item.id !== task.id)
@@ -100,6 +125,43 @@ export const useApp = create<AppStore>((set, get) => {
     onEvent<{ id: string }>(Events.instancesChanged, () => {
       void get().refreshInstances()
     })
+    onEvent<JobRecord>(Events.job, (job) => {
+      const previous = get().jobs.find((item) => item.id === job.id)
+      set((state) => ({
+        jobs: upsertJob(state.jobs, job),
+        activeJobId: state.activeJobId ?? job.id,
+      }))
+      if (job.state === 'succeeded' && previous?.state !== 'succeeded') {
+        get().pushNotification({
+          tone: 'success',
+          title: '生成完成',
+          message: `${job.instanceName} · ${job.params.width}×${job.params.height}`,
+        })
+      } else if (job.state === 'failed' && previous?.state !== 'failed') {
+        get().pushNotification({
+          tone: 'error',
+          title: '任务失败',
+          message: job.error?.message ?? '查看诊断页了解原因',
+        })
+      }
+    })
+
+    onEvent<JobLogLine>(Events.jobLog, (line) => {
+      set((state) => {
+        const previous = state.jobLogs[line.jobId] ?? []
+        return {
+          jobLogs: {
+            ...state.jobLogs,
+            [line.jobId]: [...previous.slice(-1499), line],
+          },
+        }
+      })
+    })
+
+    onEvent<Diagnostic>(Events.diagnostic, (diagnostic) => {
+      set((state) => ({ diagnostics: upsertDiagnostic(state.diagnostics, diagnostic) }))
+    })
+
     onEvent<Settings>(Events.settingsChanged, (settings) => {
       applyTheme(settings.theme)
       set({ settings })
@@ -138,6 +200,10 @@ export const useApp = create<AppStore>((set, get) => {
     instances: [],
     catalog: null,
     downloads: [],
+    jobs: [],
+    activeJobId: null,
+    jobLogs: {},
+    diagnostics: [],
     notifications: [],
     notificationsOpen: true,
     studioPrompt: '',
@@ -159,12 +225,14 @@ export const useApp = create<AppStore>((set, get) => {
         set({ settings })
         subscribe()
 
-        const [env, updates, instances, catalog, downloads] = await Promise.allSettled([
+        const [env, updates, instances, catalog, downloads, jobs, diagnostics] = await Promise.allSettled([
           call<EnvReport>(Ipc.envScan),
           call<UpdateState>(Ipc.updatesCheck),
           call<InstanceInfo[]>(Ipc.instancesList),
           call<Catalog>(Ipc.modelsCatalog),
           call<DownloadTask[]>(Ipc.downloadsList),
+          call<JobRecord[]>(Ipc.jobList),
+          call<Diagnostic[]>(Ipc.diagnosticsList),
         ])
         set({
           env: env.status === 'fulfilled' ? env.value : null,
@@ -172,6 +240,12 @@ export const useApp = create<AppStore>((set, get) => {
           instances: instances.status === 'fulfilled' ? instances.value : [],
           catalog: catalog.status === 'fulfilled' ? catalog.value : null,
           downloads: downloads.status === 'fulfilled' ? downloads.value : [],
+          jobs: jobs.status === 'fulfilled' ? jobs.value : [],
+          diagnostics: diagnostics.status === 'fulfilled' ? diagnostics.value : [],
+          activeJobId:
+            jobs.status === 'fulfilled'
+              ? (jobs.value.find((job) => job.state === 'running' || job.state === 'starting')?.id ?? null)
+              : null,
           ready: true,
         })
         if (updates.status === 'fulfilled' && updates.value.updateAvailable) {
@@ -301,6 +375,68 @@ export const useApp = create<AppStore>((set, get) => {
     async deleteModel(kind, id) {
       await call(Ipc.modelDelete, { kind, id })
       await get().refreshCatalog()
+    },
+
+    async refreshJobs() {
+      try {
+        const jobs = await call<JobRecord[]>(Ipc.jobList)
+        set({ jobs })
+      } catch {
+        // keep previous
+      }
+    },
+
+    async startJob(input) {
+      const job = await call<JobRecord>(Ipc.jobStart, input)
+      set((state) => ({
+        jobs: upsertJob(state.jobs, job),
+        activeJobId: job.id,
+        jobLogs: { ...state.jobLogs, [job.id]: [] },
+      }))
+      return job
+    },
+
+    async cancelJob(id) {
+      const job = await call<JobRecord | null>(Ipc.jobCancel, { id })
+      if (job) {
+        set((state) => ({ jobs: upsertJob(state.jobs, job) }))
+      }
+    },
+
+    async sendJobInput(id, text) {
+      await call(Ipc.jobInput, { id, text })
+    },
+
+    setActiveJob(id) {
+      set({ activeJobId: id })
+    },
+
+    async loadJobLogs(id) {
+      try {
+        const lines = await call<JobLogLine[]>(Ipc.jobLogs, { id })
+        set((state) => ({ jobLogs: { ...state.jobLogs, [id]: lines } }))
+      } catch {
+        // ignore
+      }
+    },
+
+    async refreshDiagnostics() {
+      try {
+        const diagnostics = await call<Diagnostic[]>(Ipc.diagnosticsList)
+        set({ diagnostics })
+      } catch {
+        // ignore
+      }
+    },
+
+    async dismissDiagnostic(id) {
+      await call(Ipc.diagnosticsDismiss, { id })
+      set((state) => ({ diagnostics: state.diagnostics.filter((item) => item.id !== id) }))
+    },
+
+    async clearDiagnostics() {
+      await call(Ipc.diagnosticsClear)
+      set({ diagnostics: [] })
     },
   }
 })

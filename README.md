@@ -3,9 +3,9 @@
 > 为 [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) 做的跨平台启动器：
 > 装得快、版本分得清、权重不迷路、创作与画廊在一个窗口里。
 
-**状态：M1–M3 + UI v0.2 可运行。** 环境报告、公告/更新检查、git 实例、
-共享/独立运行时、模型/适配器下载、通知中心、画廊、创作台与 layout 标注器均已落地；
-真正的生成运行在 M4 接入。
+**状态：M1–M4 基础可运行。** 环境报告、公告/更新检查、git 实例、共享/独立运行时、
+模型/适配器下载、通知中心、画廊、创作台与 layout 标注器、runner 编排、进度与诊断均已落地。
+真实权重的生成需要约 27 GB 模型，本机未下载，留给有足够磁盘的机器验收。
 
 ![首页](docs/assets/home.webp)
 
@@ -24,7 +24,9 @@
 | 实例管理 | ✅ | bare 镜像 + worktree，固定 commit；main HEAD / 推荐提交标稳定版 |
 | 运行时 | ✅ | 按依赖锁哈希共享；uv/venv + uv pip/pip；一键转独立 |
 | 模型 / 适配器 | ✅ | 官方权重、社区 int8/int4、DMD；HF 兼容缓存、断点续传、sha256 |
-| 生成运行 / 进度 / 诊断 | ⏳ M4 | runner、Gradio、tqdm 翻译、错误卡片 |
+| 生成运行 | ✅ 基础 | Supervisor + 薄 runner + Gradio 适配器；真实权重待验收 |
+| 进度翻译 | ✅ | tqdm/ANSI/下载条解析、阶段化进度、控制台、stdin、取消 |
+| 诊断 | ✅ | 规则匹配、signature 去重、5 分钟 toast 预算、解决方案按钮、诊断页 |
 | WebUI / 更新安装 | ⏳ M5 | 浏览器模式、应用内更新 |
 
 ## UI 设计
@@ -41,6 +43,10 @@
 ![创作台与布局标注](docs/assets/studio.webp)
 
 ![画廊](docs/assets/gallery.webp)
+
+![运行与进度](docs/assets/run.webp)
+
+![诊断](docs/assets/diagnostics.webp)
 
 ![折叠侧栏](docs/assets/sidebar-collapsed.webp)
 
@@ -83,12 +89,14 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ```
 apps/desktop/
   src/main/          Electron 主进程 + 领域服务 + IPC + clover 协议
+                     （supervisor / parsers / diagnostics / gallery）
   src/preload/       contextBridge（只暴露 invoke / on / acrylic）
   src/renderer/
-    src/pages/       Home / Studio / Gallery / Instances / InstanceDetail / Models / Settings
+    src/pages/       Home / Studio / Gallery / Run / Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/  layout / NotificationPanel / ui / ErrorBoundary
     src/lib/         layout 编译器 / clover URL / api / format / i18n
   src/shared/        types / channels / zod schemas
+runner/              薄 Python runner：官方 pipeline + NDJSON + simulate 自检
 release/             更新源：manifest.json、公告 README、模型目录、错误规则
 contracts/           协议与 schema（release / runner / job）
 docs/
@@ -109,7 +117,7 @@ tools/budget.py      算力 / 显存预算工具
 - [实现状态](docs/status.md)：已完成、实测证据、与设计的差异、下一步；
 - [Layout 规范](docs/layout-schema.md)：草稿/编译两种坐标系、校验与官方对拍；
 - [路线图](docs/roadmap.md)：M0–M6 与验收标准；
-- [Runner 协议](contracts/runner-protocol.md)、[更新清单 schema](contracts/release-manifest.schema.json)。
+- [Runner 实现](runner/README.md)、[Runner 协议](contracts/runner-protocol.md)、[更新清单 schema](contracts/release-manifest.schema.json)。
 
 ## 不做什么（V1）
 

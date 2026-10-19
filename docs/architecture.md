@@ -1,7 +1,7 @@
 # 架构文档 · CloverMoss Launcher
 
 - 版本：v0.2（2026-10-19）
-- 状态：M1–M3 + UI v0.2 已落地，M4 进行中；实现差异见 [status.md](status.md)
+- 状态：M1–M4 基础已落地；实现差异与验收边界见 [status.md](status.md)
 - 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---
@@ -55,15 +55,17 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 apps/desktop/
   electron.vite.config.ts
   src/main/           Electron 主进程 + 领域服务 + IPC
-    services/         env / network / git / runtimes / instances / models / updates / gallery
+    services/         env / network / git / runtimes / instances / models / updates / gallery /
+                      supervisor / parsers / diagnostics
     lib/              paths / run / events
   src/preload/        contextBridge（只暴露 invoke / on / acrylic）
   src/renderer/       React 19 + Tailwind 4 + Apps SDK UI
-    src/pages/        Home / Studio / Gallery / Instances / InstanceDetail / Models / Settings
+    src/pages/        Home / Studio / Gallery / Run / Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/   layout / NotificationPanel / ui / ErrorBoundary
     src/lib/          layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
     src/store.ts      Zustand（含通知、创作草稿、画廊底图）
   src/shared/         types / channels / zod schemas
+runner/               薄 Python runner（官方 pipeline + NDJSON + --simulate）
 release/              manifest.json + 公告 markdown + 模型目录 + 错误规则
 contracts/            协议与 schema（release / runner / job）
 docs/  tools/         设计与预算工具
@@ -344,9 +346,20 @@ python gradio_app.py --host 127.0.0.1 --port <free> --model <local bundle>
   输出 `bbox_coord_space: abs_centralized`、`bbox_format: yxyx`，去掉编辑器字段；
 - 校验：16 倍数、区域非空、caption 非空、文字项必须有 `text`、bbox 在画布内；
 - 对拍：与官方 `skills/moss-image-prompt-enhancer/scripts/compile_prompt.py` 的示例逐字段一致；
-- 生成入口：M4 接 runner 后替换当前提示；编译后的 JSON 直接插入 Prompt。
+- 生成入口：M4 已接 `jobs:start`（Supervisor + runner）；真实权重生成待验收；
+- 编译后的 JSON 直接插入 Prompt。
 
 详见 [layout-schema.md](layout-schema.md)。
+
+### 9.6 当前实现（M4）
+
+- `services/supervisor.ts`：`jobs:start/cancel/list/get/input/logs`、job.json、180 s readiness、
+  stdin 取消 → 5 s 强杀、进程组 kill、JSON 持久化；
+- `services/parsers.ts`：ANSI 剥离、`\r/\n` 分帧、tqdm/下载条、错误规则加载与 signature；
+- `services/diagnostics.ts`：去重、全局 toast 预算（5 min ≤ 3）、`diagnostics.json` 持久化；
+- `runner/runner.py`：官方 pipeline + NDJSON；`--simulate` 不加载权重，用于编排自检；
+- 预检：运行时未就绪 / 27 GB SFT 权重缺失时直接生成诊断卡片，避免误触发下载；
+- 未完成：SQLite、Gradio 实测、DMD 采样器、实例模型绑定。
 
 ## 10. 日志管线与错误规则
 
@@ -516,7 +529,7 @@ window.clover = {
 | 画廊 | 48 张/页；只渲染可视附近卡片；1 万张目录仍可滚动 |
 
 - 结构化日志：主进程 `pino`，写入 `logs/app-<date>.jsonl`，30 天轮转；
-- 任务日志：`logs/<job>.jsonl`，含 stage/step/内存/降档/退出码；
+- 任务日志：`jobs/<job>.jsonl`，含 stage/step/内存/降档/退出码；
 - “导出诊断包”：环境报告 + 实例配置 + 最近日志 + 规则命中，脱敏后 zip。
 
 ## 18. 测试
@@ -536,6 +549,6 @@ window.clover = {
 | M2 | git 镜像 + 实例 + 运行时 | ✅ 基础完成；托管 Python / 更新 UI 待补 |
 | M3 | 模型/适配器 + 下载队列 | ✅ 下载与 HF 缓存实测；绑定 UI 待补 |
 | UI v0.2 | 亚克力/折叠侧栏/通知/画廊/创作台/标注器 | ✅ 已实现；生成接入 M4 |
-| M4 | Supervisor + runner + 解析 + 诊断 | ⏳ 当前 |
+| M4 | Supervisor + runner + 解析 + 诊断 | ✅ 基础完成（simulate/取消/解析实测；真实权重待验收） |
 | M5 | Gradio + WebUI + 更新/公告 | 计划 |
 | M6 | 打包、公证、Windows、Beta | 计划 |

@@ -7,7 +7,9 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Play,
   Settings as SettingsIcon,
+  Stethoscope,
   Sparkles,
   Wand2,
   type LucideIcon,
@@ -30,6 +32,8 @@ const navItems: NavItem[] = [
   { to: '/instances', key: 'nav.instances', icon: Boxes },
   { to: '/models', key: 'nav.models', icon: Package },
   { to: '/gallery', key: 'nav.gallery', icon: Images },
+  { to: '/run', key: 'nav.run', icon: Play },
+  { to: '/diagnostics', key: 'nav.diagnostics', icon: Stethoscope },
 ]
 
 export function Sidebar(): React.JSX.Element {
@@ -37,7 +41,10 @@ export function Sidebar(): React.JSX.Element {
   const instances = useApp((state) => state.instances)
   const downloads = useApp((state) => state.downloads)
   const env = useApp((state) => state.env)
+  const jobs = useApp((state) => state.jobs)
+  const diagnostics = useApp((state) => state.diagnostics)
   const collapsed = settings?.sidebarCollapsed ?? false
+  const runningJobs = jobs.filter((job) => job.state === 'running' || job.state === 'starting').length
   const activeDownloads = downloads.filter((task) => task.state === 'running' || task.state === 'queued').length
 
   return (
@@ -63,7 +70,15 @@ export function Sidebar(): React.JSX.Element {
         {navItems.map((item) => {
           const Icon = item.icon
           const count =
-            item.to === '/instances' ? instances.length : item.to === '/models' ? activeDownloads : 0
+            item.to === '/instances'
+              ? instances.length
+              : item.to === '/models'
+                ? activeDownloads
+                : item.to === '/run'
+                  ? runningJobs
+                  : item.to === '/diagnostics'
+                    ? diagnostics.length
+                    : 0
           return (
             <NavLink
               key={item.to}
@@ -149,6 +164,8 @@ const titles: Record<string, string> = {
   '/instances': t('instances.title'),
   '/models': t('models.title'),
   '/gallery': t('nav.gallery'),
+  '/run': t('nav.run'),
+  '/diagnostics': t('nav.diagnostics'),
   '/settings': t('settings.title'),
 }
 

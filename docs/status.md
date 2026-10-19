@@ -1,8 +1,8 @@
-# 实现状态（M1–M3 + UI v0.2）
+# 实现状态（M1–M4 + UI v0.2）
 
 - 日期：2026-10-19
 - 范围：Electron 启动器、环境报告、公告/更新、实例/运行时、模型/下载、
-  通知中心、画廊、创作台与 layout 标注器
+  通知中心、画廊、创作台与 layout 标注器、runner 编排/进度/诊断
 - 对应路线图：[M1 / M2 / M3](roadmap.md)
 
 ## 1. 现在能跑什么
@@ -50,6 +50,19 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 画廊 | 默认 outputs + 实例 outputs + 自定义目录；`clover://` 协议；48 张/页 + IntersectionObserver；`content-visibility`；PNG/sidecar 元数据；“用作布局底图” |
 | 设置补充 | 画廊目录增删、首页背景选择、设备与诊断完整报告 |
 
+### 2.3 M4 运行与诊断
+
+| 模块 | 实现 |
+| --- | --- |
+| Supervisor | spawn（无 shell）、job.json、180 s readiness、取消（stdin → 5 s 强杀）、进程组/kill tree、崩溃/退出处理 |
+| 薄 runner | `runner/runner.py`：加载官方 pipeline、阶段/进度/结果/错误事件、stdin 取消、`--simulate` 自检 |
+| 解析管线 | ANSI 剥离、`\r`/`\n` 分帧、tqdm（s/it、it/s）、HF 下载条、错误规则匹配、signature 归一化 |
+| 诊断 | 内置规则 + `release/rules.json`；signature 去重；全局 5 分钟 3 条 toast 预算；本地持久化 |
+| 运行页 | 阶段 stepper、总进度、ETA、输出缩略图、控制台、stdin、停止/重试、任务历史 |
+| 诊断页 | 全部/错误/警告筛选、原始输出折叠、解决方案按钮（重试降档/打开模型/修复/复制/忽略） |
+| 联动 | 任务成功/失败写应用内通知；诊断 toast 由 Shell 统一分发，避免页面重复弹窗 |
+| Gradio | 基础适配器：启动 `gradio_app.py`、匹配 `Running on local URL:`、打开 URL（未实测） |
+
 ## 3. 实测证据
 
 在本机 **Apple M3 / 16 GB / macOS 15.7.7** 上验证：
@@ -67,6 +80,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Layout 编译器 | `node --experimental-strip-types` 跑 `layout.ts` | 官方示例输出逐字段一致：文本 `[-416,-384,-288,384]`、物体 `[-192,-288,384,288]` |
 | 通知中心 | `--screenshot` | 默认打开、两块圆角卡片；进入创作/画廊后自动收起 |
 | 侧栏 | `--screenshot` | 212 ↔ 64 折叠正常，内容区自适应 |
+| 解析器 | `--scenario=parser` | 45% tqdm → 9/20、ETA 15000 ms；OOM→E_OOM；缺包→E_MODULE |
+| 模拟任务 | `--scenario=job` | 4 步、100%、3 行日志、512² 输出、任务持久化 |
+| 取消 | `--scenario=job-cancel` | 运行中取消 → state=canceled |
+| 预检 | `--scenario=job-real` | 缺权重 → 预期报错 + E_MODEL 诊断卡片 |
 
 截图（`--screenshot` 自动生成）：
 
@@ -75,6 +92,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ![创作台](assets/studio.webp)
 ![画廊](assets/gallery.webp)
 ![画廊详情](assets/gallery-detail.webp)
+![运行与进度](assets/run.webp)
+![诊断](assets/diagnostics.webp)
 ![折叠侧栏](assets/sidebar-collapsed.webp)
 ![设置](assets/settings.webp)
 
@@ -89,6 +108,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 7. **亚克力只在 macOS / Windows 生效**；Linux/截图模式回退到渐变背景。
 8. **标注器的画框/拖拽/缩放交互已实现**，但还没有自动化 E2E；建议在接 runner 前手工验收一次。
 9. **画廊只做了分页 + content-visibility**，没有做 DOM 行级虚拟化；1 万张量级仍建议后续加窗口化。
+10. **真实权重的 runner 未在本机跑过**：本机只剩约 14 GB，27 GB SFT 权重未下载；用 `--simulate` 验证了编排/进度/取消/输出/诊断链路。
+11. **Gradio 适配器只做了基础实现**，未在安装 gradio 的实例上验收。
+12. **DMD 8 步 profile 只透传，runner 仍走官方 pipeline**；真正的 data-space DMD 采样器是后续工作。
+13. **任务/诊断仍用 JSON 持久化**，不是 SQLite；任务量大时需要迁移。
 
 ## 5. 开发辅助
 
@@ -101,21 +124,26 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ... electron . --scenario=second
 ... electron . --scenario=install
 
+# 模拟任务 / 取消 / 解析器 / 缺权重预检
+... electron . --scenario=job
+... electron . --scenario=job-cancel
+... electron . --scenario=parser
+... electron . --scenario=job-real
+
 # 下载一个 12 MB 的 HF 测试仓库
 ... electron . --scenario=download-test
 
-# 生成首页/通知/创作/画廊/折叠/设置等截图到 .dev-data/
+# 生成首页/通知/创作/画廊/运行/诊断/折叠/设置等截图到 .dev-data/
 ... electron . --screenshot
 ```
 
 > `--scenario=*` 与 `--screenshot` 仅用于开发；发布包不暴露入口。
 
-## 6. 下一步（M4）
+## 6. 下一步（M5 / M4 收尾）
 
-- runner + NDJSON 协议、Gradio 适配器；
-- tqdm/ANSI 解析、阶段化进度、stdin；
-- 诊断规则与弹窗预算（防循环）；
-- 任务/日志落盘（SQLite）；
-- 实例模型绑定与适配器强度；
-- 下载队列持久化与速度统计；
-- 创作台接上 runner 后，把“开始生成”变成真实流程。
+- **真实权重验收**：在 ≥ 64 GB 空闲磁盘的机器上下载 SFT，跑通 runner 到 PNG；
+- **实例模型绑定**：把模型/适配器与实例关联，runner 使用绑定路径而不是默认 repo；
+- **DMD 采样器**：把 8 步 data-space DMD 的 `Q`、step codes、fp32 time embedding 接进 runner；
+- **Gradio 验收**与内嵌 WebContentsView；
+- **任务/诊断迁移 SQLite**，日志检索与导出；
+- **M5**：WebUI（Fastify + 同一前端）+ 应用内更新安装。

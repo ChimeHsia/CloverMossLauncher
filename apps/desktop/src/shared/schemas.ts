@@ -64,6 +64,28 @@ export const schemas = {
 
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
 
+  jobStart: z.object({
+    instanceId: z.string().min(1).max(120),
+    prompt: z.string().max(32768),
+    negativePrompt: z.string().max(8192).default(''),
+    width: z.number().int().min(256).max(2048).multipleOf(16),
+    height: z.number().int().min(256).max(2048).multipleOf(16),
+    steps: z.number().int().min(1).max(100),
+    cfg: z.number().min(0).max(20),
+    seed: z.number().int().min(0).max(4294967295),
+    profile: z.enum(['base', 'dmd8']).default('base'),
+    mode: z.enum(['runner', 'gradio', 'simulate']).default('runner'),
+  }),
+
+  jobId: z.object({ id: z.string().min(1).max(120) }),
+
+  jobInput: z.object({
+    id: z.string().min(1).max(120),
+    text: z.string().max(4096),
+  }),
+
+  diagnosticsDismiss: z.object({ id: z.string().min(1).max(120) }),
+
   galleryList: z.object({
     cursor: z.string().max(32).optional(),
     limit: z.number().int().min(1).max(120).default(48),

@@ -1,7 +1,7 @@
 # 产品设计文档 · CloverMoss Launcher
 
 - 版本：v0.2（2026-10-19）
-- 状态：M1–M3 + UI v0.2 已实现，M4 进行中；实现状态见 [status.md](status.md)
+- 状态：M1–M4 基础 + UI v0.2 已实现，M5 进行中；实现状态见 [status.md](status.md)
 - 关联：[架构文档](architecture.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---
@@ -68,8 +68,9 @@
 ├── 实例 Instances     列表 · 详情（概览/版本/依赖/模型/启动设置/日志）· 新建向导
 ├── 模型 Models        已安装 · 可下载 · 下载中 · 详情
 ├── 画廊 Gallery       outputs / 自定义目录 · 分页 · 详情 · 用作布局底图
+├── 运行 Run           阶段进度 · 控制台 · stdin · 停止/重试 · 任务历史
 ├── 通知 Notifications 右上角抽屉：公告（release）+ 应用内通知
-├── 诊断 Diagnostics   错误卡片 · 筛选 · 导出诊断包（M4）
+├── 诊断 Diagnostics   错误卡片 · 解决方案 · 去重 · toast 预算
 └── 设置 Settings      外观 · 网络/镜像 · 存储 · 运行时 · 画廊/背景 · 设备 · 更新
 ```
 
@@ -89,6 +90,8 @@
   移动、右下角缩放，标签为物体/人物/文字；
 - **画廊**：默认读取 outputs 与实例 outputs，可添加任意目录；48 张/页 + `content-visibility`，
   超大目录不会一次性渲染；详情支持“用作布局底图”；
+- **运行**：阶段 stepper、总进度、ETA、输出缩略图、控制台、stdin、停止/重试、任务历史；
+- **诊断**：按严重度筛选，每张卡片有原始输出与解决方案（降档重试、打开模型、修复运行时等）；
 - **侧栏**：212 px ↔ 64 px 折叠，图标 rail + tooltip，折叠状态持久化。
 
 ## 6. 核心界面

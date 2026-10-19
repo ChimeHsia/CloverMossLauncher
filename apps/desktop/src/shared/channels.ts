@@ -21,6 +21,16 @@ export const Ipc = {
   modelPause: 'models:pause',
   modelDelete: 'models:delete',
   downloadsList: 'downloads:list',
+  jobStart: 'jobs:start',
+  jobCancel: 'jobs:cancel',
+  jobList: 'jobs:list',
+  jobGet: 'jobs:get',
+  jobInput: 'jobs:input',
+  jobLogs: 'jobs:logs',
+  jobOpenLog: 'jobs:open-log',
+  diagnosticsList: 'diagnostics:list',
+  diagnosticsDismiss: 'diagnostics:dismiss',
+  diagnosticsClear: 'diagnostics:clear',
   galleryList: 'gallery:list',
   galleryItem: 'gallery:item',
   galleryReveal: 'gallery:reveal',
@@ -38,6 +48,9 @@ export const Events = {
   download: 'event:download',
   instancesChanged: 'event:instances-changed',
   settingsChanged: 'event:settings-changed',
+  job: 'event:job',
+  jobLog: 'event:job-log',
+  diagnostic: 'event:diagnostic',
 } as const
 
 export type EventChannel = (typeof Events)[keyof typeof Events]

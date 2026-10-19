@@ -5,6 +5,8 @@ import { ensureDirs } from './lib/paths'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, listInstances } from './services/instances'
 import { installDeps } from './services/runtimes'
+import { cancelJob, getJob, getJobLogs, startJob } from './services/supervisor'
+import { matchRule, parseTqdm } from './services/parsers'
 import { registerIpc } from './ipc'
 import { scanEnvironment } from './services/env'
 import { getSettings } from './services/settings'
@@ -31,6 +33,9 @@ const noSandbox = process.env['CLOVER_NO_SANDBOX'] === '1' || smoke || screensho
 if (noSandbox) {
   // The harness/CI sandbox cannot initialize Chromium's zygote sandbox. End-user builds keep it on.
   app.commandLine.appendSwitch('no-sandbox')
+}
+if (smoke || screenshot) {
+  // Headless captures do not need GPU; keeping it off also avoids Chromium GPU-process noise.
   app.disableHardwareAcceleration()
 }
 
@@ -217,6 +222,132 @@ app.whenReady().then(async () => {
     return
   }
 
+  if (scenario === 'job') {
+    try {
+      const [instance] = await listInstances()
+      if (!instance) throw new Error('没有实例，先运行 --scenario=create')
+      const job = await startJob({
+        instanceId: instance.id,
+        prompt: 'A quiet blue morning, simulated job for CloverMoss M4',
+        negativePrompt: '',
+        width: 512,
+        height: 512,
+        steps: 4,
+        cfg: 1,
+        seed: 42,
+        profile: 'dmd8',
+        mode: 'simulate',
+      })
+      const deadline = Date.now() + 60_000
+      let current = job
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        current = (await getJob(job.id)) ?? current
+        if (current.state === 'succeeded' || current.state === 'failed' || current.state === 'canceled') break
+      }
+      const logs = await getJobLogs(job.id)
+      console.log(
+        JSON.stringify(
+          {
+            scenario: 'job',
+            state: current.state,
+            stage: current.stage,
+            progress: current.progress,
+            outputs: current.outputs,
+            error: current.error,
+            logLines: logs.length,
+          },
+          null,
+          2,
+        ),
+      )
+      app.exit(current.state === 'succeeded' ? 0 : 1)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'parser') {
+    console.log(
+      JSON.stringify(
+        {
+          tqdm: parseTqdm(' 45%|████▌     | 9/20 [00:12<00:15,  1.37s/it]'),
+          oom: matchRule('CUDA out of memory. Tried to allocate 2.00 GiB')?.id ?? null,
+          module: matchRule("ModuleNotFoundError: No module named 'xformers'")?.id ?? null,
+        },
+        null,
+        2,
+      ),
+    )
+    app.exit(0)
+    return
+  }
+
+  if (scenario === 'job-cancel') {
+    try {
+      const [instance] = await listInstances()
+      if (!instance) throw new Error('没有实例')
+      const job = await startJob({
+        instanceId: instance.id,
+        prompt: 'cancel test',
+        width: 512,
+        height: 512,
+        steps: 20,
+        cfg: 1,
+        seed: 1,
+        profile: 'dmd8',
+        mode: 'simulate',
+      })
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      await cancelJob(job.id)
+      const deadline = Date.now() + 20_000
+      let current = job
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+        current = (await getJob(job.id)) ?? current
+        if (current.state !== 'running' && current.state !== 'starting') break
+      }
+      console.log(JSON.stringify({ scenario: 'job-cancel', state: current.state, error: current.error }, null, 2))
+      app.exit(0)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
+  if (scenario === 'job-real') {
+    try {
+      const [instance] = await listInstances()
+      if (!instance) throw new Error('没有实例')
+      await startJob({
+        instanceId: instance.id,
+        prompt: 'A model-missing preflight check',
+        width: 512,
+        height: 512,
+        steps: 8,
+        cfg: 1,
+        seed: 1,
+        profile: 'dmd8',
+        mode: 'runner',
+      })
+      console.log(JSON.stringify({ scenario: 'job-real', unexpected: true }))
+      app.exit(1)
+    } catch (error) {
+      console.log(
+        JSON.stringify(
+          { scenario: 'job-real', expected: true, message: error instanceof Error ? error.message : String(error) },
+          null,
+          2,
+        ),
+      )
+      app.exit(0)
+    }
+    return
+  }
+
   if (scenario === 'download-test') {
     try {
       const task = await downloadCustomModel('hf-internal-testing/tiny-random-gpt2', getSettings())
@@ -246,6 +377,8 @@ app.whenReady().then(async () => {
       ['/instances/moss-main-9d799c1', 'instance-detail'],
       ['/studio', 'studio'],
       ['/gallery', 'gallery'],
+      ['/run', 'run'],
+      ['/diagnostics', 'diagnostics'],
       ['/models', 'models'],
       ['/settings', 'settings'],
     ]

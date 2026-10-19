@@ -16,6 +16,8 @@ import {
 } from './services/instances'
 import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload } from './services/models'
 import { galleryDetail, listGallery, revealInFolder } from './services/gallery'
+import { cancelJob, getJob, getJobLogs, inputJob, listJobs, startJob } from './services/supervisor'
+import { clearDiagnostics, dismissDiagnostic, listDiagnostics } from './services/diagnostics'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
@@ -149,6 +151,39 @@ export function registerIpc(): void {
   })
 
   handle(Ipc.downloadsList, null, () => listDownloads())
+
+  handle(Ipc.jobStart, schemas.jobStart, (input) => startJob(input))
+
+  handle(Ipc.jobCancel, schemas.jobId, ({ id }) => cancelJob(id))
+
+  handle(Ipc.jobList, null, () => listJobs())
+
+  handle(Ipc.jobGet, schemas.jobId, ({ id }) => getJob(id))
+
+  handle(Ipc.jobLogs, schemas.jobId, ({ id }) => getJobLogs(id))
+
+  handle(Ipc.jobInput, schemas.jobInput, ({ id, text }) => {
+    inputJob(id, text)
+    return true
+  })
+
+  handle(Ipc.jobOpenLog, schemas.jobId, async ({ id }) => {
+    const job = await getJob(id)
+    if (job?.logPath) shell.showItemInFolder(job.logPath)
+    return true
+  })
+
+  handle(Ipc.diagnosticsList, null, () => listDiagnostics())
+
+  handle(Ipc.diagnosticsDismiss, schemas.diagnosticsDismiss, ({ id }) => {
+    dismissDiagnostic(id)
+    return true
+  })
+
+  handle(Ipc.diagnosticsClear, null, () => {
+    clearDiagnostics()
+    return true
+  })
 
   handle(Ipc.galleryList, schemas.galleryList, (input) => listGallery(getSettings(), input))
 

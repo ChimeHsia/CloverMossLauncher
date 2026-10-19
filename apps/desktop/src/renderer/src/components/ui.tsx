@@ -92,13 +92,17 @@ export function Button({
 }): React.JSX.Element {
   const color = tone === 'danger' ? 'danger' : tone === 'primary' ? 'primary' : 'secondary'
   const variant = tone === 'primary' ? 'solid' : tone === 'ghost' ? 'ghost' : 'soft'
+  const tint =
+    tone === 'secondary'
+      ? 'border border-[var(--color-border-subtle)] bg-white/55 dark:bg-white/[0.06]'
+      : ''
   return (
     <SdkButton
       color={color}
       variant={variant}
       size={size}
       pill
-      className={className}
+      className={cn(tint, className)}
       style={{ borderRadius: 9999, color: tone === 'primary' ? '#ffffff' : undefined, ...style }}
       {...rest}
     >

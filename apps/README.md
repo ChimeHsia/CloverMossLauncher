@@ -18,7 +18,7 @@ apps/desktop/
     index.html
     src/main.tsx
     src/App.tsx             HashRouter + 侧栏布局
-    src/pages/              Home / Studio / Gallery / Instances / InstanceDetail / Models / Settings
+    src/pages/              Home / Studio / Gallery / Run / Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/         layout（Sidebar / Topbar）/ NotificationPanel / ui / ErrorBoundary
     src/store.ts            Zustand（含通知、创作草稿、画廊底图）
     src/lib/                layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
@@ -92,6 +92,31 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - 统一返回 `{ ok, data } | { ok, error }`；
 - 进度类事件单向推送（`event:download`、`event:runtime-log`、`event:instances-changed`）；
 - 渲染层用 Zustand 归约，页面不直接接触 `ipcRenderer`。
+
+## 运行与诊断
+
+- `src/main/services/supervisor.ts`：spawn 官方 Python，解析 NDJSON / tqdm，处理就绪、取消、退出；
+- `src/main/services/parsers.ts`：ANSI、`\r` 分帧、tqdm/下载条、错误规则；
+- `src/main/services/diagnostics.ts`：signature 去重、5 分钟 3 条 toast 预算、本地持久化；
+- `runner/runner.py`：薄 runner；`--simulate` 不加载模型，用于验证编排；
+- `pages/Run.tsx`：阶段 stepper、总进度、ETA、控制台、stdin、停止/重试、历史；
+- `pages/Diagnostics.tsx`：按严重度筛选、原始输出、解决方案按钮。
+
+开发自检：
+
+```bash
+# 模拟任务（不加载 27 GB 权重）
+... electron . --scenario=job
+
+# 取消
+... electron . --scenario=job-cancel
+
+# 解析器样例
+... electron . --scenario=parser
+
+# 缺权重预检
+... electron . --scenario=job-real
+```
 
 ## 画廊与 layout
 

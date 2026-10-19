@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { GalleryItem, InstanceInfo } from '@shared/types'
 import { cloverUrl } from '../lib/clover'
 import {
@@ -46,6 +47,7 @@ type DragState =
   | null
 
 export function StudioPage(): React.JSX.Element {
+  const navigate = useNavigate()
   const toast = useToast()
   const storedPrompt = useApp((state) => state.studioPrompt)
   const storedDraft = useApp((state) => state.studioDraft)
@@ -54,6 +56,8 @@ export function StudioPage(): React.JSX.Element {
   const setStudioBackground = useApp((state) => state.setStudioBackground)
   const instances = useApp((state) => state.instances)
   const env = useApp((state) => state.env)
+  const startJob = useApp((state) => state.startJob)
+  const [generating, setGenerating] = useState(false)
 
   const [prompt, setPrompt] = useState(storedPrompt)
   const [negative, setNegative] = useState('nsfw, worst quality, bad anatomy, watermark, jpeg artifact')
@@ -218,8 +222,37 @@ export function StudioPage(): React.JSX.Element {
     toast.push('布局 Prompt 已插入', 'success')
   }
 
-  function generate(): void {
-    toast.push('运行后端将在 M4 接入。当前可以先编译布局 Prompt 并保存。', 'info')
+  async function generate(): Promise<void> {
+    if (!instanceId) {
+      toast.push('先创建一个实例并安装运行时，才能开始生成', 'error')
+      return
+    }
+    if (!prompt.trim()) {
+      toast.push('先写一段 Prompt，或点击“示例布局”', 'error')
+      return
+    }
+    setGenerating(true)
+    try {
+      const next = prompt.trim()
+      setStudioPrompt(next)
+      await startJob({
+        instanceId,
+        prompt: next,
+        negativePrompt: negative,
+        width: draft.width,
+        height: draft.height,
+        steps,
+        cfg,
+        seed,
+        profile: steps === 8 ? 'dmd8' : 'base',
+        mode: 'runner',
+      })
+      navigate('/run')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   return (
@@ -233,9 +266,9 @@ export function StudioPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {env ? <Pill tone="blue">{env.recommendation.width}² · {env.recommendation.steps} 步</Pill> : null}
-          <Button tone="primary" onClick={generate}>
+          <Button tone="primary" onClick={() => void generate()} disabled={generating}>
             <span className="inline-flex items-center gap-1.5">
-              开始生成 <ArrowRight className="size-3.5" />
+              {generating ? '提交中…' : '开始生成'} <ArrowRight className="size-3.5" />
             </span>
           </Button>
         </div>

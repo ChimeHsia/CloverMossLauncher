@@ -1,4 +1,8 @@
 import { useEffect } from 'react'
+import { Events } from '@shared/channels'
+import type { Diagnostic } from '@shared/types'
+import { onEvent } from './lib/api'
+import { useToast } from './components/ui'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Sidebar, Topbar } from './components/layout'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -6,6 +10,8 @@ import { ToastProvider } from './components/ui'
 import { NotificationPanel } from './components/NotificationPanel'
 import { HomePage } from './pages/Home'
 import { GalleryPage } from './pages/Gallery'
+import { DiagnosticsPage } from './pages/Diagnostics'
+import { RunPage } from './pages/Run'
 import { StudioPage } from './pages/Studio'
 import { InstanceDetailPage } from './pages/InstanceDetail'
 import { InstancesPage } from './pages/Instances'
@@ -15,12 +21,23 @@ import { useApp } from './store'
 
 function Shell(): React.JSX.Element {
   const location = useLocation()
+  const toast = useToast()
   const setNotificationsOpen = useApp((state) => state.setNotificationsOpen)
 
   useEffect(() => {
     // The notification drawer is open on launch/home; close it when entering a work page.
     if (location.pathname !== '/') setNotificationsOpen(false)
   }, [location.pathname, setNotificationsOpen])
+
+  useEffect(
+    () =>
+      onEvent<Diagnostic>(Events.diagnostic, (diagnostic) => {
+        if (diagnostic.toast) {
+          toast.push(diagnostic.title, diagnostic.severity === 'warning' ? 'info' : 'error')
+        }
+      }),
+    [toast],
+  )
 
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
@@ -34,6 +51,8 @@ function Shell(): React.JSX.Element {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/studio" element={<StudioPage />} />
                 <Route path="/gallery" element={<GalleryPage />} />
+                <Route path="/run" element={<RunPage />} />
+                <Route path="/diagnostics" element={<DiagnosticsPage />} />
                 <Route path="/instances" element={<InstancesPage />} />
                 <Route path="/instances/:id" element={<InstanceDetailPage />} />
                 <Route path="/models" element={<ModelsPage />} />
