@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, protocol, shell } from 'electron'
+import { app, dialog, nativeTheme, protocol } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureDirs } from './lib/paths'
@@ -13,6 +13,7 @@ import { getSettings } from './services/settings'
 import { checkUpdates } from './services/updates'
 import { downloadCustomModel, getCatalog, listDownloads } from './services/models'
 import { registerGalleryProtocol } from './services/gallery'
+import { createAppWindow, getWindow, openWindow } from './windows'
 
 const isDev = !app.isPackaged
 const smoke = process.argv.includes('--smoke')
@@ -24,6 +25,7 @@ if (isDev) {
   app.setPath('userData', join(app.getAppPath(), '..', '..', '.dev-data'))
 }
 app.setName('CloverMoss')
+nativeTheme.themeSource = 'dark'
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'clover', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
@@ -37,68 +39,6 @@ if (noSandbox) {
 if (smoke || screenshot) {
   // Headless captures do not need GPU; keeping it off also avoids Chromium GPU-process noise.
   app.disableHardwareAcceleration()
-}
-
-function createWindow(show = true): BrowserWindow {
-  const acrylic = !screenshot && (process.platform === 'darwin' || process.platform === 'win32')
-  const win = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 960,
-    minHeight: 640,
-    show: false,
-    title: 'CloverMoss',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    trafficLightPosition: { x: 16, y: 18 },
-    ...(process.platform === 'darwin'
-      ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const }
-      : {}),
-    ...(process.platform === 'win32' ? { backgroundMaterial: 'acrylic' as const } : {}),
-    backgroundColor: acrylic ? '#00000000' : '#0b1220',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      additionalArguments: [acrylic ? '--clover-acrylic' : '--clover-opaque'],
-    },
-  })
-
-  win.once('ready-to-show', () => {
-    if (show) win.show()
-  })
-
-  win.webContents.on('console-message', (...args: unknown[]) => {
-    const details = args[1] as { level?: string; message?: string } | number | undefined
-    if (details && typeof details === 'object' && details.message) {
-      console.log(`[renderer:${details.level ?? 'log'}]`, details.message)
-    } else if (typeof args[2] === 'string') {
-      console.log('[renderer]', args[2])
-    }
-  })
-  win.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[renderer:gone]', details.reason, details.exitCode)
-  })
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) void shell.openExternal(url)
-    return { action: 'deny' }
-  })
-
-  win.webContents.on('will-navigate', (event, url) => {
-    const current = win.webContents.getURL()
-    if (url !== current) {
-      event.preventDefault()
-      if (url.startsWith('https://')) void shell.openExternal(url)
-    }
-  })
-
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-  return win
 }
 
 async function runSmoke(): Promise<void> {
@@ -367,100 +307,84 @@ app.whenReady().then(async () => {
     return
   }
 
+  if (scenario === 'windows') {
+    const launcher = createAppWindow('launcher', false)
+    await new Promise<void>((resolve) => launcher.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    await launcher.webContents.executeJavaScript("window.clover.invoke('window:open', { kind: 'creator' })")
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    const creator = Boolean(getWindow('creator'))
+    await launcher.webContents.executeJavaScript("window.clover.invoke('window:open', { kind: 'terminal' })")
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    const terminal = Boolean(getWindow('terminal'))
+    console.log(JSON.stringify({ scenario: 'windows', creator, terminal }, null, 2))
+    app.exit(creator && terminal ? 0 : 1)
+    return
+  }
+
   if (screenshot) {
-    const win = createWindow(false)
-    await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
-    await new Promise((resolve) => setTimeout(resolve, 8000))
+    const launcher = createAppWindow('launcher', false)
+    await new Promise<void>((resolve) => launcher.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 4500))
+    const oobe = await launcher.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-oobe.png'), oobe.toPNG())
+    await launcher.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '本次跳过')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    const home = await launcher.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-home.png'), home.toPNG())
+    await launcher.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '隐藏通知')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const cleanHome = await launcher.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-home-clean.png'), cleanHome.toPNG())
+    await launcher.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '启动')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 1600))
+    const launch = await launcher.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-launch.png'), launch.toPNG())
+
     const routes: Array<[string, string]> = [
-      ['/', 'home'],
       ['/instances', 'instances'],
       ['/instances/moss-main-9d799c1', 'instance-detail'],
-      ['/studio', 'studio'],
-      ['/gallery', 'gallery'],
-      ['/run', 'run'],
       ['/diagnostics', 'diagnostics'],
       ['/models', 'models'],
       ['/settings', 'settings'],
     ]
     for (const [route, name] of routes) {
-      await win.webContents.executeJavaScript(`location.hash = '#${route}'`)
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-      const image = await win.webContents.capturePage()
+      await launcher.webContents.executeJavaScript(`location.hash = '#${route}'`)
+      await new Promise((resolve) => setTimeout(resolve, 900))
+      const image = await launcher.webContents.capturePage()
       writeFileSync(join(app.getPath('userData'), `screenshot-${name}.png`), image.toPNG())
     }
-    await win.webContents.executeJavaScript("location.hash = '#/'; document.querySelector('main')?.scrollTo(0, 620)")
+
+    const creator = createAppWindow('creator', false)
+    await new Promise<void>((resolve) => creator.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 2200))
+    const studio = await creator.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-studio.png'), studio.toPNG())
+    await creator.webContents.executeJavaScript("location.hash = '#/gallery'")
     await new Promise((resolve) => setTimeout(resolve, 1000))
-    const scrolled = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-home-scrolled.png'), scrolled.toPNG())
-    await win.webContents.executeJavaScript("location.hash = '#/gallery'")
-    await new Promise((resolve) => setTimeout(resolve, 900))
-    await win.webContents.executeJavaScript(
-      "[...document.querySelectorAll('main button')].find((b) => b.querySelector('img'))?.click()",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 1400))
-    const galleryDetail = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-gallery-detail.png'), galleryDetail.toPNG())
-    const handoff = await win.webContents.executeJavaScript(
-      "(()=>{const b=[...document.querySelectorAll('button')].find((x)=>x.textContent.includes('用作布局底图')); if(b){b.click(); return true} return false})()",
-    )
-    if (handoff) {
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-      const studioBackground = await win.webContents.capturePage()
-      writeFileSync(join(app.getPath('userData'), 'screenshot-studio-background.png'), studioBackground.toPNG())
-    } else {
-      await win.webContents.executeJavaScript(
-        "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))",
-      )
-    }
+    const gallery = await creator.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-gallery.png'), gallery.toPNG())
 
-    await win.webContents.executeJavaScript(
-      "location.hash = '#/'; document.querySelector('main')?.scrollTo(0, 0)",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 700))
-    await win.webContents.executeJavaScript(
-      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.includes('隐藏通知'))?.click()",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    const cleanHome = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-home-clean.png'), cleanHome.toPNG())
+    const terminal = createAppWindow('terminal', false)
+    await new Promise<void>((resolve) => terminal.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 2200))
+    const terminalShot = await terminal.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-terminal.png'), terminalShot.toPNG())
 
-    await win.webContents.executeJavaScript(
-      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '收起侧栏')?.click()",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 450))
-    const collapsed = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-sidebar-collapsed.png'), collapsed.toPNG())
-    await win.webContents.executeJavaScript(
-      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '展开侧栏')?.click()",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 450))
-
-    await win.webContents.executeJavaScript("location.hash = '#/instances'")
-    await new Promise((resolve) => setTimeout(resolve, 900))
-    await win.webContents.executeJavaScript(
-      "[...document.querySelectorAll('button')].find((b) => b.textContent.includes('新建实例'))?.click()",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 3500))
-    const createModal = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-create.png'), createModal.toPNG())
-    await win.webContents.executeJavaScript(
-      "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))",
-    )
-
-    await win.webContents.executeJavaScript(
-      "document.documentElement.dataset.theme='light'; location.hash='#/'; document.querySelector('main')?.scrollTo(0, 0)",
-    )
-    await new Promise((resolve) => setTimeout(resolve, 900))
-    const light = await win.webContents.capturePage()
-    writeFileSync(join(app.getPath('userData'), 'screenshot-light.png'), light.toPNG())
     console.log('screenshots written to', app.getPath('userData'))
     app.exit(0)
     return
   }
 
-  createWindow()
+  createAppWindow('launcher')
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    openWindow('launcher')
   })
 })
 

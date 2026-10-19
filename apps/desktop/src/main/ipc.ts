@@ -23,6 +23,10 @@ import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
 import { checkUpdates, dismissAnnouncement } from './services/updates'
 import { isInside } from './lib/paths'
+import { openWindow } from './windows'
+import { listDevices } from './services/devices'
+import { listCases, removeCase, saveCase } from './services/cases'
+import { getOnboardingStatus } from './services/onboarding'
 
 function toResult<T>(fn: () => Promise<T> | T): Promise<IpcResult<T>> {
   return Promise.resolve()
@@ -64,6 +68,24 @@ export function registerIpc(): void {
     modelsPath: paths.models(getSettings().modelsRoot),
     acrylic: process.platform === 'darwin' || process.platform === 'win32',
   }))
+
+  handle(Ipc.windowOpen, schemas.windowOpen, ({ kind }) => {
+    openWindow(kind)
+    return true
+  })
+
+  handle(Ipc.devicesList, null, () => listDevices())
+
+  handle(Ipc.casesList, null, () => listCases())
+
+  handle(Ipc.casesSave, schemas.caseSave, (input) => saveCase(input))
+
+  handle(Ipc.casesRemove, schemas.caseRemove, ({ id }) => {
+    removeCase(id)
+    return true
+  })
+
+  handle(Ipc.onboardingStatus, null, () => getOnboardingStatus(getSettings()))
 
   handle(Ipc.settingsGet, null, () => getSettings())
 

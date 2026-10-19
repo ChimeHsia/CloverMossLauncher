@@ -1,58 +1,76 @@
 # CloverMoss Launcher
 
 > 为 [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) 做的跨平台启动器：
-> 装得快、版本分得清、权重不迷路、创作与画廊在一个窗口里。
+> 像 Minecraft Launcher 一样选版本、选设备、启动；创作和终端各有一个独立窗口。
 
-**状态：M1–M4 基础可运行。** 环境报告、公告/更新检查、git 实例、共享/独立运行时、
-模型/适配器下载、通知中心、画廊、创作台与 layout 标注器、runner 编排、进度与诊断均已落地。
-真实权重的生成需要约 27 GB 模型，本机未下载，留给有足够磁盘的机器验收。
+**状态：v0.3 三窗口启动器。** 启动器 / 创作 / 终端可分可合；OOBE、启动条、运行栈、
+官方 Gradio 启动、xterm 终端已落地。Clover 常驻后端和 Project 持久化在下一轮。
 
-![首页](docs/assets/home.webp)
+![首次启动 OOBE](docs/assets/oobe.webp)
 
-## 现在能做什么
+## 三窗口
 
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| 亚克力窗口 | ✅ | macOS `vibrancy` + Windows `acrylic`，非支持平台回退到蓝白渐变 |
-| 可折叠侧栏 | ✅ | 212 px ↔ 64 px，状态持久化 |
-| 通知中心 | ✅ | 右上角抽屉，默认打开；分「公告」（release）与「应用内通知」两块圆角卡片 |
-| 首页 | ✅ | “今天想在 Moss 中画点什么？” + 实例列表 + 教程案例 + 最近作品 |
-| 创作台 | ✅ | Prompt、负面词、尺寸/步数/CFG/Seed、实例选择、运行未接入提示 |
-| Layout 标注器 | ✅ | 画框、移动、缩放、物体/人物/文字标签、官方 JSON 编译器 |
-| 画廊 | ✅ | 读取输出目录/自定义路径；分段加载 + `content-visibility`；元数据与“用作布局底图” |
-| 设备环境报告 | ✅ | 系统 / GPU / 内存 / 磁盘 / Python / git / 网络 / 端口，附推荐档位 |
-| 实例管理 | ✅ | bare 镜像 + worktree，固定 commit；main HEAD / 推荐提交标稳定版 |
-| 运行时 | ✅ | 按依赖锁哈希共享；uv/venv + uv pip/pip；一键转独立 |
-| 模型 / 适配器 | ✅ | 官方权重、社区 int8/int4、DMD；HF 兼容缓存、断点续传、sha256 |
-| 生成运行 | ✅ 基础 | Supervisor + 薄 runner + Gradio 适配器；真实权重待验收 |
-| 进度翻译 | ✅ | tqdm/ANSI/下载条解析、阶段化进度、控制台、stdin、取消 |
-| 诊断 | ✅ | 规则匹配、signature 去重、5 分钟 toast 预算、解决方案按钮、诊断页 |
-| WebUI / 更新安装 | ⏳ M5 | 浏览器模式、应用内更新 |
+| 窗口 | 负责 |
+| --- | --- |
+| **启动器** | 首页启动条、运行栈、实例、模型、诊断、设置、OOBE |
+| **创作** | Studio、layout 画布、JSON 编译、画廊 |
+| **终端** | 左侧 Case 列表、右侧 xterm、stdout/stderr/stdin |
 
-## UI 设计
+窗口共用同一套 React 前端和深灰亚克力 token；标题栏居中显示 `CloverMoss` +
+`dev`/`release` + 版本号，没有侧栏 Logo。
 
-- **只用白色 / 浅蓝 / 冷灰**，不包含任何绿色元素；强调色 `#2563eb`；
-- 深色为深海军蓝，浅色为蓝白；卡片、侧栏、顶栏、通知抽屉统一使用
-  `glass` / `glass-strong` 半透明层；
-- macOS 使用 `vibrancy: under-window` 透出桌面，Windows 使用 `backgroundMaterial: acrylic`；
-  截图/不支持平台回退为渐变背景；
-- 默认窗口 **1180×760**（不是全屏），最小 960×640。
+![启动器首页](docs/assets/home.webp)
 
-![通知中心](docs/assets/notifications.webp)
+## 启动条与运行栈
 
-![创作台与布局标注](docs/assets/studio.webp)
+```text
+[Case] [后端：官方 Gradio / Clover] [实例] [设备] [档位] [⚙] [启动]
+```
 
-![画廊](docs/assets/gallery.webp)
+- 启动后这一条锁定为 `运行中 / 停止 / 终端 / 打开界面`；
+- 上方永远保留一条新的空白启动条；
+- 运行中的 Case 收在下方，可折叠、按名称或启动时间排序；
+- 同设备默认只跑 1 个真实任务，其余排队；可在高级里强制并发（后续）；
+- 设备列表自动枚举（Apple MPS / NVIDIA CUDA / CPU），暂不做维护页；
+- 官方 Gradio 由实例里的 `gradio_app.py` 启动；Clover 常驻后端下一轮接入。
 
-![运行与进度](docs/assets/run.webp)
+## 视觉
 
-![诊断](docs/assets/diagnostics.webp)
+- 中性深灰亚克力，不用深蓝底、不用蓝色渐变；
+- 文字为冷调浅蓝白，浅蓝只做激活/焦点/少量图标；
+- 标题栏/侧栏薄亚克力，内容区后亚克力，卡片更薄；
+- 按钮/分段控件按 Fluent 2 收紧到 30–32 px、4–6 px 圆角，宽度随文字伸展；
+- 通知是一个大矩形，用标题/段落/发丝线分区，不再卡片套卡片；
+- 只保留深色主题，浅色主题已移除。
 
-![折叠侧栏](docs/assets/sidebar-collapsed.webp)
+![创作窗口](docs/assets/studio.webp)
+
+![终端窗口](docs/assets/terminal.webp)
+
+## OOBE
+
+启动时检查：至少一个实例满足 `runtime ready + 模型可用`。
+
+- 不满足 → 每次启动默认弹出单页三行清单：实例 / 运行时 / 模型；
+- 可关闭（本次跳过），下次启动仍不完整会再出现；
+- 每行直接给动作，不滥用圆角，不做多步向导。
+
+## 已有能力
+
+| 能力 | 状态 |
+| --- | --- |
+| 环境报告 / 网络镜像 / 公告更新 | ✅ |
+| git 实例（固定 commit、稳定版标记） | ✅ |
+| 共享/独立运行时 + 依赖安装 | ✅ |
+| 模型/适配器目录与 HF 缓存下载 | ✅ |
+| 创作台 + 官方 layout JSON 编译器 | ✅（生成下一轮） |
+| 画廊（分页 + content-visibility + clover 协议） | ✅ |
+| Supervisor + 薄 runner + tqdm/错误解析 + 诊断 | ✅（真实 27GB 权重待验收） |
+| 官方 Gradio 启动 | ✅ 代码路径，缺权重时预检拦截 |
+| xterm 终端 | ✅ |
+| Clover 常驻后端 / Project 持久化 / WebUI | ⏳ 下一轮 |
 
 ## 快速开始
-
-需要 Node 20+、pnpm 9+。首次启动会自动扫描环境，不会下载权重。
 
 ```bash
 pnpm install
@@ -65,70 +83,48 @@ pnpm dev
 pnpm build
 pnpm typecheck
 
-# 无窗口自检：环境 + 公告 + 目录
 env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smoke
 ```
 
-> 某些 CI / harness 会设置 `ELECTRON_RUN_AS_NODE=1`，此时 Electron 会以 Node 运行，
-> 需要像上面那样临时去掉。普通桌面环境不需要。
+> 部分 CI / harness 会设置 `ELECTRON_RUN_AS_NODE=1`，需要像上面那样临时去掉。
+> 开发数据在 `.dev-data/`（已忽略）。
 
-开发数据写在仓库内 `.dev-data/`（已忽略），不会碰真实用户目录。
+## 结构
 
-## 技术栈
-
-- **Electron 44 + TypeScript + React 19**，`electron-vite` 构建；
-- **UI：`@openai/apps-sdk-ui`**（MIT，Tailwind 4 + Radix 底座）+ 自定义蓝色 token；
-- 主进程：类型化 IPC + zod + 领域服务（env / network / git / runtimes / instances /
-  models / updates / gallery），当前 JSON 持久化，M4 换 SQLite；
-- 本地图片：`clover://` 自定义协议，只允许画廊根目录与首页背景；
-- 渲染层：Zustand + React Router；
-- Layout 编译器：按官方 `compile_prompt.py` 规则实现，见 [docs/layout-schema.md](docs/layout-schema.md)。
-
-## 仓库结构
-
-```
+```text
 apps/desktop/
-  src/main/          Electron 主进程 + 领域服务 + IPC + clover 协议
-                     （supervisor / parsers / diagnostics / gallery）
-  src/preload/       contextBridge（只暴露 invoke / on / acrylic）
+  src/main/
+    windows.ts          启动器 / 创作 / 终端三窗口
+    services/           env / git / runtimes / instances / models / gallery /
+                        supervisor / parsers / diagnostics / devices / cases / onboarding
+    ipc.ts              类型化 IPC + zod
+  src/preload/          contextBridge（windowKind / acrylic / channel）
   src/renderer/
-    src/pages/       Home / Studio / Gallery / Run / Diagnostics / Instances / InstanceDetail / Models / Settings
-    src/components/  layout / NotificationPanel / ui / ErrorBoundary
-    src/lib/         layout 编译器 / clover URL / api / format / i18n
-  src/shared/        types / channels / zod schemas
-runner/              薄 Python runner：官方 pipeline + NDJSON + simulate 自检
-release/             更新源：manifest.json、公告 README、模型目录、错误规则
-contracts/           协议与 schema（release / runner / job）
-docs/
-  product-design.md  产品设计文档
-  architecture.md    架构文档
-  status.md          M1–M3 与 UI v0.2 实现状态、实测
-  layout-schema.md   官方 layout JSON 调研与编译器规则
-  roadmap.md         里程碑
-  decisions/         ADR
-  assets/            UI 截图
-tools/budget.py      算力 / 显存预算工具
+    src/pages/          Home / Studio / Gallery / Terminal / Instances / Models / Diagnostics / Settings
+    src/components/     AppTitlebar / layout / NotificationPanel / Oobe / ui
+    src/lib/            layout 编译器 / clover / windows / api
+runner/                 薄 Python runner（NDJSON + simulate）
+release/                更新源、公告、模型目录、错误规则
+docs/                   产品、架构、状态、layout 规范、截图
 ```
 
 ## 文档
 
-- [产品设计](docs/product-design.md)：用户、界面、流程、错误策略、视觉规范；
-- [架构](docs/architecture.md)：进程模型、数据模型、git/运行时/下载/监督/解析/更新；
-- [实现状态](docs/status.md)：已完成、实测证据、与设计的差异、下一步；
-- [Layout 规范](docs/layout-schema.md)：草稿/编译两种坐标系、校验与官方对拍；
-- [路线图](docs/roadmap.md)：M0–M6 与验收标准；
-- [Runner 实现](runner/README.md)、[Runner 协议](contracts/runner-protocol.md)、[更新清单 schema](contracts/release-manifest.schema.json)。
+- [产品设计](docs/product-design.md)
+- [架构](docs/architecture.md)
+- [实现状态](docs/status.md)
+- [Layout JSON 规范](docs/layout-schema.md)
+- [Runner](runner/README.md)
+- [路线图](docs/roadmap.md)
 
-## 不做什么（V1）
+## 已知限制
 
-- **不做自有推理后端**：运行官方 Python 代码；引擎是 V2 的事，见
-  [ADR-0003](docs/decisions/0003-launcher-first.md) 与
-  [未来引擎架构](docs/future-inference-engine.md)。
-- 不做训练 UI（训练器以外部进程接入，见 [ADR-0002](docs/decisions/0002-trainer-backend.md)）。
-- 不做 img2img / 移动端 / 云账号。
+- Clover 常驻后端、Project 持久化、图层系统在下一轮；
+- 创作窗口的“开始生成”目前提示下一轮，不直接起任务；
+- Cases 与排队只在本次启动器会话内保存，重启丢失；
+- 官方 Gradio 真实启动需要 27 GB SFT 权重，本机未下载，未做真机验收；
+- Windows 未实机验证。
 
 ## 许可
 
-本仓库代码 MIT（见 [LICENSE](LICENSE)）。MOSS-Image 权重与代码为 Apache-2.0。
-参考实现（mlx-serve、moss-image-swift）为 MIT，只做行为对照。
-不包含 KohakuMossTrainer 代码。
+本仓库代码 MIT。MOSS-Image 权重与代码为 Apache-2.0；不包含 KohakuMossTrainer 代码。

@@ -13,7 +13,6 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import type { GalleryItem, InstanceInfo } from '@shared/types'
 import { cloverUrl } from '../lib/clover'
 import {
@@ -47,7 +46,6 @@ type DragState =
   | null
 
 export function StudioPage(): React.JSX.Element {
-  const navigate = useNavigate()
   const toast = useToast()
   const storedPrompt = useApp((state) => state.studioPrompt)
   const storedDraft = useApp((state) => state.studioDraft)
@@ -56,8 +54,6 @@ export function StudioPage(): React.JSX.Element {
   const setStudioBackground = useApp((state) => state.setStudioBackground)
   const instances = useApp((state) => state.instances)
   const env = useApp((state) => state.env)
-  const startJob = useApp((state) => state.startJob)
-  const [generating, setGenerating] = useState(false)
 
   const [prompt, setPrompt] = useState(storedPrompt)
   const [negative, setNegative] = useState('nsfw, worst quality, bad anatomy, watermark, jpeg artifact')
@@ -222,37 +218,8 @@ export function StudioPage(): React.JSX.Element {
     toast.push('布局 Prompt 已插入', 'success')
   }
 
-  async function generate(): Promise<void> {
-    if (!instanceId) {
-      toast.push('先创建一个实例并安装运行时，才能开始生成', 'error')
-      return
-    }
-    if (!prompt.trim()) {
-      toast.push('先写一段 Prompt，或点击“示例布局”', 'error')
-      return
-    }
-    setGenerating(true)
-    try {
-      const next = prompt.trim()
-      setStudioPrompt(next)
-      await startJob({
-        instanceId,
-        prompt: next,
-        negativePrompt: negative,
-        width: draft.width,
-        height: draft.height,
-        steps,
-        cfg,
-        seed,
-        profile: steps === 8 ? 'dmd8' : 'base',
-        mode: 'runner',
-      })
-      navigate('/run')
-    } catch (error) {
-      toast.push(error instanceof Error ? error.message : String(error), 'error')
-    } finally {
-      setGenerating(false)
-    }
+  function generate(): void {
+    toast.push('Clover 常驻后端下一轮接入；当前可以编译布局 JSON，或先在启动器启动官方 Gradio。', 'info')
   }
 
   return (
@@ -261,14 +228,14 @@ export function StudioPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">创作</h1>
           <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-            写提示词、框选布局，再编译成 MOSS 的 layout JSON。运行接入在 M4。
+            写提示词、框选布局，再编译成 MOSS 的 layout JSON。Clover 常驻后端下一轮接入；当前先把布局 JSON 编译好。
           </p>
         </div>
         <div className="flex items-center gap-2">
           {env ? <Pill tone="blue">{env.recommendation.width}² · {env.recommendation.steps} 步</Pill> : null}
-          <Button tone="primary" onClick={() => void generate()} disabled={generating}>
+          <Button tone="primary" onClick={generate}>
             <span className="inline-flex items-center gap-1.5">
-              {generating ? '提交中…' : '开始生成'} <ArrowRight className="size-3.5" />
+              开始生成 <ArrowRight className="size-3.5" />
             </span>
           </Button>
         </div>
@@ -285,13 +252,13 @@ export function StudioPage(): React.JSX.Element {
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="描述画面、文字、风格与布局。也可以粘贴编译后的 layout JSON。"
-              className="mt-2.5 h-40 w-full resize-none rounded-xl border border-[var(--color-border)] bg-white/55 px-3 py-2.5 text-[12px] leading-5 outline-none transition focus:border-accent-500 dark:bg-white/[0.04]"
+              className="mt-2.5 h-40 w-full resize-none rounded-[6px] border border-[var(--color-border)] bg-white/55 px-3 py-2.5 text-[12px] leading-5 outline-none transition focus:border-accent-500 dark:bg-white/[0.04]"
             />
             <label className="mt-3 block text-[10.5px] text-[var(--color-text-tertiary)]">负面提示词</label>
             <input
               value={negative}
               onChange={(event) => setNegative(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+              className="mt-1 w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
             />
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Button
@@ -348,7 +315,7 @@ export function StudioPage(): React.JSX.Element {
                   step={16}
                   value={draft.width}
                   onChange={(event) => changeSize(Number(event.target.value) || draft.width, draft.height)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                 />
               </label>
               <label className="space-y-1">
@@ -360,7 +327,7 @@ export function StudioPage(): React.JSX.Element {
                   step={16}
                   value={draft.height}
                   onChange={(event) => changeSize(draft.width, Number(event.target.value) || draft.height)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                 />
               </label>
             </div>
@@ -387,7 +354,7 @@ export function StudioPage(): React.JSX.Element {
                     step={0.5}
                     value={cfg}
                     onChange={(event) => setCfg(Number(event.target.value))}
-                    className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                    className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                   />
                 </label>
                 <label className="space-y-1">
@@ -396,7 +363,7 @@ export function StudioPage(): React.JSX.Element {
                     type="number"
                     value={seed}
                     onChange={(event) => setSeed(Number(event.target.value))}
-                    className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                    className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                   />
                 </label>
               </div>
@@ -405,7 +372,7 @@ export function StudioPage(): React.JSX.Element {
                 <select
                   value={instanceId}
                   onChange={(event) => setInstanceId(event.target.value)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                 >
                   {instances.length === 0 ? <option value="">尚未创建实例</option> : null}
                   {instances.map((instance: InstanceInfo) => (
@@ -463,7 +430,7 @@ export function StudioPage(): React.JSX.Element {
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
                 className={cn(
-                  'relative w-full select-none overflow-hidden rounded-lg border border-[var(--color-border)]',
+                  'relative w-full select-none overflow-hidden rounded-[5px] border border-[var(--color-border)]',
                   tool === 'draw' ? 'cursor-crosshair' : 'cursor-default',
                 )}
                 style={{ aspectRatio: `${draft.width} / ${draft.height}` }}
@@ -544,7 +511,7 @@ export function StudioPage(): React.JSX.Element {
             </div>
             <div className="mt-2 space-y-2">
               {draft.items.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-[11px] text-[var(--color-text-tertiary)]">
+                <div className="rounded-[5px] border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-[11px] text-[var(--color-text-tertiary)]">
                   还没有区域。用“画框”在画布上拖出一个矩形。
                 </div>
               ) : (
@@ -553,20 +520,20 @@ export function StudioPage(): React.JSX.Element {
                     key={item.id}
                     onClick={() => setSelectedId(item.id)}
                     className={cn(
-                      'rounded-xl border px-2.5 py-2 transition',
+                      'rounded-[6px] border px-2.5 py-2 transition',
                       item.id === selectedId
                         ? 'border-accent-400/60 bg-accent-500/[0.06]'
                         : 'border-[var(--color-border-subtle)] bg-white/35 dark:bg-white/[0.03]',
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex size-5 items-center justify-center rounded-md bg-accent-500/12 text-[10px] font-semibold text-accent-700 dark:text-accent-200">
+                      <span className="inline-flex size-5 items-center justify-center rounded-[4px] bg-accent-500/12 text-[10px] font-semibold text-accent-700 dark:text-accent-200">
                         {index + 1}
                       </span>
                       <select
                         value={item.label}
                         onChange={(event) => setItem(item.id, { label: event.target.value as LayoutLabel })}
-                        className="rounded-md border border-[var(--color-border)] bg-transparent px-1 py-0.5 text-[10.5px] outline-none"
+                        className="rounded-[4px] border border-[var(--color-border)] bg-transparent px-1 py-0.5 text-[10.5px] outline-none"
                       >
                         <option value="object">物体</option>
                         <option value="character">人物</option>
@@ -590,14 +557,14 @@ export function StudioPage(): React.JSX.Element {
                       value={item.caption}
                       onChange={(event) => setItem(item.id, { caption: event.target.value })}
                       placeholder="描述这个区域的外观、材质、动作…"
-                      className="mt-1.5 w-full rounded-md border border-[var(--color-border)] bg-white/45 px-2 py-1 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.03]"
+                      className="mt-1.5 w-full rounded-[4px] border border-[var(--color-border)] bg-white/45 px-2 py-1 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.03]"
                     />
                     {item.label === 'text' ? (
                       <input
                         value={item.text ?? ''}
                         onChange={(event) => setItem(item.id, { text: event.target.value })}
                         placeholder="要渲染的文字，可包含换行"
-                        className="mt-1 w-full rounded-md border border-amber-500/30 bg-amber-500/[0.05] px-2 py-1 text-[10.5px] outline-none focus:border-amber-500"
+                        className="mt-1 w-full rounded-[4px] border border-amber-500/30 bg-amber-500/[0.05] px-2 py-1 text-[10.5px] outline-none focus:border-amber-500"
                       />
                     ) : null}
                   </div>
@@ -622,7 +589,7 @@ export function StudioPage(): React.JSX.Element {
                   }))
                 }
                 placeholder="一句话描述整张图的场景、风格与构图。"
-                className="h-20 w-full resize-none rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-2 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                className="h-20 w-full resize-none rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-2 text-[11px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
               />
             </label>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -643,7 +610,7 @@ export function StudioPage(): React.JSX.Element {
                     }))
                   }
                   placeholder="poster, typography"
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                 />
               </label>
               <label className="space-y-1">
@@ -659,7 +626,7 @@ export function StudioPage(): React.JSX.Element {
                       },
                     }))
                   }
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
+                  className="w-full rounded-[5px] border border-[var(--color-border)] bg-white/55 px-2.5 py-1.5 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.04]"
                 >
                   <option value="single">single</option>
                   <option value="multi_panel">multi_panel</option>
@@ -667,7 +634,7 @@ export function StudioPage(): React.JSX.Element {
                 </select>
               </label>
             </div>
-            <Button tone="primary" className="mt-3 w-full" onClick={compile}>
+            <Button tone="primary" className="mt-3" onClick={compile}>
               <span className="inline-flex items-center gap-1.5">
                 <SquareDashedMousePointer className="size-3.5" /> 编译布局 Prompt
               </span>
@@ -708,7 +675,7 @@ export function StudioPage(): React.JSX.Element {
           </>
         }
       >
-        <pre className="max-h-[46vh] overflow-auto rounded-xl bg-white/55 p-3 font-mono text-[10.5px] leading-5 dark:bg-black/30">
+        <pre className="max-h-[46vh] overflow-auto rounded-[6px] bg-white/55 p-3 font-mono text-[10.5px] leading-5 dark:bg-black/30">
           {compiled?.preview ?? ''}
         </pre>
         {compiled?.errors.length ? (

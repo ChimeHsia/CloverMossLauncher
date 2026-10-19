@@ -11,16 +11,21 @@ import type {
   JobLogLine,
   JobRecord,
   JobStartInput,
+  LaunchCase,
+  LaunchDevice,
+  LaunchRow,
+  LaunchStartInput,
+  OnboardingStatus,
   Settings,
   UpdateState,
 } from '@shared/types'
 import type { LayoutDraft } from './lib/layout'
 import { call, onEvent } from './lib/api'
 
-function applyTheme(theme: Settings['theme']): void {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  const dark = theme === 'dark' || (theme === 'system' && prefersDark)
-  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+function applyTheme(_theme?: Settings['theme']): void {
+  // UI v0.3 is dark-gray only. The setting stays in the schema for migration,
+  // but the shell always renders the Fluent dark acrylic surface.
+  document.documentElement.dataset.theme = 'dark'
 }
 
 interface RuntimeLogEvent {
@@ -44,6 +49,10 @@ interface AppStore {
   activeJobId: string | null
   jobLogs: Record<string, JobLogLine[]>
   diagnostics: Diagnostic[]
+  devices: LaunchDevice[]
+  cases: LaunchCase[]
+  launchRows: LaunchRow[]
+  onboarding: OnboardingStatus | null
   notifications: AppNotification[]
   notificationsOpen: boolean
   studioPrompt: string
@@ -82,9 +91,40 @@ interface AppStore {
   refreshDiagnostics: () => Promise<void>
   dismissDiagnostic: (id: string) => Promise<void>
   clearDiagnostics: () => Promise<void>
+  refreshDevices: () => Promise<void>
+  refreshCases: () => Promise<void>
+  refreshOnboarding: () => Promise<void>
+  startLaunch: (input: LaunchStartInput) => Promise<LaunchRow>
+  stopLaunch: (rowId: string) => Promise<void>
+  startNextQueued: (deviceId: string) => Promise<void>
 }
 
 let subscribed = false
+
+function upsertLaunch(list: LaunchRow[], row: LaunchRow): LaunchRow[] {
+  return [row, ...list.filter((item) => item.id !== row.id)]
+}
+
+async function startOfficialJob(row: LaunchRow): Promise<JobRecord> {
+  return call<JobRecord>(Ipc.jobStart, {
+    instanceId: row.instanceId,
+    caseId: row.caseId,
+    caseName: row.caseName,
+    backend: row.backend,
+    deviceId: row.deviceId,
+    prompt: '',
+    negativePrompt: '',
+    width: 1024,
+    height: 1024,
+    steps: row.profile === 'dmd8' ? 8 : 50,
+    cfg: row.profile === 'dmd8' ? 1 : 3,
+    seed: Math.floor(Math.random() * 4294967295),
+    profile: row.profile,
+    port: row.port,
+    extraArgs: row.extraArgs,
+    mode: 'gradio',
+  })
+}
 
 function upsertJob(list: JobRecord[], job: JobRecord): JobRecord[] {
   return [job, ...list.filter((item) => item.id !== job.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
@@ -131,6 +171,30 @@ export const useApp = create<AppStore>((set, get) => {
         jobs: upsertJob(state.jobs, job),
         activeJobId: state.activeJobId ?? job.id,
       }))
+      const launchRow = get().launchRows.find((row) => row.jobId === job.id)
+      if (launchRow) {
+        const nextState =
+          job.state === 'succeeded' || job.state === 'canceled'
+            ? 'stopped'
+            : job.state === 'failed'
+              ? 'failed'
+              : job.state === 'starting'
+                ? 'starting'
+                : 'running'
+        set((state) => ({
+          launchRows: state.launchRows.map((row) =>
+            row.id === launchRow.id
+              ? { ...row, state: nextState, error: job.error?.message ?? row.error }
+              : row,
+          ),
+        }))
+        if (nextState === 'stopped' || nextState === 'failed') {
+          setTimeout(() => {
+            void get().startNextQueued(launchRow.deviceId)
+          }, 150)
+        }
+      }
+
       if (job.state === 'succeeded' && previous?.state !== 'succeeded') {
         get().pushNotification({
           tone: 'success',
@@ -204,6 +268,10 @@ export const useApp = create<AppStore>((set, get) => {
     activeJobId: null,
     jobLogs: {},
     diagnostics: [],
+    devices: [],
+    cases: [],
+    launchRows: [],
+    onboarding: null,
     notifications: [],
     notificationsOpen: true,
     studioPrompt: '',
@@ -225,15 +293,19 @@ export const useApp = create<AppStore>((set, get) => {
         set({ settings })
         subscribe()
 
-        const [env, updates, instances, catalog, downloads, jobs, diagnostics] = await Promise.allSettled([
-          call<EnvReport>(Ipc.envScan),
-          call<UpdateState>(Ipc.updatesCheck),
-          call<InstanceInfo[]>(Ipc.instancesList),
-          call<Catalog>(Ipc.modelsCatalog),
-          call<DownloadTask[]>(Ipc.downloadsList),
-          call<JobRecord[]>(Ipc.jobList),
-          call<Diagnostic[]>(Ipc.diagnosticsList),
-        ])
+        const [env, updates, instances, catalog, downloads, jobs, diagnostics, devices, cases, onboarding] =
+          await Promise.allSettled([
+            call<EnvReport>(Ipc.envScan),
+            call<UpdateState>(Ipc.updatesCheck),
+            call<InstanceInfo[]>(Ipc.instancesList),
+            call<Catalog>(Ipc.modelsCatalog),
+            call<DownloadTask[]>(Ipc.downloadsList),
+            call<JobRecord[]>(Ipc.jobList),
+            call<Diagnostic[]>(Ipc.diagnosticsList),
+            call<LaunchDevice[]>(Ipc.devicesList),
+            call<LaunchCase[]>(Ipc.casesList),
+            call<OnboardingStatus>(Ipc.onboardingStatus),
+          ])
         set({
           env: env.status === 'fulfilled' ? env.value : null,
           updates: updates.status === 'fulfilled' ? updates.value : null,
@@ -242,6 +314,9 @@ export const useApp = create<AppStore>((set, get) => {
           downloads: downloads.status === 'fulfilled' ? downloads.value : [],
           jobs: jobs.status === 'fulfilled' ? jobs.value : [],
           diagnostics: diagnostics.status === 'fulfilled' ? diagnostics.value : [],
+          devices: devices.status === 'fulfilled' ? devices.value : [],
+          cases: cases.status === 'fulfilled' ? cases.value : [],
+          onboarding: onboarding.status === 'fulfilled' ? onboarding.value : null,
           activeJobId:
             jobs.status === 'fulfilled'
               ? (jobs.value.find((job) => job.state === 'running' || job.state === 'starting')?.id ?? null)
@@ -437,6 +512,130 @@ export const useApp = create<AppStore>((set, get) => {
     async clearDiagnostics() {
       await call(Ipc.diagnosticsClear)
       set({ diagnostics: [] })
+    },
+
+    async refreshDevices() {
+      try {
+        set({ devices: await call<LaunchDevice[]>(Ipc.devicesList) })
+      } catch {
+        // keep previous
+      }
+    },
+
+    async refreshCases() {
+      try {
+        set({ cases: await call<LaunchCase[]>(Ipc.casesList) })
+      } catch {
+        // keep previous
+      }
+    },
+
+    async refreshOnboarding() {
+      try {
+        set({ onboarding: await call<OnboardingStatus>(Ipc.onboardingStatus) })
+      } catch {
+        // keep previous
+      }
+    },
+
+    async startLaunch(input) {
+      if (input.backend === 'clover') {
+        throw new Error('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio，或打开创作窗口。')
+      }
+      const instance = get().instances.find((item) => item.id === input.instanceId)
+      if (!instance) throw new Error('实例不存在')
+      const row: LaunchRow = {
+        id: `launch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        caseId: input.caseId,
+        caseName: input.caseName?.trim() || `${instance.name} · 官方`,
+        instanceId: instance.id,
+        instanceName: instance.name,
+        backend: input.backend,
+        deviceId: input.deviceId,
+        profile: input.profile,
+        port: input.port,
+        extraArgs: input.extraArgs,
+        state: 'queued',
+        queuedAt: new Date().toISOString(),
+      }
+      const busy =
+        get().launchRows.some(
+          (item) =>
+            item.deviceId === input.deviceId &&
+            (item.state === 'queued' || item.state === 'starting' || item.state === 'running'),
+        ) ||
+        get().jobs.some(
+          (job) =>
+            job.deviceId === input.deviceId &&
+            (job.state === 'starting' || job.state === 'running'),
+        )
+
+      if (busy) {
+        const queued = { ...row, state: 'queued' as const }
+        set((state) => ({ launchRows: upsertLaunch(state.launchRows, queued) }))
+        return queued
+      }
+
+      const starting: LaunchRow = { ...row, state: 'starting', startedAt: new Date().toISOString() }
+      set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
+      try {
+        const job = await startOfficialJob(starting)
+        const next = { ...starting, jobId: job.id }
+        set((state) => ({ launchRows: upsertLaunch(state.launchRows, next) }))
+        return next
+      } catch (error) {
+        const failed: LaunchRow = {
+          ...starting,
+          state: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        }
+        set((state) => ({ launchRows: upsertLaunch(state.launchRows, failed) }))
+        throw error
+      }
+    },
+
+    async stopLaunch(rowId) {
+      const row = get().launchRows.find((item) => item.id === rowId)
+      if (!row) return
+      if (row.jobId) {
+        await call(Ipc.jobCancel, { id: row.jobId })
+        set((state) => ({
+          launchRows: state.launchRows.map((item) =>
+            item.id === row.id ? { ...item, state: 'stopped' } : item,
+          ),
+        }))
+      } else {
+        set((state) => ({ launchRows: state.launchRows.filter((item) => item.id !== row.id) }))
+        void get().startNextQueued(row.deviceId)
+      }
+    },
+
+    async startNextQueued(deviceId) {
+      const rows = get().launchRows
+      if (rows.some((row) => row.deviceId === deviceId && (row.state === 'starting' || row.state === 'running'))) {
+        return
+      }
+      const next = rows
+        .filter((row) => row.deviceId === deviceId && row.state === 'queued')
+        .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))[0]
+      if (!next) return
+      const starting: LaunchRow = { ...next, state: 'starting', startedAt: new Date().toISOString() }
+      set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
+      try {
+        const job = await startOfficialJob(starting)
+        set((state) => ({
+          launchRows: upsertLaunch(state.launchRows, { ...starting, jobId: job.id }),
+        }))
+      } catch (error) {
+        set((state) => ({
+          launchRows: upsertLaunch(state.launchRows, {
+            ...starting,
+            state: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        }))
+        void get().startNextQueued(deviceId)
+      }
     },
   }
 })

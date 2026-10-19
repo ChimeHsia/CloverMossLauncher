@@ -152,6 +152,7 @@ function envFor(job: JobRecord): NodeJS.ProcessEnv {
     HF_HUB_CACHE: join(paths.models(getSettings().modelsRoot), 'hf', 'hub'),
     CLOVER_JOB_ID: job.id,
     CLOVER_INSTANCE_ID: job.instanceId,
+    ...(job.deviceId?.startsWith('cuda:') ? { CUDA_VISIBLE_DEVICES: job.deviceId.slice(5) } : {}),
   }
 }
 
@@ -389,6 +390,10 @@ function handleLine(job: JobRecord, runningJob: RunningJob, stream: 'stdout' | '
 
 export interface StartJobInput {
   instanceId: string
+  caseId?: string
+  caseName?: string
+  backend?: 'official' | 'clover'
+  deviceId?: string
   prompt: string
   negativePrompt?: string
   width: number
@@ -398,6 +403,8 @@ export interface StartJobInput {
   seed: number
   profile?: 'base' | 'dmd8'
   mode?: 'runner' | 'gradio' | 'simulate'
+  port?: number | null
+  extraArgs?: string
 }
 
 export async function startJob(input: StartJobInput): Promise<JobRecord> {
@@ -457,6 +464,10 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     id: `job-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}`,
     instanceId: instance.id,
     instanceName: instance.name,
+    caseId: input.caseId,
+    caseName: input.caseName,
+    backend: input.backend,
+    deviceId: input.deviceId,
     mode,
     state: 'starting',
     stage: 'idle',
@@ -491,7 +502,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
         profile: params.profile,
         adapters: params.adapters ?? [],
         output_dir: outputDir,
-        device: 'mps',
+        device: input.deviceId ?? (process.platform === 'darwin' ? 'mps' : 'cpu'),
         dtype: 'float16',
         options: { vae_tiling: true, attention_slicing: false },
       },
@@ -504,9 +515,10 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   let command: string
   let args: string[]
   if (mode === 'gradio') {
-    const port = await freePort()
+    const port = input.port ?? (await freePort())
     command = python
     args = [join(instance.path, 'gradio_app.py'), '--host', '127.0.0.1', '--port', String(port)]
+    if (input.extraArgs?.trim()) args.push(...input.extraArgs.trim().split(/\s+/))
   } else {
     command = python
     args = [runnerScript(), '--job', jobFile, ...(mode === 'simulate' ? ['--simulate'] : [])]

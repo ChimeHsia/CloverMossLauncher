@@ -12,6 +12,8 @@
     "smoke": "electron . --smoke"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

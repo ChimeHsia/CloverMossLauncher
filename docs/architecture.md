@@ -1,7 +1,7 @@
 # 架构文档 · CloverMoss Launcher
 
-- 版本：v0.2（2026-10-19）
-- 状态：M1–M4 基础已落地；实现差异与验收边界见 [status.md](status.md)
+- 版本：v0.3（2026-10-19）
+- 状态：三窗口 UI + M1–M4 基础已落地；实现差异与验收边界见 [status.md](status.md)
 - 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---
@@ -49,6 +49,19 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 - WebUI 模式复用同一服务层，只是把 IPC 换成 HTTP/SSE；
 - 子进程统一经 `supervisor`，禁止业务代码直接 `child_process.spawn`。
 
+### 2.1 三窗口
+
+```
+LauncherWindow  首页（启动条 + 运行栈）/ 实例 / 模型 / 诊断 / 设置 / OOBE
+CreatorWindow   Studio / 画布 / layout JSON / 画廊
+TerminalWindow  Case 列表 + xterm（stdout/stderr/stdin）
+```
+
+- 同一套 renderer bundle，preload 通过 `--clover-window=<kind>` 暴露 `windowKind`；
+- `src/main/windows.ts` 负责创建/单例/聚焦；标题栏统一居中 `CloverMoss` + `dev/release` + 版本；
+- 启动器关闭不结束终端/创作；`window-all-closed` 按平台处理；
+- 后续 WebUI 复用同一批 `/studio`、`/gallery` 路由。
+
 ## 3. 代码结构（monorepo）
 
 ```
@@ -56,12 +69,13 @@ apps/desktop/
   electron.vite.config.ts
   src/main/           Electron 主进程 + 领域服务 + IPC
     services/         env / network / git / runtimes / instances / models / updates / gallery /
-                      supervisor / parsers / diagnostics
+                      supervisor / parsers / diagnostics / devices / cases / onboarding
+    windows.ts        启动器 / 创作 / 终端三窗口
     lib/              paths / run / events
   src/preload/        contextBridge（只暴露 invoke / on / acrylic）
   src/renderer/       React 19 + Tailwind 4 + Apps SDK UI
-    src/pages/        Home / Studio / Gallery / Run / Diagnostics / Instances / InstanceDetail / Models / Settings
-    src/components/   layout / NotificationPanel / ui / ErrorBoundary
+    src/pages/        Home / Studio / Gallery / Terminal / Diagnostics / Instances / InstanceDetail / Models / Settings
+    src/components/   AppTitlebar / layout / NotificationPanel / Oobe / ui / ErrorBoundary
     src/lib/          layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
     src/store.ts      Zustand（含通知、创作草稿、画廊底图）
   src/shared/         types / channels / zod schemas
@@ -351,7 +365,16 @@ python gradio_app.py --host 127.0.0.1 --port <free> --model <local bundle>
 
 详见 [layout-schema.md](layout-schema.md)。
 
-### 9.6 当前实现（M4）
+### 9.6 启动条、Case 与设备
+
+- `devices.ts`：自动枚举 MPS / CUDA / CPU；暂不做维护页；
+- `cases.ts`：`cases.json` 保存实例 + 后端 + 设备 + 档位 + 端口/参数；
+- 启动条：`Case / 后端 / 实例 / 设备 / 档位 / 高级 / 启动`；运行后锁定为停止/终端；
+- 队列：渲染层按设备维护，默认同设备 1 个真实任务；重启丢失（下一轮落盘）；
+- 官方 Gradio：`gradio_app.py --host 127.0.0.1 --port <port>`，URL readiness；
+- Clover 后端：占位，下一轮常驻 HTTP/WS。
+
+### 9.7 当前实现（M4）
 
 - `services/supervisor.ts`：`jobs:start/cancel/list/get/input/logs`、job.json、180 s readiness、
   stdin 取消 → 5 s 强杀、进程组 kill、JSON 持久化；
@@ -548,7 +571,8 @@ window.clover = {
 | M1 | Electron 壳 + 首页 + 环境报告 | ✅ 已实现，macOS arm64 实测 |
 | M2 | git 镜像 + 实例 + 运行时 | ✅ 基础完成；托管 Python / 更新 UI 待补 |
 | M3 | 模型/适配器 + 下载队列 | ✅ 下载与 HF 缓存实测；绑定 UI 待补 |
-| UI v0.2 | 亚克力/折叠侧栏/通知/画廊/创作台/标注器 | ✅ 已实现；生成接入 M4 |
+| UI v0.2 | 亚克力/折叠侧栏/通知/画廊/创作台/标注器 | ✅ 已实现 |
+| UI v0.3 | 三窗口 + 启动条/运行栈 + OOBE + 终端 + Fluent 深灰 | ✅ 已实现；Clover 后端下一轮 |
 | M4 | Supervisor + runner + 解析 + 诊断 | ✅ 基础完成（simulate/取消/解析实测；真实权重待验收） |
 | M5 | Gradio + WebUI + 更新/公告 | 计划 |
 | M6 | 打包、公证、Windows、Beta | 计划 |

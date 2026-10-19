@@ -1,382 +1,475 @@
 import {
-  ArrowRight,
-  BookOpen,
-  Boxes,
-  ChevronRight,
-  Image as ImageIcon,
-  LayoutGrid,
-  Sparkles,
-  Type,
-  UserRound,
+  ChevronDown,
+  CircleDot,
+  ExternalLink,
+  FolderCog,
+  Layers3,
+  Play,
+  Settings2,
+  Square,
+  SquareTerminal,
   Wand2,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
-import type { GalleryItem, GalleryPage } from '@shared/types'
+import type { LaunchCase, LaunchRow, LaunchStartInput } from '@shared/types'
 import { call } from '../lib/api'
-import { cloverUrl } from '../lib/clover'
-import { relative } from '../lib/format'
-import { exampleDraft, type LayoutDraft } from '../lib/layout'
+import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, StatusDot, cn } from '../components/ui'
+import { Button, Card, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
 
-interface Tutorial {
-  id: string
-  title: string
-  description: string
-  tag: 'Layout' | 'Prompt'
-  icon: React.ReactNode
-  prompt: string
-  draft: LayoutDraft | null
+function Field({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: React.ReactNode
+  className?: string
+}): React.JSX.Element {
+  return (
+    <label className={cn('flex min-w-0 flex-col gap-1', className)}>
+      <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+        {label}
+      </span>
+      {children}
+    </label>
+  )
 }
 
-const characterDraft: LayoutDraft = {
-  width: 1024,
-  height: 1024,
-  summary: {
-    caption:
-      'An anime-style illustration of a girl in a navy school uniform standing in a sunlit classroom, with rows of wooden desks and large windows.',
-    meta: ['illustration', 'anime'],
-    canvas: 'single',
-  },
-  items: [
-    {
-      id: 'character-1',
-      label: 'character',
-      caption:
-        'A girl with shoulder-length dark hair, navy sailor uniform and a red ribbon, standing and looking toward the camera, soft rim light.',
-      bbox: [352, 192, 672, 896],
-    },
-    {
-      id: 'background-1',
-      label: 'object',
-      caption:
-        'A sunlit Japanese classroom: rows of wooden desks, a large blackboard, large windows with white curtains and warm afternoon light.',
-      bbox: [0, 0, 1024, 1024],
-    },
-  ],
+function Select({
+  value,
+  onChange,
+  children,
+  disabled,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  children: React.ReactNode
+  disabled?: boolean
+  className?: string
+}): React.JSX.Element {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      className={cn(
+        'h-8 max-w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] text-[var(--color-text)] outline-none transition',
+        'hover:border-[var(--color-border)] focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/20',
+        'disabled:cursor-default disabled:opacity-55',
+        className,
+      )}
+    >
+      {children}
+    </select>
+  )
 }
 
-const tutorials: Tutorial[] = [
-  {
-    id: 'poster',
-    title: '海报排版：标题 + 副标题',
-    description: '用两个文字框分别控制标题与正文的位置、字号和颜色。',
-    tag: 'Layout',
-    icon: <LayoutGrid className="size-4" />,
-    prompt: 'A minimalist travel poster with a cream background and a blue mountain illustration.',
-    draft: exampleDraft(),
-  },
-  {
-    id: 'character',
-    title: '人物构图：人物 + 背景',
-    description: '把人物与场景拆成两个区域，各自描述外观与光线。',
-    tag: 'Layout',
-    icon: <UserRound className="size-4" />,
-    prompt: 'An anime-style illustration of a girl standing in a sunlit classroom.',
-    draft: characterDraft,
-  },
-  {
-    id: 'text',
-    title: '文字渲染：招牌与营业时间',
-    description: '把要显示的文字原样写进 prompt，用引号和换行控制排版。',
-    tag: 'Prompt',
-    icon: <Type className="size-4" />,
-    prompt:
-      'A cozy ramen shop at night. A wooden sign above the door reads "麺" in warm white neon; a small chalkboard says "営業中\n18:00 - 02:00".',
-    draft: null,
-  },
-]
+const stateLabel: Record<LaunchRow['state'], string> = {
+  queued: '排队中',
+  starting: '启动中',
+  running: '运行中',
+  stopped: '已停止',
+  failed: '失败',
+}
+
+const stateTone: Record<LaunchRow['state'], 'neutral' | 'accent' | 'amber' | 'red'> = {
+  queued: 'neutral',
+  starting: 'amber',
+  running: 'accent',
+  stopped: 'neutral',
+  failed: 'red',
+}
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
-  const env = useApp((state) => state.env)
+  const toast = useToast()
   const instances = useApp((state) => state.instances)
-  const settings = useApp((state) => state.settings)
-  const updates = useApp((state) => state.updates)
-  const setStudioPrompt = useApp((state) => state.setStudioPrompt)
-  const setStudioDraft = useApp((state) => state.setStudioDraft)
-  const [heroPrompt, setHeroPrompt] = useState('')
-  const [recent, setRecent] = useState<GalleryItem[]>([])
+  const devices = useApp((state) => state.devices)
+  const cases = useApp((state) => state.cases)
+  const launchRows = useApp((state) => state.launchRows)
+  const env = useApp((state) => state.env)
+  const startLaunch = useApp((state) => state.startLaunch)
+  const stopLaunch = useApp((state) => state.stopLaunch)
+  const setActiveJob = useApp((state) => state.setActiveJob)
+  const refreshCases = useApp((state) => state.refreshCases)
+  const notificationsOpen = useApp((state) => state.notificationsOpen)
+
+  const [caseId, setCaseId] = useState('new')
+  const [backend, setBackend] = useState<'official' | 'clover'>('official')
+  const [instanceId, setInstanceId] = useState('')
+  const [deviceId, setDeviceId] = useState('')
+  const [profile, setProfile] = useState<'base' | 'dmd8'>(
+    env?.recommendation.profile === 'base' ? 'base' : 'dmd8',
+  )
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [caseName, setCaseName] = useState('')
+  const [port, setPort] = useState('')
+  const [extraArgs, setExtraArgs] = useState('')
+  const [launching, setLaunching] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const [sort, setSort] = useState<'started' | 'name'>('started')
 
   useEffect(() => {
-    let cancelled = false
-    void call<GalleryPage>(Ipc.galleryList, { limit: 4 })
-      .then((page) => {
-        if (!cancelled) setRecent(page.items)
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
+    if (!instanceId && instances[0]) setInstanceId(instances[0].id)
+  }, [instanceId, instances])
+
+  useEffect(() => {
+    if (!deviceId && devices[0]) setDeviceId(devices[0].id)
+  }, [deviceId, devices])
+
+  const selectedCase = cases.find((item) => item.id === caseId)
+  const instance = instances.find((item) => item.id === instanceId)
+  const device = devices.find((item) => item.id === deviceId)
+
+  useEffect(() => {
+    if (!selectedCase) return
+    setBackend(selectedCase.backend)
+    setInstanceId(selectedCase.instanceId)
+    setDeviceId(selectedCase.deviceId)
+    setProfile(selectedCase.profile)
+    setCaseName(selectedCase.name)
+    setPort(selectedCase.port ? String(selectedCase.port) : '')
+    setExtraArgs(selectedCase.extraArgs ?? '')
+  }, [selectedCase])
+
+  const activeRows = useMemo(() => {
+    const rows = launchRows.filter((row) => row.state === 'queued' || row.state === 'starting' || row.state === 'running')
+    return rows.sort((a, b) => {
+      if (sort === 'name') return a.caseName.localeCompare(b.caseName)
+      return (b.startedAt ?? b.queuedAt).localeCompare(a.startedAt ?? a.queuedAt)
+    })
+  }, [launchRows, sort])
+
+  async function launch(): Promise<void> {
+    if (!instanceId) {
+      toast.push('先创建一个实例，再选择它', 'error')
+      return
     }
-  }, [])
-
-  function startStudio(prompt: string, draft: LayoutDraft | null = null): void {
-    setStudioPrompt(prompt)
-    setStudioDraft(draft)
-    navigate('/studio')
+    if (!deviceId) {
+      toast.push('没有可用设备', 'error')
+      return
+    }
+    if (backend === 'clover') {
+      toast.push('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio', 'info')
+      return
+    }
+    setLaunching(true)
+    try {
+      const input: LaunchStartInput = {
+        instanceId,
+        caseId: selectedCase?.id,
+        caseName: caseName || selectedCase?.name,
+        backend,
+        deviceId,
+        profile,
+        port: port ? Number(port) : null,
+        extraArgs,
+      }
+      const row = await startLaunch(input)
+      if (row.state === 'queued') {
+        toast.push(`设备被占用，已排队：${row.caseName}`, 'info')
+      } else {
+        toast.push(`已启动 ${row.caseName}`, 'success')
+      }
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setLaunching(false)
+    }
   }
 
-  function startTutorial(tutorial: Tutorial): void {
-    startStudio(tutorial.prompt, tutorial.draft)
+  async function saveCase(): Promise<void> {
+    if (!instanceId) return
+    try {
+      await call(Ipc.casesSave, {
+        id: selectedCase?.id,
+        name: caseName.trim() || `${instance?.name ?? 'MOSS'} · ${backend === 'official' ? '官方' : 'Clover'}`,
+        instanceId,
+        backend,
+        deviceId,
+        profile,
+        port: port ? Number(port) : null,
+        extraArgs,
+      })
+      await refreshCases()
+      toast.push('启动配置已保存', 'success')
+      setAdvancedOpen(false)
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    }
   }
 
-  const background = settings?.homeBackground
+  function openTerminal(row: LaunchRow): void {
+    if (row.jobId) setActiveJob(row.jobId)
+    openWindow('terminal')
+  }
 
   return (
-    <div className="space-y-4">
-      <section className="relative overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] shadow-[0_18px_50px_-24px_rgba(37,99,235,0.35)]">
-        {background ? (
-          <img
-            src={cloverUrl(background)}
-            alt=""
-            className="absolute inset-0 size-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(900px_420px_at_10%_-10%,#dbeafe_0%,transparent_60%),radial-gradient(700px_400px_at_100%_120%,#e0ecff_0%,transparent_58%),linear-gradient(135deg,#f8fbff_0%,#eef5ff_60%,#f7faff_100%)] dark:bg-[radial-gradient(900px_420px_at_10%_-10%,#17305a_0%,transparent_60%),radial-gradient(700px_400px_at_100%_120%,#112240_0%,transparent_58%),linear-gradient(135deg,#070c15_0%,#0b1424_60%,#070c15_100%)]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/70 to-white/20 dark:from-[#070c15]/92 dark:via-[#070c15]/72 dark:to-transparent" />
+    <div className={cn('pb-16 transition-[padding] duration-200', notificationsOpen && 'pr-[352px]')}>
+      <header className="pt-4">
+        <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+          <CircleDot className="size-3 text-accent-300" />
+          Launcher
+        </div>
+        <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.02em]">
+          今天想启动哪个 Case？
+        </h1>
+        <p className="mt-1.5 max-w-[560px] text-[12px] leading-5 text-[var(--color-text-secondary)]">
+          选择后端、实例与设备，启动官方 Gradio 或你自己的 Clover Case；运行中的任务会收在下面。
+        </p>
+      </header>
 
-        <div className="relative z-10 px-7 py-7">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone="blue">
-              <Sparkles className="size-3" /> CloverMoss · MOSS-Image
-            </Pill>
-            {updates?.updateAvailable ? <Pill tone="blue">v{updates.latestVersion} 可用</Pill> : null}
-            {env ? (
-              <Pill tone="neutral">
-                {env.gpu.name} · {Math.round(env.device.memoryTotal / 1024 ** 3)} GB
-              </Pill>
-            ) : null}
-          </div>
-
-          <h1 className="mt-4 max-w-[560px] text-[30px] font-semibold leading-[1.2] tracking-tight">
-            今天想在 Moss 中
-            <span className="text-accent-600 dark:text-accent-300">画点什么？</span>
-          </h1>
-          <p className="mt-2 max-w-[540px] text-[12.5px] leading-6 text-[var(--color-text-secondary)]">
-            写一个画面、一段文字排版，或者用框选把人物和标题放到准确的位置。
-          </p>
-
-          <div className="mt-4 flex max-w-[560px] items-end gap-2 rounded-2xl border border-white/70 bg-white/70 p-2 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06]">
-            <textarea
-              value={heroPrompt}
-              onChange={(event) => setHeroPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  startStudio(heroPrompt)
-                }
+      <Card className="relative mt-6 p-4">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <Field label="Case" className="min-w-[130px]">
+            <Select
+              value={caseId}
+              onChange={(value) => {
+                setCaseId(value)
+                if (value === 'new') setCaseName('')
               }}
-              rows={2}
-              placeholder="例如：雨夜修表店，橱窗里有一只猫，招牌写着 REPAIR…"
-              className="min-h-[48px] min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-[12.5px] leading-5 outline-none placeholder:text-[var(--color-text-tertiary)]"
-            />
-            <Button tone="primary" className="shrink-0" onClick={() => startStudio(heroPrompt)}>
+            >
+              <option value="new">新建启动配置</option>
+              {cases.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="后端" className="min-w-[105px]">
+            <Select
+              value={backend}
+              onChange={(value) => setBackend(value as 'official' | 'clover')}
+              disabled={Boolean(selectedCase)}
+            >
+              <option value="official">官方 Gradio</option>
+              <option value="clover">Clover Case（下一轮）</option>
+            </Select>
+          </Field>
+
+          <Field label="实例" className="min-w-[150px]">
+            <Select
+              value={instanceId}
+              onChange={setInstanceId}
+              disabled={Boolean(selectedCase) || instances.length === 0}
+            >
+              {instances.length === 0 ? <option value="">没有实例</option> : null}
+              {instances.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="设备" className="min-w-[130px]">
+            <Select value={deviceId} onChange={setDeviceId} disabled={Boolean(selectedCase)}>
+              {devices.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="档位" className="min-w-[100px]">
+            <Select
+              value={profile}
+              onChange={(value) => setProfile(value as 'base' | 'dmd8')}
+              disabled={Boolean(selectedCase)}
+            >
+              <option value="dmd8">8 步 DMD</option>
+              <option value="base">50 步质量</option>
+            </Select>
+          </Field>
+
+          <div className="ml-auto flex items-center gap-1">
+            <IconButton
+              label="打开实例设置"
+              className="size-8"
+              onClick={() => instanceId && navigate(`/instances/${instanceId}`)}
+              disabled={!instanceId}
+            >
+              <Settings2 className="size-3.5" />
+            </IconButton>
+            <IconButton
+              label="高级选项"
+              className={cn('size-8', advancedOpen && 'bg-white/[0.07] text-[var(--color-text)]')}
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              <FolderCog className="size-3.5" />
+            </IconButton>
+            <Button tone="primary" onClick={() => void launch()} disabled={launching || !instanceId || !deviceId}>
               <span className="inline-flex items-center gap-1.5">
-                进入创作 <ArrowRight className="size-3.5" />
+                {launching ? <Spinner className="size-3.5" /> : <Play className="size-3.5" />}
+                {launching ? '启动中' : '启动'}
               </span>
             </Button>
           </div>
+        </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[10.5px] text-[var(--color-text-tertiary)]">试试：</span>
-            {tutorials.map((tutorial) => (
-              <button
-                key={tutorial.id}
-                type="button"
-                onClick={() => startTutorial(tutorial)}
-                className="rounded-full border border-white/70 bg-white/55 px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] backdrop-blur-md transition hover:border-accent-400/50 hover:text-accent-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:text-accent-200"
-              >
-                {tutorial.title.split('：')[0]}
-              </button>
-            ))}
-            {env ? (
-              <span className="ml-auto text-[10.5px] text-[var(--color-text-tertiary)]">
-                推荐 {env.recommendation.width}² · {env.recommendation.steps} 步 · {env.recommendation.quant}
-              </span>
-            ) : null}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9.5px] text-[var(--color-text-tertiary)]">
+          <span>{device ? `${device.name} · ${device.detail}` : '没有可用设备'}</span>
+          {instance ? <span>固定 {instance.shortCommit}</span> : null}
+          {env ? <span>推荐 {env.recommendation.width}² · {env.recommendation.steps} 步</span> : null}
+          <span className="ml-auto">新的启动条会永远置顶，运行中的 Case 收在下面。</span>
+        </div>
+
+        {advancedOpen ? (
+          <div className="mt-3 border-t border-[var(--color-border-subtle)] pt-3">
+            <div className="flex flex-wrap items-end gap-2.5">
+              <Field label="Case 名称" className="min-w-[180px] flex-1">
+                <input
+                  value={caseName}
+                  onChange={(event) => setCaseName(event.target.value)}
+                  placeholder="例如：日常 1024 / 官方 Gradio"
+                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] outline-none focus:border-accent-500/60"
+                />
+              </Field>
+              <Field label="Gradio 端口（可空）" className="w-[130px]">
+                <input
+                  value={port}
+                  onChange={(event) => setPort(event.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="自动"
+                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] tabular-nums outline-none focus:border-accent-500/60"
+                />
+              </Field>
+              <Field label="额外参数" className="min-w-[180px] flex-[2]">
+                <input
+                  value={extraArgs}
+                  onChange={(event) => setExtraArgs(event.target.value)}
+                  placeholder="--flag value"
+                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 font-mono text-[10.5px] outline-none focus:border-accent-500/60"
+                />
+              </Field>
+              <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
+                保存为 Case
+              </Button>
+            </div>
           </div>
-        </div>
-      </section>
+        ) : null}
+      </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.55fr_1fr]">
-        <div className="space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Boxes className="size-4 text-accent-500" />
-                <h2 className="text-[13px] font-semibold">我的实例</h2>
-                <span className="text-[10px] text-[var(--color-text-tertiary)]">{instances.length} 个</span>
-              </div>
-              <Button tone="ghost" onClick={() => navigate('/instances')}>
-                管理
-              </Button>
-            </div>
-            {instances.length === 0 ? (
-              <EmptyState
-                icon={<Boxes className="size-6" />}
-                title="还没有实例"
-                description="创建一个实例来固定 MOSS-Image 的版本与运行时。"
-                action={
-                  <Button tone="primary" onClick={() => navigate('/instances')}>
-                    新建实例
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="mt-2 divide-y divide-[var(--color-border-subtle)]">
-                {instances.slice(0, 3).map((instance) => (
-                  <button
-                    key={instance.id}
-                    type="button"
-                    onClick={() => navigate(`/instances/${instance.id}`)}
-                    className="flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-white/35 dark:hover:bg-white/[0.03]"
-                  >
-                    <StatusDot status={instance.status === 'ok' ? 'ok' : 'warn'} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-[12px] font-medium">{instance.name}</span>
-                        {instance.channel === 'stable' ? <Pill tone="blue">稳定版</Pill> : null}
-                        {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
-                      </div>
-                      <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
-                        {instance.shortCommit} · {instance.runtimeState === 'ready' ? '运行时就绪' : '待安装依赖'} ·{' '}
-                        {relative(instance.lastUsedAt ?? instance.createdAt)}
-                      </div>
-                    </div>
-                    <ChevronRight className="size-3.5 text-[var(--color-text-tertiary)]" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="size-4 text-accent-500" />
-                <h2 className="text-[13px] font-semibold">教程</h2>
-              </div>
-              <span className="text-[10px] text-[var(--color-text-tertiary)]">从示例开始</span>
-            </div>
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-              {tutorials.map((tutorial) => (
-                <button
-                  key={tutorial.id}
-                  type="button"
-                  onClick={() => startTutorial(tutorial)}
-                  className="group flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-white/35 p-3 text-left transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:bg-white/55 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-                >
-                  <span className="flex size-7 items-center justify-center rounded-lg bg-accent-500/12 text-accent-600 dark:text-accent-300">
-                    {tutorial.icon}
-                  </span>
-                  <span className="text-[11.5px] font-medium leading-5">{tutorial.title}</span>
-                  <span className="text-[10px] leading-4 text-[var(--color-text-tertiary)]">
-                    {tutorial.description}
-                  </span>
-                  <span className="mt-auto inline-flex items-center gap-1 text-[10px] text-accent-600 dark:text-accent-300">
-                    {tutorial.tag === 'Layout' ? '载入布局' : '载入 Prompt'}
-                    <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="size-4 text-accent-500" />
-                <h2 className="text-[13px] font-semibold">最近作品</h2>
-              </div>
-              <Button tone="ghost" onClick={() => navigate('/gallery')}>
-                画廊
-              </Button>
-            </div>
-            {recent.length === 0 ? (
-              <div className="mt-2 flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-4 py-8 text-center">
-                <Wand2 className="size-5 text-[var(--color-text-tertiary)]" />
-                <p className="text-[11px] text-[var(--color-text-secondary)]">生成的作品会自动出现在这里</p>
-                <p className="text-[10px] text-[var(--color-text-tertiary)]">
-                  也可以去设置里添加已有的输出目录
-                </p>
-              </div>
-            ) : (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {recent.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => navigate('/gallery')}
-                    className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-tertiary)]"
-                  >
-                    <img
-                      src={cloverUrl(item.path)}
-                      alt={item.name}
-                      loading="lazy"
-                      className="size-full object-cover transition duration-300 group-hover:scale-105"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-4">
-            <h2 className="text-[13px] font-semibold">设备与建议</h2>
-            <div className="mt-2 space-y-2 text-[11px]">
-              <div className="flex items-center justify-between">
-                <span className="text-[var(--color-text-tertiary)]">加速器</span>
-                <span className="font-medium">{env?.gpu.name ?? '检测中'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[var(--color-text-tertiary)]">内存</span>
-                <span className="font-medium">
-                  {env ? `${Math.round(env.device.memoryTotal / 1024 ** 3)} GB` : '—'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[var(--color-text-tertiary)]">建议档位</span>
-                <span className="font-medium">
-                  {env ? `${env.recommendation.width}² · ${env.recommendation.steps} 步` : '—'}
-                </span>
-              </div>
-            </div>
-            <Button tone="secondary" className="mt-3 w-full" onClick={() => navigate('/settings')}>
-              查看环境报告
-            </Button>
-          </Card>
-
-          <Card className="p-4">
-            <h2 className="text-[13px] font-semibold">快捷入口</h2>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {[
-                { label: '模型库', to: '/models', icon: <Boxes className="size-3.5" /> },
-                { label: '画廊', to: '/gallery', icon: <ImageIcon className="size-3.5" /> },
-                { label: '创作', to: '/studio', icon: <Wand2 className="size-3.5" /> },
-                { label: '设置', to: '/settings', icon: <Sparkles className="size-3.5" /> },
-              ].map((entry) => (
-                <button
-                  key={entry.to}
-                  type="button"
-                  onClick={() => navigate(entry.to)}
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-white/35 px-2.5 py-2 text-[11px] text-[var(--color-text-secondary)] transition hover:border-accent-400/40 hover:text-accent-700 dark:bg-white/[0.03] dark:hover:text-accent-200',
-                  )}
-                >
-                  {entry.icon}
-                  {entry.label}
-                </button>
-              ))}
-            </div>
-          </Card>
+      <div className="mt-6 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+        >
+          <ChevronDown className={cn('size-3.5 transition-transform', collapsed && '-rotate-90')} />
+          运行中的 Case
+          <span className="text-[var(--color-text-tertiary)]">{activeRows.length}</span>
+        </button>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9.5px] text-[var(--color-text-tertiary)]">排序</span>
+          <Select value={sort} onChange={(value) => setSort(value as 'started' | 'name')} className="h-7 text-[10.5px]">
+            <option value="started">启动时间</option>
+            <option value="name">名称</option>
+          </Select>
         </div>
       </div>
+
+      {!collapsed ? (
+        <div className="mt-2 space-y-1.5">
+          {activeRows.length === 0 ? (
+            <div className="rounded-[8px] border border-dashed border-[var(--color-border-subtle)] px-4 py-8 text-center text-[11px] text-[var(--color-text-tertiary)]">
+              还没有运行中的 Case。上面的启动条会一直留在这里。
+            </div>
+          ) : (
+            activeRows.map((row) => {
+              const running = row.state === 'running' || row.state === 'starting'
+              const queued = row.state === 'queued'
+              const job = useApp.getState().jobs.find((item) => item.id === row.jobId)
+              return (
+                <div
+                  key={row.id}
+                  className="glass flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[7px] px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-[11.5px] font-medium">{row.caseName}</span>
+                      <Pill tone={stateTone[row.state]}>{stateLabel[row.state]}</Pill>
+                      {row.state === 'queued' ? (
+                        <span className="text-[9px] text-[var(--color-text-tertiary)]">等待设备</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9.5px] text-[var(--color-text-tertiary)]">
+                      <span>{row.instanceName}</span>
+                      <span>{row.backend === 'official' ? '官方 Gradio' : 'Clover Case'}</span>
+                      <span>{devices.find((item) => item.id === row.deviceId)?.name ?? row.deviceId}</span>
+                      <span>{row.profile === 'dmd8' ? '8 步 DMD' : '50 步质量'}</span>
+                      {row.error ? <span className="text-red-300">{row.error}</span> : null}
+                    </div>
+                  </div>
+
+                  {row.state === 'running' && job?.progress.percent ? (
+                    <div className="hidden w-28 shrink-0 sm:block">
+                      <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.08]">
+                        <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
+                      </div>
+                      <div className="mt-1 text-right text-[8.5px] tabular-nums text-[var(--color-text-tertiary)]">
+                        {Math.round(job.progress.percent)}%
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="ml-auto flex items-center gap-1">
+                    {job?.url ? (
+                      <Button
+                        tone="secondary"
+                        onClick={() => void call(Ipc.openExternal, { url: job.url! })}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <ExternalLink className="size-3" /> 打开界面
+                        </span>
+                      </Button>
+                    ) : null}
+                    <Button tone="secondary" className={!row.jobId ? 'opacity-40' : undefined} onClick={() => openTerminal(row)} disabled={!row.jobId}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <SquareTerminal className="size-3" /> 终端
+                      </span>
+                    </Button>
+                    {running || queued ? (
+                      <Button tone="ghost" onClick={() => void stopLaunch(row.id)}>
+                        <span className="inline-flex items-center gap-1.5 text-red-300">
+                          <Square className="size-3" /> {queued ? '取消' : '停止'}
+                        </span>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      ) : null}
+
+      <div className="mt-8 flex items-center gap-2 text-[9.5px] text-[var(--color-text-tertiary)]">
+        <Layers3 className="size-3" />
+        创作窗口负责 JSON、画布与图层；启动器只负责启动与监视。
+        <button
+          type="button"
+          onClick={() => openWindow('creator')}
+          className="ml-1 inline-flex items-center gap-1 text-accent-300 hover:underline"
+        >
+          <Wand2 className="size-3" /> 打开创作窗口
+        </button>
+      </div>
+
+      {instances.length === 0 ? (
+        <div className="mt-6 flex items-center justify-between rounded-[8px] border border-[var(--color-border-subtle)] px-4 py-3">
+          <p className="text-[11px] text-[var(--color-text-secondary)]">还没有实例。先创建一个版本实例，再回来启动。</p>
+          <Button tone="primary" onClick={() => navigate('/instances')}>
+            创建实例
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

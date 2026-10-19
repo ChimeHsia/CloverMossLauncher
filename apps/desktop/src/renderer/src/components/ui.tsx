@@ -25,7 +25,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'glass rounded-xl border border-[var(--color-border-subtle)]',
+        'glass rounded-lg border border-[var(--color-border-subtle)]',
         className,
       )}
       {...rest}
@@ -68,7 +68,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-4',
+        'inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4',
         pillTone[tone],
         className,
       )}
@@ -94,16 +94,23 @@ export function Button({
   const variant = tone === 'primary' ? 'solid' : tone === 'ghost' ? 'ghost' : 'soft'
   const tint =
     tone === 'secondary'
-      ? 'border border-[var(--color-border-subtle)] bg-white/55 dark:bg-white/[0.06]'
+      ? 'border border-[var(--color-border-subtle)] bg-white/[0.045]'
       : ''
   return (
     <SdkButton
       color={color}
       variant={variant}
       size={size}
-      pill
       className={cn(tint, className)}
-      style={{ borderRadius: 9999, color: tone === 'primary' ? '#ffffff' : undefined, ...style }}
+      style={{
+        borderRadius: 6,
+        fontSize: 12,
+        lineHeight: '16px',
+        minHeight: 30,
+        paddingInline: 12,
+        color: tone === 'primary' ? '#ffffff' : undefined,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -123,7 +130,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface-tertiary)] hover:text-[var(--color-text)]',
+        'inline-flex size-7 items-center justify-center rounded-[6px] text-[var(--color-text-secondary)] transition hover:bg-white/[0.07] hover:text-[var(--color-text)]',
         className,
       )}
       {...rest}
@@ -144,7 +151,7 @@ export function ProgressBar({
 }): React.JSX.Element {
   const width = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
   return (
-    <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-tertiary)]', className)}>
+    <div className={cn('h-[3px] w-full overflow-hidden rounded-full bg-white/[0.08]', className)}>
       <div
         className={cn(
           'h-full rounded-full transition-[width] duration-300 ease-out',
@@ -218,7 +225,7 @@ export function Modal({
     >
       <div
         className={cn(
-          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] shadow-2xl',
+          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-subtle)] shadow-2xl',
           width,
         )}
         onMouseDown={(event) => event.stopPropagation()}
@@ -281,11 +288,11 @@ export function ToastProvider({ children }: { children: ReactNode }): React.JSX.
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[300px] flex-col gap-1.5">
         {items.map((item) => (
           <div
             key={item.id}
-            className="glass-strong pointer-events-auto flex items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] px-3 py-2.5 text-[12.5px] shadow-lg"
+            className="glass-strong pointer-events-auto flex items-start gap-2 rounded-[6px] border border-[var(--color-border-subtle)] px-2.5 py-2 text-[11.5px] shadow-lg"
           >
             {toastIcon[item.tone]}
             <span className="leading-5">{item.message}</span>
@@ -318,7 +325,7 @@ export function Segmented<T extends string>({
   className?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('inline-flex rounded-lg bg-[var(--color-surface-tertiary)] p-0.5', className)}>
+    <div className={cn('inline-flex rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -326,9 +333,9 @@ export function Segmented<T extends string>({
           title={option.hint}
           onClick={() => onChange(option.value)}
           className={cn(
-            'rounded-[7px] px-3 py-1 text-[12px] font-medium transition',
+            'rounded-[4px] px-2.5 py-1 text-[11px] font-medium transition',
             value === option.value
-              ? 'bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm'
+              ? 'bg-white/[0.09] text-[var(--color-text)] shadow-sm'
               : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]',
           )}
         >

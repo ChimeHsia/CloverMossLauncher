@@ -1,5 +1,11 @@
 export const Ipc = {
   appInfo: 'app:info',
+  windowOpen: 'window:open',
+  devicesList: 'devices:list',
+  casesList: 'cases:list',
+  casesSave: 'cases:save',
+  casesRemove: 'cases:remove',
+  onboardingStatus: 'onboarding:status',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
   envScan: 'env:scan',

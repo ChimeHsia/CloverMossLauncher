@@ -115,24 +115,18 @@ export function SettingsPage(): React.JSX.Element {
         </Button>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <Card className="px-5 py-4">
           <h2 className="text-[13px] font-semibold">{t('settings.appearance')}</h2>
           <div className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="text-[12px] font-medium">主题</div>
-                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">默认跟随系统</div>
+                <div className="text-[12px] font-medium">表面</div>
+                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  深灰亚克力，跟随系统材质
+                </div>
               </div>
-              <Segmented
-                value={draft.theme}
-                onChange={(theme) => patch({ theme })}
-                options={[
-                  { value: 'system', label: '系统' },
-                  { value: 'light', label: '浅色' },
-                  { value: 'dark', label: '深色' },
-                ]}
-              />
+              <Pill tone="neutral">Fixed</Pill>
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-3">
               <div>
@@ -187,7 +181,7 @@ export function SettingsPage(): React.JSX.Element {
                   value={String(draft[key] ?? '')}
                   placeholder={placeholder}
                   onChange={(event) => patch({ [key]: event.target.value || null } as Partial<Settings>)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
+                  className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
                 />
               </label>
             ))}
@@ -223,7 +217,7 @@ export function SettingsPage(): React.JSX.Element {
                 value={draft.modelsRoot ?? ''}
                 placeholder="例如 /Volumes/Data/CloverMoss/models"
                 onChange={(event) => patch({ modelsRoot: event.target.value || null })}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
+                className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
               />
             </label>
             <p className="text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
@@ -241,7 +235,7 @@ export function SettingsPage(): React.JSX.Element {
                 value={draft.pythonPath ?? ''}
                 placeholder="/opt/homebrew/bin/python3.12"
                 onChange={(event) => patch({ pythonPath: event.target.value || null })}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
+                className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
               />
             </label>
             <div className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">

@@ -273,6 +273,45 @@ export interface DownloadTask {
   updatedAt: string
 }
 
+export type LaunchBackend = 'official' | 'clover'
+export type DeviceKind = 'mps' | 'cuda' | 'cpu'
+
+export interface LaunchDevice {
+  id: string
+  name: string
+  kind: DeviceKind
+  detail: string
+  memoryBytes?: number
+  available: boolean
+}
+
+export interface LaunchCase {
+  id: string
+  name: string
+  instanceId: string
+  backend: LaunchBackend
+  deviceId: string
+  profile: 'base' | 'dmd8'
+  port?: number | null
+  extraArgs?: string
+  createdAt: string
+  lastUsedAt?: string
+}
+
+export interface OnboardingStep {
+  id: 'instance' | 'runtime' | 'model'
+  status: 'ok' | 'missing' | 'partial'
+  title: string
+  detail: string
+  action: 'instances' | 'models' | 'settings'
+}
+
+export interface OnboardingStatus {
+  ready: boolean
+  steps: OnboardingStep[]
+  checkedAt: string
+}
+
 export type JobMode = 'runner' | 'gradio' | 'simulate'
 export type JobState = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'canceled'
 export type JobStage = 'load' | 'text' | 'denoise' | 'decode' | 'save' | 'ready' | 'idle'
@@ -289,8 +328,41 @@ export interface JobParams {
   adapters?: Array<{ path: string; strength: number }>
 }
 
+export interface LaunchStartInput {
+  instanceId: string
+  caseId?: string
+  caseName?: string
+  backend: LaunchBackend
+  deviceId: string
+  profile: 'base' | 'dmd8'
+  port?: number | null
+  extraArgs?: string
+}
+
+export interface LaunchRow {
+  id: string
+  caseId?: string
+  caseName: string
+  instanceId: string
+  instanceName: string
+  backend: LaunchBackend
+  deviceId: string
+  profile: 'base' | 'dmd8'
+  port?: number | null
+  extraArgs?: string
+  jobId?: string
+  state: 'queued' | 'starting' | 'running' | 'stopped' | 'failed'
+  queuedAt: string
+  startedAt?: string
+  error?: string
+}
+
 export interface JobStartInput {
   instanceId: string
+  caseId?: string
+  caseName?: string
+  backend?: LaunchBackend
+  deviceId?: string
   prompt: string
   negativePrompt?: string
   width: number
@@ -300,6 +372,8 @@ export interface JobStartInput {
   seed: number
   profile?: 'base' | 'dmd8'
   mode?: 'runner' | 'gradio' | 'simulate'
+  port?: number | null
+  extraArgs?: string
 }
 
 export interface JobProgress {
@@ -315,6 +389,10 @@ export interface JobRecord {
   id: string
   instanceId: string
   instanceName: string
+  caseId?: string
+  caseName?: string
+  backend?: LaunchBackend
+  deviceId?: string
   mode: JobMode
   state: JobState
   stage: JobStage

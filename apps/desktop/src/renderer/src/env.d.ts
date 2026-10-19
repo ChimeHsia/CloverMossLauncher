@@ -8,6 +8,8 @@ declare global {
       platform: string
       version: string
       acrylic: boolean
+      windowKind: 'launcher' | 'creator' | 'terminal'
+      channel: string
     }
   }
 }

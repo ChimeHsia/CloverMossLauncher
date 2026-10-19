@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Copy, Info, RefreshCw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { openWindow } from '../lib/windows'
 import type { Diagnostic, DiagnosticSolution } from '@shared/types'
 import { call } from '../lib/api'
 import { relative } from '../lib/format'
@@ -37,7 +38,7 @@ export function DiagnosticsPage(): React.JSX.Element {
           setActiveJob(diagnostic.jobId)
           await loadJobLogs(diagnostic.jobId)
         }
-        navigate('/run')
+        openWindow('terminal')
       } else if (solution.action === 'open_settings' || solution.action === 'switch_mirror') {
         navigate('/settings')
       } else if (solution.action === 'open_models') {
@@ -69,7 +70,7 @@ export function DiagnosticsPage(): React.JSX.Element {
         })
         setActiveJob(next.id)
         toast.push(`已用 ${width}×${height} 重新提交`, 'success')
-        navigate('/run')
+        openWindow('terminal')
       } else if (solution.action === 'copy_diagnostics') {
         await navigator.clipboard.writeText(JSON.stringify(diagnostic, null, 2))
         toast.push('诊断信息已复制', 'success')
@@ -153,7 +154,7 @@ export function DiagnosticsPage(): React.JSX.Element {
           title={diagnostics.length === 0 ? '没有诊断记录' : '当前筛选下没有记录'}
           description="任务失败、OOM、网络与依赖问题会生成卡片，并附带解决按钮。"
           action={
-            <Button tone="secondary" onClick={() => navigate('/run')}>
+            <Button tone="secondary" onClick={() => openWindow('terminal')}>
               查看运行
             </Button>
           }

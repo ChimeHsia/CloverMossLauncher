@@ -64,6 +64,21 @@ export const schemas = {
 
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
 
+  windowOpen: z.object({ kind: z.enum(['launcher', 'creator', 'terminal']) }),
+
+  caseSave: z.object({
+    id: z.string().max(80).optional(),
+    name: z.string().max(120).optional(),
+    instanceId: z.string().min(1).max(120),
+    backend: z.enum(['official', 'clover']),
+    deviceId: z.string().min(1).max(120),
+    profile: z.enum(['base', 'dmd8']),
+    port: z.number().int().min(1024).max(65535).nullable().optional(),
+    extraArgs: z.string().max(2000).optional(),
+  }),
+
+  caseRemove: z.object({ id: z.string().min(1).max(80) }),
+
   jobStart: z.object({
     instanceId: z.string().min(1).max(120),
     prompt: z.string().max(32768),
@@ -75,6 +90,12 @@ export const schemas = {
     seed: z.number().int().min(0).max(4294967295),
     profile: z.enum(['base', 'dmd8']).default('base'),
     mode: z.enum(['runner', 'gradio', 'simulate']).default('runner'),
+    caseId: z.string().max(80).optional(),
+    caseName: z.string().max(120).optional(),
+    backend: z.enum(['official', 'clover']).optional(),
+    deviceId: z.string().max(120).optional(),
+    port: z.number().int().min(1024).max(65535).nullable().optional(),
+    extraArgs: z.string().max(2000).optional(),
   }),
 
   jobId: z.object({ id: z.string().min(1).max(120) }),
