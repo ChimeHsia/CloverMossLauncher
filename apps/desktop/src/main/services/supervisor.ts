@@ -208,6 +208,8 @@ function runnerScript(): string {
 function envFor(job: JobRecord): NodeJS.ProcessEnv {
   return {
     PYTHONUNBUFFERED: '1',
+    // Upstream reads UTF-8 assets without an explicit encoding; Windows may default to GBK.
+    PYTHONUTF8: '1',
     PYTHONIOENCODING: 'utf-8',
     PYTHONPATH: '.',
     PYTORCH_ENABLE_MPS_FALLBACK: '1',
