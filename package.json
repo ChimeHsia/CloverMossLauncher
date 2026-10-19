@@ -9,6 +9,7 @@
     "typecheck": "pnpm --filter @clover/desktop typecheck",
     "smoke": "pnpm --filter @clover/desktop smoke",
     "test:settings-draft": "node tools/test-settings-draft.mjs",
+    "test:download-queue": "node --test tools/test-download-queue.mjs",
     "test:ui": "node tools/test-ui.mjs --scaled",
     "release:md": "node tools/release-md.mjs",
     "release:md:check": "node tools/release-md.mjs --check"
