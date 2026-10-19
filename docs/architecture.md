@@ -1,7 +1,7 @@
 # 架构文档 · CloverMoss Launcher
 
-- 版本：v0.1（2026-10-19）
-- 状态：M1–M3 已落地，M4 进行中；实现差异见 [status.md](status.md)
+- 版本：v0.2（2026-10-19）
+- 状态：M1–M3 + UI v0.2 已落地，M4 进行中；实现差异见 [status.md](status.md)
 - 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---
@@ -26,7 +26,7 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │ core services（纯 Node，可单独测试）                          │  │
 │  │ env · network · git · runtimes · instances · models ·        │  │
-│  │ adapters · downloads · supervisor · parsers · diagnostics ·  │  │
+│  │ gallery · downloads · supervisor · parsers · diagnostics ·   │  │
 │  │ updates · webui                                             │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │        │ ipcMain.handle / webContents.send        │ Fastify(可选)  │
@@ -55,13 +55,14 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 apps/desktop/
   electron.vite.config.ts
   src/main/           Electron 主进程 + 领域服务 + IPC
-    services/         env / network / git / runtimes / instances / models / updates
+    services/         env / network / git / runtimes / instances / models / updates / gallery
     lib/              paths / run / events
-  src/preload/        contextBridge（只暴露 invoke / on）
+  src/preload/        contextBridge（只暴露 invoke / on / acrylic）
   src/renderer/       React 19 + Tailwind 4 + Apps SDK UI
-    src/pages/        Home / Instances / InstanceDetail / Models / Settings
-    src/components/   layout + ui（Card / Pill / Modal / Toast / Progress）
-    src/store.ts      Zustand
+    src/pages/        Home / Studio / Gallery / Instances / InstanceDetail / Models / Settings
+    src/components/   layout / NotificationPanel / ui / ErrorBoundary
+    src/lib/          layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
+    src/store.ts      Zustand（含通知、创作草稿、画廊底图）
   src/shared/         types / channels / zod schemas
 release/              manifest.json + 公告 markdown + 模型目录 + 错误规则
 contracts/            协议与 schema（release / runner / job）
@@ -80,6 +81,8 @@ ESLint + Prettier、`zod` 运行时校验。
 ```ts
 Instance  { id, name, sourceUrl, branch, commit, channel, runtimeId,
             launch, models{dit,te,vae}, adapters[], status, createdAt, lastUsedAt }
+GalleryItem { id, path, name, root, size, mtime, width, height, prompt, seed }
+AppNotification { tone, title, message, createdAt, read }
 Runtime   { id, pythonPath, pythonVersion, lockHash, kind: 'shared'|'isolated',
             path, state, refCount }
 ModelPack { id, provider: 'hf'|'modelscope'|'url', repo, revision, role,
@@ -114,6 +117,7 @@ electron-rebuild，备选 `node:sqlite`。
   models/
     hf/hub/models--org--name/   HF 兼容缓存（blobs/snapshots/refs）
     adapters/<sha256>.safetensors
+  outputs/                     首页/画廊默认读取的输出目录
   downloads/                    *.part（断点续传）
   logs/<job>.jsonl
   cache/
@@ -257,6 +261,20 @@ models/hf/hub/models--OpenMOSS-Team--MOSS-Image-SFT/
 官方权重、社区量化包、DMD、常用 LoRA。每条含 `provider/repo/revision/files/license/
 size/preview/tags`。用户也可“从 HF 仓库 / 链接 / 本地文件”添加。
 
+### 8.5 画廊与本地图片协议
+
+- **来源**：`<appData>/outputs`、每个实例的 `outputs/`、`settings.galleryRoots`（任意本地目录）；
+- **扫描**：递归深度 ≤ 5，跳过隐藏目录与 `node_modules/.git`；结果按 mtime 倒序，
+  5 s 内存缓存；
+- **分页**：`gallery:list` 以 cursor + limit（默认 48）返回；渲染层用 IntersectionObserver
+  自动加载下一页；
+- **渲染优化**：卡片 `content-visibility: auto` + `contain-intrinsic-size`，图片 `loading="lazy"`，
+  大目录不会一次性创建所有 DOM/解码所有图片；
+- **本地图片**：注册 `clover://` 自定义协议，`clover://local?path=…` 只允许画廊根目录与
+  `homeBackground`，主进程读文件后按 MIME 返回；CSP 只放行 `clover:`；
+- **元数据**：PNG `tEXt/iTXt` + 同名 sidecar `.json`，读取 prompt / negative / seed / 尺寸；
+- **交接**：详情里的“用作布局底图”把 `GalleryItem` 写入 `studioBackground` 并跳转 `/studio`。
+
 ## 9. 进程监督与适配器
 
 ### 9.1 接口
@@ -318,6 +336,17 @@ python gradio_app.py --host 127.0.0.1 --port <free> --model <local bundle>
 - 生成进度由 Gradio 自己展示；启动器只显示“由 Gradio 提供”，并解析下载/报错；
 - 展示：应用内 `WebContentsView` 或外部浏览器（用户可选）；
 - 关闭：先请求停止，再按 §9.2 终止。
+
+### 9.5 创作台与 layout 编译器
+
+- 草稿：`abs + xyxy`，带 `width`/`height`，左上原点；
+- 编译：每个 box 转为 `[floor(y1)-H/2, floor(x1)-W/2, ceil(y2)-H/2, ceil(x2)-W/2]`，
+  输出 `bbox_coord_space: abs_centralized`、`bbox_format: yxyx`，去掉编辑器字段；
+- 校验：16 倍数、区域非空、caption 非空、文字项必须有 `text`、bbox 在画布内；
+- 对拍：与官方 `skills/moss-image-prompt-enhancer/scripts/compile_prompt.py` 的示例逐字段一致；
+- 生成入口：M4 接 runner 后替换当前提示；编译后的 JSON 直接插入 Prompt。
+
+详见 [layout-schema.md](layout-schema.md)。
 
 ## 10. 日志管线与错误规则
 
@@ -468,10 +497,10 @@ window.clover = {
 
 ## 16. 跨平台
 
-- **macOS**：arm64 优先；hardened runtime + 公证；`hiddenInset` 标题栏；
+- **macOS**：arm64 优先；hardened runtime + 公证；`hiddenInset` + `vibrancy: under-window`；
   MPS fallback 环境变量；路径含空格需引号（spawn 数组天然安全）。
-- **Windows**：长路径（worktree 路径可能 >260）；Defender 误报（Electron 常见，
-  文档说明）；`py -3` 启动器；`taskkill /T`；CRLF 归一化。
+- **Windows**：`backgroundMaterial: 'acrylic'`（Win11）；长路径（worktree 可能 >260）；
+  Defender 误报文档；`py -3` 启动器；`taskkill /T`；CRLF 归一化。
 - **Linux**：XDG 路径；AppImage/deb；`python3` 多版本；无签名要求但保留校验。
 
 ## 17. 性能预算与可观测性
@@ -484,6 +513,7 @@ window.clover = {
 | 空闲内存 | ≤ 250 MB |
 | 日志渲染 | 5k 行/s 不卡顿（虚拟列表 + 批处理） |
 | 进度更新 | ≤ 10 Hz/条，合并后推送 |
+| 画廊 | 48 张/页；只渲染可视附近卡片；1 万张目录仍可滚动 |
 
 - 结构化日志：主进程 `pino`，写入 `logs/app-<date>.jsonl`，30 天轮转；
 - 任务日志：`logs/<job>.jsonl`，含 stage/step/内存/降档/退出码；
@@ -505,6 +535,7 @@ window.clover = {
 | M1 | Electron 壳 + 首页 + 环境报告 | ✅ 已实现，macOS arm64 实测 |
 | M2 | git 镜像 + 实例 + 运行时 | ✅ 基础完成；托管 Python / 更新 UI 待补 |
 | M3 | 模型/适配器 + 下载队列 | ✅ 下载与 HF 缓存实测；绑定 UI 待补 |
+| UI v0.2 | 亚克力/折叠侧栏/通知/画廊/创作台/标注器 | ✅ 已实现；生成接入 M4 |
 | M4 | Supervisor + runner + 解析 + 诊断 | ⏳ 当前 |
 | M5 | Gradio + WebUI + 更新/公告 | 计划 |
 | M6 | 打包、公证、Windows、Beta | 计划 |

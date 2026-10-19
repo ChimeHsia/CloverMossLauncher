@@ -34,8 +34,8 @@ const stateLabel: Record<DownloadTask['state'], string> = {
   error: '失败',
 }
 
-function tagTone(tag: string): 'moss' | 'blue' | 'amber' | 'neutral' {
-  if (tag === 'official' || tag === 'recommended') return 'moss'
+function tagTone(tag: string): 'accent' | 'blue' | 'amber' | 'neutral' {
+  if (tag === 'official' || tag === 'recommended') return 'accent'
   if (tag === 'quantized' || tag === 'low-memory' || tag === 'community') return 'blue'
   if (tag === 'few-step') return 'amber'
   return 'neutral'
@@ -195,7 +195,7 @@ export function ModelsPage(): React.JSX.Element {
                             : task.state === 'paused'
                               ? 'amber'
                               : task.state === 'done'
-                                ? 'moss'
+                                ? 'accent'
                                 : 'blue'
                         }
                       >
@@ -262,7 +262,7 @@ export function ModelsPage(): React.JSX.Element {
                           {model.repo}
                         </div>
                       </div>
-                      {model.installed ? <Pill tone="moss">{t('common.installed')}</Pill> : null}
+                      {model.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       <Pill tone="neutral">{model.precision}</Pill>
@@ -331,7 +331,7 @@ export function ModelsPage(): React.JSX.Element {
                           {adapter.repo}
                         </div>
                       </div>
-                      {adapter.installed ? <Pill tone="moss">{t('common.installed')}</Pill> : null}
+                      {adapter.installed ? <Pill tone="accent">{t('common.installed')}</Pill> : null}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       <Pill tone="blue">{adapter.kind}</Pill>

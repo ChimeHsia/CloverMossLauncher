@@ -46,11 +46,11 @@ export function StatusDot({ status, className }: { status: CheckStatus; classNam
   return <span className={cn('inline-block size-2 shrink-0 rounded-full', statusColor[status], className)} />
 }
 
-type PillTone = 'neutral' | 'moss' | 'amber' | 'red' | 'blue'
+type PillTone = 'neutral' | 'accent' | 'amber' | 'red' | 'blue'
 
 const pillTone: Record<PillTone, string> = {
   neutral: 'border-[var(--color-border)] text-[var(--color-text-secondary)]',
-  moss: 'border-accent-500/25 bg-accent-500/10 text-accent-600 dark:text-accent-300',
+  accent: 'border-accent-500/25 bg-accent-500/10 text-accent-600 dark:text-accent-300',
   amber: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
   red: 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300',
   blue: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
@@ -131,11 +131,11 @@ export function IconButton({
 
 export function ProgressBar({
   value,
-  tone = 'moss',
+  tone = 'accent',
   className,
 }: {
   value: number
-  tone?: 'moss' | 'neutral'
+  tone?: 'accent' | 'neutral'
   className?: string
 }): React.JSX.Element {
   const width = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
@@ -144,7 +144,7 @@ export function ProgressBar({
       <div
         className={cn(
           'h-full rounded-full transition-[width] duration-300 ease-out',
-          tone === 'moss' ? 'bg-accent-500' : 'bg-[var(--color-text-tertiary)]',
+          tone === 'accent' ? 'bg-accent-500' : 'bg-[var(--color-text-tertiary)]',
         )}
         style={{ width: `${width}%` }}
       />

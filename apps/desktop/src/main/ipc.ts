@@ -1,4 +1,4 @@
-import { app, ipcMain, shell } from 'electron'
+import { app, dialog, ipcMain, shell } from 'electron'
 import { ZodError, type ZodType } from 'zod'
 import { Events, Ipc } from '@shared/channels'
 import { schemas } from '@shared/schemas'
@@ -15,6 +15,7 @@ import {
   updateInstance,
 } from './services/instances'
 import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload } from './services/models'
+import { galleryDetail, listGallery, revealInFolder } from './services/gallery'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
@@ -148,6 +149,24 @@ export function registerIpc(): void {
   })
 
   handle(Ipc.downloadsList, null, () => listDownloads())
+
+  handle(Ipc.galleryList, schemas.galleryList, (input) => listGallery(getSettings(), input))
+
+  handle(Ipc.galleryItem, schemas.galleryItem, ({ path }) => galleryDetail(path))
+
+  handle(Ipc.galleryReveal, schemas.galleryReveal, ({ path }) => revealInFolder(path))
+
+  handle(Ipc.pickDialog, schemas.pickDialog, async ({ kind, title }) => {
+    const result = await dialog.showOpenDialog({
+      title,
+      properties: kind === 'folder' ? ['openDirectory', 'createDirectory'] : ['openFile'],
+      filters:
+        kind === 'image'
+          ? [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+          : undefined,
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
 
   handle(Ipc.openPath, schemas.openPath, async ({ path }) => {
     const allowed = [paths.root(), paths.models(getSettings().modelsRoot)]

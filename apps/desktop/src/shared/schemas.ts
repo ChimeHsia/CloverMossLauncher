@@ -15,6 +15,9 @@ export const schemas = {
       modelsRoot: z.string().max(4096).nullable(),
       pythonPath: z.string().max(4096).nullable(),
       autoCheckUpdates: z.boolean(),
+      sidebarCollapsed: z.boolean(),
+      galleryRoots: z.array(z.string().max(4096)).max(20),
+      homeBackground: z.string().max(4096).nullable(),
     })
     .partial(),
 
@@ -60,6 +63,22 @@ export const schemas = {
   }),
 
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
+
+  galleryList: z.object({
+    cursor: z.string().max(32).optional(),
+    limit: z.number().int().min(1).max(120).default(48),
+    query: z.string().max(200).optional(),
+    root: z.string().max(4096).optional(),
+  }),
+
+  galleryItem: z.object({ path: pathLike }),
+
+  galleryReveal: z.object({ path: pathLike }),
+
+  pickDialog: z.object({
+    kind: z.enum(['folder', 'image']).default('folder'),
+    title: z.string().max(120).optional(),
+  }),
 
   openPath: z.object({ path: pathLike }),
 

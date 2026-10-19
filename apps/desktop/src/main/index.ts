@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, protocol, shell } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureDirs } from './lib/paths'
@@ -10,6 +10,7 @@ import { scanEnvironment } from './services/env'
 import { getSettings } from './services/settings'
 import { checkUpdates } from './services/updates'
 import { downloadCustomModel, getCatalog, listDownloads } from './services/models'
+import { registerGalleryProtocol } from './services/gallery'
 
 const isDev = !app.isPackaged
 const smoke = process.argv.includes('--smoke')
@@ -22,6 +23,10 @@ if (isDev) {
 }
 app.setName('CloverMoss')
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'clover', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+])
+
 const noSandbox = process.env['CLOVER_NO_SANDBOX'] === '1' || smoke || screenshot || Boolean(scenario)
 if (noSandbox) {
   // The harness/CI sandbox cannot initialize Chromium's zygote sandbox. End-user builds keep it on.
@@ -32,10 +37,10 @@ if (noSandbox) {
 function createWindow(show = true): BrowserWindow {
   const acrylic = !screenshot && (process.platform === 'darwin' || process.platform === 'win32')
   const win = new BrowserWindow({
-    width: 960,
-    height: 640,
-    minWidth: 840,
-    minHeight: 560,
+    width: 1180,
+    height: 760,
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     title: 'CloverMoss',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
@@ -133,6 +138,7 @@ async function runSmoke(): Promise<void> {
 
 app.whenReady().then(async () => {
   ensureDirs(getSettings().modelsRoot)
+  registerGalleryProtocol()
   registerIpc()
 
   if (smoke) {
@@ -238,6 +244,8 @@ app.whenReady().then(async () => {
       ['/', 'home'],
       ['/instances', 'instances'],
       ['/instances/moss-main-9d799c1', 'instance-detail'],
+      ['/studio', 'studio'],
+      ['/gallery', 'gallery'],
       ['/models', 'models'],
       ['/settings', 'settings'],
     ]
@@ -251,6 +259,49 @@ app.whenReady().then(async () => {
     await new Promise((resolve) => setTimeout(resolve, 1000))
     const scrolled = await win.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-home-scrolled.png'), scrolled.toPNG())
+    await win.webContents.executeJavaScript("location.hash = '#/gallery'")
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    await win.webContents.executeJavaScript(
+      "[...document.querySelectorAll('main button')].find((b) => b.querySelector('img'))?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 1400))
+    const galleryDetail = await win.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-gallery-detail.png'), galleryDetail.toPNG())
+    const handoff = await win.webContents.executeJavaScript(
+      "(()=>{const b=[...document.querySelectorAll('button')].find((x)=>x.textContent.includes('用作布局底图')); if(b){b.click(); return true} return false})()",
+    )
+    if (handoff) {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      const studioBackground = await win.webContents.capturePage()
+      writeFileSync(join(app.getPath('userData'), 'screenshot-studio-background.png'), studioBackground.toPNG())
+    } else {
+      await win.webContents.executeJavaScript(
+        "window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))",
+      )
+    }
+
+    await win.webContents.executeJavaScript(
+      "location.hash = '#/'; document.querySelector('main')?.scrollTo(0, 0)",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    await win.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label')?.includes('隐藏通知'))?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const cleanHome = await win.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-home-clean.png'), cleanHome.toPNG())
+
+    await win.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '收起侧栏')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    const collapsed = await win.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-sidebar-collapsed.png'), collapsed.toPNG())
+    await win.webContents.executeJavaScript(
+      "[...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '展开侧栏')?.click()",
+    )
+    await new Promise((resolve) => setTimeout(resolve, 450))
+
     await win.webContents.executeJavaScript("location.hash = '#/instances'")
     await new Promise((resolve) => setTimeout(resolve, 900))
     await win.webContents.executeJavaScript(

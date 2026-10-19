@@ -13,6 +13,9 @@ export const DEFAULT_SETTINGS: Settings = {
   pythonPath: null,
   autoCheckUpdates: true,
   dismissedAnnouncements: [],
+  sidebarCollapsed: false,
+  galleryRoots: [],
+  homeBackground: null,
 }
 
 let cache: Settings | null = null

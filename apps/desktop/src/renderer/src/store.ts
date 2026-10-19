@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import { Events, Ipc } from '@shared/channels'
 import type {
+  AppNotification,
   Catalog,
   DownloadTask,
   EnvReport,
+  GalleryItem,
   InstanceInfo,
   Settings,
   UpdateState,
 } from '@shared/types'
+import type { LayoutDraft } from './lib/layout'
 import { call, onEvent } from './lib/api'
 
 function applyTheme(theme: Settings['theme']): void {
@@ -33,6 +36,11 @@ interface AppStore {
   instances: InstanceInfo[]
   catalog: Catalog | null
   downloads: DownloadTask[]
+  notifications: AppNotification[]
+  notificationsOpen: boolean
+  studioPrompt: string
+  studioDraft: LayoutDraft | null
+  studioBackground: GalleryItem | null
   scanning: boolean
   scanSection: string | null
   gitMessage: string | null
@@ -44,6 +52,14 @@ interface AppStore {
   refreshCatalog: () => Promise<void>
   refreshUpdates: () => Promise<void>
   saveSettings: (patch: Partial<Settings>) => Promise<void>
+  toggleSidebar: () => Promise<void>
+  toggleNotifications: () => void
+  setNotificationsOpen: (open: boolean) => void
+  pushNotification: (input: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void
+  markAllNotificationsRead: () => void
+  setStudioPrompt: (prompt: string) => void
+  setStudioDraft: (draft: LayoutDraft | null) => void
+  setStudioBackground: (item: GalleryItem | null) => void
   dismissAnnouncement: (id: string) => Promise<void>
   downloadModel: (modelId: string) => Promise<void>
   downloadAdapter: (adapterId: string) => Promise<void>
@@ -66,7 +82,20 @@ export const useApp = create<AppStore>((set, get) => {
 
     onEvent<DownloadTask>(Events.download, (task) => {
       set((state) => ({ downloads: upsertDownload(state.downloads, task) }))
-      if (task.state === 'done') void get().refreshCatalog()
+      if (task.state === 'done') {
+        void get().refreshCatalog()
+        get().pushNotification({
+          tone: 'success',
+          title: '下载完成',
+          message: `${task.label} 已写入本地缓存`,
+        })
+      } else if (task.state === 'error') {
+        get().pushNotification({
+          tone: 'error',
+          title: '下载失败',
+          message: task.error ?? task.label,
+        })
+      }
     })
     onEvent<{ id: string }>(Events.instancesChanged, () => {
       void get().refreshInstances()
@@ -109,6 +138,11 @@ export const useApp = create<AppStore>((set, get) => {
     instances: [],
     catalog: null,
     downloads: [],
+    notifications: [],
+    notificationsOpen: true,
+    studioPrompt: '',
+    studioDraft: null,
+    studioBackground: null,
     scanning: false,
     scanSection: null,
     gitMessage: null,
@@ -140,6 +174,13 @@ export const useApp = create<AppStore>((set, get) => {
           downloads: downloads.status === 'fulfilled' ? downloads.value : [],
           ready: true,
         })
+        if (updates.status === 'fulfilled' && updates.value.updateAvailable) {
+          get().pushNotification({
+            tone: 'info',
+            title: '发现新版本',
+            message: `CloverMoss ${updates.value.latestVersion} 可用`,
+          })
+        }
       } catch (error) {
         set({ error: error instanceof Error ? error.message : String(error) })
       } finally {
@@ -190,6 +231,52 @@ export const useApp = create<AppStore>((set, get) => {
       const settings = await call<Settings>(Ipc.settingsUpdate, patch)
       applyTheme(settings.theme)
       set({ settings })
+    },
+
+    async toggleSidebar() {
+      const settings = get().settings
+      if (!settings) return
+      await get().saveSettings({ sidebarCollapsed: !settings.sidebarCollapsed })
+    },
+
+    toggleNotifications() {
+      set((state) => ({ notificationsOpen: !state.notificationsOpen }))
+    },
+
+    setNotificationsOpen(open) {
+      set({ notificationsOpen: open })
+    },
+
+    pushNotification(input) {
+      set((state) => ({
+        notifications: [
+          {
+            ...input,
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            read: false,
+          },
+          ...state.notifications,
+        ].slice(0, 50),
+      }))
+    },
+
+    markAllNotificationsRead() {
+      set((state) => ({
+        notifications: state.notifications.map((item) => ({ ...item, read: true })),
+      }))
+    },
+
+    setStudioPrompt(prompt) {
+      set({ studioPrompt: prompt })
+    },
+
+    setStudioDraft(draft) {
+      set({ studioDraft: draft })
+    },
+
+    setStudioBackground(item) {
+      set({ studioBackground: item })
     },
 
     async dismissAnnouncement(id) {

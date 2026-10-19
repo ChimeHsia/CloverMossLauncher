@@ -21,6 +21,10 @@ export const Ipc = {
   modelPause: 'models:pause',
   modelDelete: 'models:delete',
   downloadsList: 'downloads:list',
+  galleryList: 'gallery:list',
+  galleryItem: 'gallery:item',
+  galleryReveal: 'gallery:reveal',
+  pickDialog: 'dialog:pick',
   openPath: 'app:open-path',
   openExternal: 'app:open-external',
 } as const

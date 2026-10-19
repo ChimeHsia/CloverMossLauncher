@@ -28,8 +28,8 @@ const runtimeLabel: Record<InstanceInfo['runtimeState'], string> = {
   error: '运行时异常',
 }
 
-function runtimeTone(state: InstanceInfo['runtimeState']): 'neutral' | 'amber' | 'moss' | 'red' {
-  if (state === 'ready') return 'moss'
+function runtimeTone(state: InstanceInfo['runtimeState']): 'neutral' | 'amber' | 'accent' | 'red' {
+  if (state === 'ready') return 'accent'
   if (state === 'error') return 'red'
   if (state === 'installing') return 'amber'
   return 'neutral'
@@ -38,7 +38,7 @@ function runtimeTone(state: InstanceInfo['runtimeState']): 'neutral' | 'amber' |
 export function InstancesPage(): React.JSX.Element {
   const navigate = useNavigate()
   const toast = useToast()
-  const { instances, refreshInstances, gitMessage } = useApp()
+  const { instances, refreshInstances, gitMessage, pushNotification } = useApp()
   const [createOpen, setCreateOpen] = useState(false)
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [commits, setCommits] = useState<CommitInfo[]>([])
@@ -101,6 +101,11 @@ export function InstancesPage(): React.JSX.Element {
         runtimeMode,
       })
       toast.push(`实例 ${instance.name} 已创建`, 'success')
+      pushNotification({
+        tone: 'success',
+        title: '实例已创建',
+        message: `${instance.name} 已固定到 ${instance.shortCommit}`,
+      })
       setCreateOpen(false)
       setName('')
       await refreshInstances()
@@ -117,6 +122,11 @@ export function InstancesPage(): React.JSX.Element {
     try {
       await call(Ipc.runtimeInstall, { instanceId: instance.id })
       toast.push('依赖安装完成', 'success')
+      pushNotification({
+        tone: 'success',
+        title: '依赖安装完成',
+        message: `${instance.name} 的运行时已就绪`,
+      })
       await refreshInstances()
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -194,7 +204,7 @@ export function InstancesPage(): React.JSX.Element {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-[13px] font-medium">{instance.name}</span>
-                  {instance.channel === 'stable' ? <Pill tone="moss">稳定版</Pill> : null}
+                  {instance.channel === 'stable' ? <Pill tone="accent">稳定版</Pill> : null}
                   {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
                   {instance.channel === 'custom' ? <Pill tone="blue">自定义</Pill> : null}
                   {instance.dirty ? <Pill tone="amber">有本地改动</Pill> : null}
@@ -332,7 +342,7 @@ export function InstancesPage(): React.JSX.Element {
                             {item.short}
                           </span>
                           <span className="text-[11px] text-[var(--color-text-tertiary)]">{dateTime(item.date)}</span>
-                          {item.sha === stable?.sha ? <Pill tone="moss">稳定版</Pill> : null}
+                          {item.sha === stable?.sha ? <Pill tone="accent">稳定版</Pill> : null}
                         </div>
                         <div className="truncate text-[12px]">{item.subject || '(无提交信息)'}</div>
                         <div className="text-[10.5px] text-[var(--color-text-tertiary)]">{item.author}</div>

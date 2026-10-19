@@ -1,331 +1,382 @@
-import { ArrowRight, Boxes, Package, RefreshCw, Sparkles, Wrench } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Boxes,
+  ChevronRight,
+  Image as ImageIcon,
+  LayoutGrid,
+  Sparkles,
+  Type,
+  UserRound,
+  Wand2,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
-import type { CheckAction, CheckItem } from '@shared/types'
+import type { GalleryItem, GalleryPage } from '@shared/types'
 import { call } from '../lib/api'
-import { bytes, relative } from '../lib/format'
-import { t } from '../lib/i18n'
+import { cloverUrl } from '../lib/clover'
+import { relative } from '../lib/format'
+import { exampleDraft, type LayoutDraft } from '../lib/layout'
 import { useApp } from '../store'
-import {
-  Button,
-  Card,
-  MarkdownBody,
-  Pill,
-  Spinner,
-  StatusDot,
-  cn,
-  useToast,
-} from '../components/ui'
+import { Button, Card, EmptyState, Pill, StatusDot, cn } from '../components/ui'
 
-const groupTitles: Record<CheckItem['group'], string> = {
-  system: '系统',
-  accelerator: '加速器',
-  memory: '内存与磁盘',
-  tools: '工具链',
-  network: '网络',
-  ports: '端口',
+interface Tutorial {
+  id: string
+  title: string
+  description: string
+  tag: 'Layout' | 'Prompt'
+  icon: React.ReactNode
+  prompt: string
+  draft: LayoutDraft | null
 }
 
-const announcementTone: Record<string, string> = {
-  info: 'border-sky-500/20 bg-sky-500/[0.04]',
-  success: 'border-sky-500/20 bg-sky-500/[0.04]',
-  warning: 'border-amber-500/25 bg-amber-500/[0.05]',
-  critical: 'border-red-500/25 bg-red-500/[0.05]',
+const characterDraft: LayoutDraft = {
+  width: 1024,
+  height: 1024,
+  summary: {
+    caption:
+      'An anime-style illustration of a girl in a navy school uniform standing in a sunlit classroom, with rows of wooden desks and large windows.',
+    meta: ['illustration', 'anime'],
+    canvas: 'single',
+  },
+  items: [
+    {
+      id: 'character-1',
+      label: 'character',
+      caption:
+        'A girl with shoulder-length dark hair, navy sailor uniform and a red ribbon, standing and looking toward the camera, soft rim light.',
+      bbox: [352, 192, 672, 896],
+    },
+    {
+      id: 'background-1',
+      label: 'object',
+      caption:
+        'A sunlit Japanese classroom: rows of wooden desks, a large blackboard, large windows with white curtains and warm afternoon light.',
+      bbox: [0, 0, 1024, 1024],
+    },
+  ],
 }
+
+const tutorials: Tutorial[] = [
+  {
+    id: 'poster',
+    title: '海报排版：标题 + 副标题',
+    description: '用两个文字框分别控制标题与正文的位置、字号和颜色。',
+    tag: 'Layout',
+    icon: <LayoutGrid className="size-4" />,
+    prompt: 'A minimalist travel poster with a cream background and a blue mountain illustration.',
+    draft: exampleDraft(),
+  },
+  {
+    id: 'character',
+    title: '人物构图：人物 + 背景',
+    description: '把人物与场景拆成两个区域，各自描述外观与光线。',
+    tag: 'Layout',
+    icon: <UserRound className="size-4" />,
+    prompt: 'An anime-style illustration of a girl standing in a sunlit classroom.',
+    draft: characterDraft,
+  },
+  {
+    id: 'text',
+    title: '文字渲染：招牌与营业时间',
+    description: '把要显示的文字原样写进 prompt，用引号和换行控制排版。',
+    tag: 'Prompt',
+    icon: <Type className="size-4" />,
+    prompt:
+      'A cozy ramen shop at night. A wooden sign above the door reads "麺" in warm white neon; a small chalkboard says "営業中\n18:00 - 02:00".',
+    draft: null,
+  },
+]
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
-  const toast = useToast()
-  const [expanded, setExpanded] = useState(false)
-  const { env, updates, instances, scanning, refreshEnv, dismissAnnouncement, refreshUpdates } = useApp()
+  const env = useApp((state) => state.env)
+  const instances = useApp((state) => state.instances)
+  const settings = useApp((state) => state.settings)
+  const updates = useApp((state) => state.updates)
+  const setStudioPrompt = useApp((state) => state.setStudioPrompt)
+  const setStudioDraft = useApp((state) => state.setStudioDraft)
+  const [heroPrompt, setHeroPrompt] = useState('')
+  const [recent, setRecent] = useState<GalleryItem[]>([])
 
-  const announcement = updates?.announcements[0]
   useEffect(() => {
-    setExpanded(false)
-  }, [announcement?.id])
-
-  const body = announcement ? announcement.body.replace(/^\s*#\s+.*\n+/, '') : ''
-  const recent = [...instances]
-    .sort((a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt))
-    .slice(0, 3)
-
-  async function handleAction(action: CheckAction): Promise<void> {
-    if (action.kind === 'rescan') {
-      await refreshEnv()
-    } else if (action.kind === 'open-settings') {
-      navigate('/settings')
-    } else if (action.kind === 'open-url' && action.url) {
-      await call(Ipc.openExternal, { url: action.url })
-    } else if (action.kind === 'install-python') {
-      navigate('/settings')
+    let cancelled = false
+    void call<GalleryPage>(Ipc.galleryList, { limit: 4 })
+      .then((page) => {
+        if (!cancelled) setRecent(page.items)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
     }
+  }, [])
+
+  function startStudio(prompt: string, draft: LayoutDraft | null = null): void {
+    setStudioPrompt(prompt)
+    setStudioDraft(draft)
+    navigate('/studio')
   }
 
-  const groups = (() => {
-    const map = new Map<CheckItem['group'], CheckItem[]>()
-    for (const check of env?.checks ?? []) {
-      const list = map.get(check.group) ?? []
-      list.push(check)
-      map.set(check.group, list)
-    }
-    return [...map.entries()]
-  })()
+  function startTutorial(tutorial: Tutorial): void {
+    startStudio(tutorial.prompt, tutorial.draft)
+  }
+
+  const background = settings?.homeBackground
 
   return (
-    <div className="space-y-5">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">{t('home.title')}</h1>
-          <p className="mt-1 text-[12.5px] text-[var(--color-text-secondary)]">{t('home.subtitle')}</p>
-        </div>
-        <Button tone="ghost" onClick={() => void refreshEnv()} disabled={scanning}>
-          <span className="inline-flex items-center gap-1.5">
-            {scanning ? <Spinner className="size-3.5" /> : <RefreshCw className="size-3.5" />}
-            {t('home.rescan')}
-          </span>
-        </Button>
-      </header>
+    <div className="space-y-4">
+      <section className="relative overflow-hidden rounded-[22px] border border-[var(--color-border-subtle)] shadow-[0_18px_50px_-24px_rgba(37,99,235,0.35)]">
+        {background ? (
+          <img
+            src={cloverUrl(background)}
+            alt=""
+            className="absolute inset-0 size-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(900px_420px_at_10%_-10%,#dbeafe_0%,transparent_60%),radial-gradient(700px_400px_at_100%_120%,#e0ecff_0%,transparent_58%),linear-gradient(135deg,#f8fbff_0%,#eef5ff_60%,#f7faff_100%)] dark:bg-[radial-gradient(900px_420px_at_10%_-10%,#17305a_0%,transparent_60%),radial-gradient(700px_400px_at_100%_120%,#112240_0%,transparent_58%),linear-gradient(135deg,#070c15_0%,#0b1424_60%,#070c15_100%)]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/70 to-white/20 dark:from-[#070c15]/92 dark:via-[#070c15]/72 dark:to-transparent" />
 
-      {announcement ? (
-        <Card className={cn('relative overflow-hidden px-5 py-4', announcementTone[announcement.level])}>
-          <div className="mb-1.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-accent-500 dark:text-accent-300" />
-              <span className="text-[12.5px] font-semibold">{announcement.title}</span>
-              {announcement.pinned ? <Pill tone="moss">置顶</Pill> : null}
-            </div>
-            <div className="flex items-center gap-2">
-              {announcement.action ? (
-                <Button
-                  tone="ghost"
-                  onClick={() => {
-                    if (announcement.action?.kind === 'open_url' && announcement.action.url) {
-                      void call(Ipc.openExternal, { url: announcement.action.url })
-                    } else if (announcement.action?.kind === 'check_update') {
-                      void refreshUpdates()
-                    } else {
-                      navigate('/settings')
-                    }
-                  }}
-                >
-                  {announcement.action.label}
-                </Button>
-              ) : null}
-              <Button tone="ghost" onClick={() => setExpanded((value) => !value)}>
-                {expanded ? '收起' : '展开'}
-              </Button>
-              {announcement.dismissible ? (
-                <Button
-                  tone="ghost"
-                  onClick={() =>
-                    void dismissAnnouncement(announcement.id).then(() => toast.push('已收起这条公告', 'success'))
-                  }
-                >
-                  不再显示
-                </Button>
-              ) : null}
-            </div>
-          </div>
-          <div className={cn('relative', !expanded && 'max-h-[84px] overflow-hidden')}>
-            <MarkdownBody>{body}</MarkdownBody>
-            {!expanded ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--color-surface)] to-transparent" />
+        <div className="relative z-10 px-7 py-7">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill tone="blue">
+              <Sparkles className="size-3" /> CloverMoss · MOSS-Image
+            </Pill>
+            {updates?.updateAvailable ? <Pill tone="blue">v{updates.latestVersion} 可用</Pill> : null}
+            {env ? (
+              <Pill tone="neutral">
+                {env.gpu.name} · {Math.round(env.device.memoryTotal / 1024 ** 3)} GB
+              </Pill>
             ) : null}
           </div>
-        </Card>
-      ) : null}
 
-      {updates?.updateAvailable ? (
-        <Card className="flex items-center justify-between gap-3 border-accent-500/25 bg-accent-500/[0.06] px-5 py-3">
-          <div className="text-[12.5px]">
-            新版本 <span className="font-semibold">{updates.latestVersion}</span> 可用，当前 {updates.currentVersion}。
+          <h1 className="mt-4 max-w-[560px] text-[30px] font-semibold leading-[1.2] tracking-tight">
+            今天想在 Moss 中
+            <span className="text-accent-600 dark:text-accent-300">画点什么？</span>
+          </h1>
+          <p className="mt-2 max-w-[540px] text-[12.5px] leading-6 text-[var(--color-text-secondary)]">
+            写一个画面、一段文字排版，或者用框选把人物和标题放到准确的位置。
+          </p>
+
+          <div className="mt-4 flex max-w-[560px] items-end gap-2 rounded-2xl border border-white/70 bg-white/70 p-2 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06]">
+            <textarea
+              value={heroPrompt}
+              onChange={(event) => setHeroPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  startStudio(heroPrompt)
+                }
+              }}
+              rows={2}
+              placeholder="例如：雨夜修表店，橱窗里有一只猫，招牌写着 REPAIR…"
+              className="min-h-[48px] min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-[12.5px] leading-5 outline-none placeholder:text-[var(--color-text-tertiary)]"
+            />
+            <Button tone="primary" className="shrink-0" onClick={() => startStudio(heroPrompt)}>
+              <span className="inline-flex items-center gap-1.5">
+                进入创作 <ArrowRight className="size-3.5" />
+              </span>
+            </Button>
           </div>
-          <Button tone="primary" onClick={() => navigate('/settings')}>
-            查看更新
-          </Button>
-        </Card>
-      ) : null}
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-[1.6fr_1fr]">
-        <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-5 py-3">
-            <div>
-              <h2 className="text-[13.5px] font-semibold">设备环境</h2>
-              <p className="mt-0.5 text-[11.5px] text-[var(--color-text-tertiary)]">
-                {env ? `检测于 ${relative(env.scannedAt)} · 共 ${env.checks.length} 项` : '正在读取设备信息'}
-              </p>
-            </div>
-            {scanning ? <Spinner /> : null}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[10.5px] text-[var(--color-text-tertiary)]">试试：</span>
+            {tutorials.map((tutorial) => (
+              <button
+                key={tutorial.id}
+                type="button"
+                onClick={() => startTutorial(tutorial)}
+                className="rounded-full border border-white/70 bg-white/55 px-2.5 py-1 text-[10.5px] text-[var(--color-text-secondary)] backdrop-blur-md transition hover:border-accent-400/50 hover:text-accent-700 dark:border-white/10 dark:bg-white/[0.05] dark:hover:text-accent-200"
+              >
+                {tutorial.title.split('：')[0]}
+              </button>
+            ))}
+            {env ? (
+              <span className="ml-auto text-[10.5px] text-[var(--color-text-tertiary)]">
+                推荐 {env.recommendation.width}² · {env.recommendation.steps} 步 · {env.recommendation.quant}
+              </span>
+            ) : null}
           </div>
+        </div>
+      </section>
 
-          {!env ? (
-            <div className="space-y-3 px-5 py-4">
-              {[0, 1, 2, 3, 4].map((index) => (
-                <div key={index} className="h-8 animate-pulse rounded-md bg-[var(--color-surface-tertiary)]" />
-              ))}
-            </div>
-          ) : (
-            <div className="divide-y divide-[var(--color-border-subtle)]">
-              {groups.map(([group, checks]) => (
-                <div key={group} className="px-5 py-3">
-                  <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-[var(--color-text-tertiary)]">
-                    {groupTitles[group]}
-                  </div>
-                  <div className="space-y-1">
-                    {checks.map((check) => (
-                      <div key={check.id} className="flex items-start gap-2.5 py-1.5">
-                        <StatusDot status={check.status} className="mt-[7px]" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className="text-[12.5px] font-medium">{check.label}</span>
-                            <span className="truncate text-right text-[12px] text-[var(--color-text-secondary)]">
-                              {check.value}
-                            </span>
-                          </div>
-                          {check.detail ? (
-                            <p className="mt-0.5 text-[11.5px] leading-5 text-[var(--color-text-tertiary)]">
-                              {check.detail}
-                            </p>
-                          ) : null}
-                          {check.actions?.length ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {check.actions.map((action) => (
-                                <Button key={action.id} tone="ghost" onClick={() => void handleAction(action)}>
-                                  {action.label}
-                                </Button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <div className="space-y-5">
-          <Card className="overflow-hidden border-accent-500/20 bg-accent-500/[0.05]">
-            <div className="px-5 py-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-accent-600 dark:text-accent-300">
-                  {t('home.recommended')}
-                </span>
-                {env ? <Pill tone="moss">{env.recommendation.quant.toUpperCase()}</Pill> : null}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <div className="space-y-4">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Boxes className="size-4 text-accent-500" />
+                <h2 className="text-[13px] font-semibold">我的实例</h2>
+                <span className="text-[10px] text-[var(--color-text-tertiary)]">{instances.length} 个</span>
               </div>
-              {env ? (
-                <>
-                  <div className="mt-3 text-[26px] font-semibold tracking-tight">
-                    {env.recommendation.width} × {env.recommendation.height}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--color-text-secondary)]">
-                    <span>{env.recommendation.steps} 步</span>
-                    <span className="text-[var(--color-text-tertiary)]">·</span>
-                    <span>{env.recommendation.profile === 'dmd8' ? 'DMD' : 'CFG 3'}</span>
-                    <span className="text-[var(--color-text-tertiary)]">·</span>
-                    <span>{env.recommendation.estimatedLabel}</span>
-                  </div>
-                  <p className="mt-3 text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
-                    {env.recommendation.note}
-                  </p>
-                </>
-              ) : (
-                <div className="mt-3 h-16 animate-pulse rounded-md bg-accent-500/10" />
-              )}
-              <Button tone="primary" className="mt-4 w-full" onClick={() => navigate('/instances')}>
-                <span className="inline-flex items-center gap-1.5">
-                  {t('home.newInstance')} <ArrowRight className="size-3.5" />
-                </span>
+              <Button tone="ghost" onClick={() => navigate('/instances')}>
+                管理
               </Button>
             </div>
+            {instances.length === 0 ? (
+              <EmptyState
+                icon={<Boxes className="size-6" />}
+                title="还没有实例"
+                description="创建一个实例来固定 MOSS-Image 的版本与运行时。"
+                action={
+                  <Button tone="primary" onClick={() => navigate('/instances')}>
+                    新建实例
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="mt-2 divide-y divide-[var(--color-border-subtle)]">
+                {instances.slice(0, 3).map((instance) => (
+                  <button
+                    key={instance.id}
+                    type="button"
+                    onClick={() => navigate(`/instances/${instance.id}`)}
+                    className="flex w-full items-center gap-3 py-2.5 text-left transition hover:bg-white/35 dark:hover:bg-white/[0.03]"
+                  >
+                    <StatusDot status={instance.status === 'ok' ? 'ok' : 'warn'} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[12px] font-medium">{instance.name}</span>
+                        {instance.channel === 'stable' ? <Pill tone="blue">稳定版</Pill> : null}
+                        {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
+                      </div>
+                      <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                        {instance.shortCommit} · {instance.runtimeState === 'ready' ? '运行时就绪' : '待安装依赖'} ·{' '}
+                        {relative(instance.lastUsedAt ?? instance.createdAt)}
+                      </div>
+                    </div>
+                    <ChevronRight className="size-3.5 text-[var(--color-text-tertiary)]" />
+                  </button>
+                ))}
+              </div>
+            )}
           </Card>
 
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => navigate('/instances')}
-              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-accent-500/30 hover:bg-accent-500/[0.03]"
-            >
-              <Boxes className="size-4 text-accent-500" />
-              <div>
-                <div className="text-[12.5px] font-medium">实例</div>
-                <div className="text-[11px] text-[var(--color-text-tertiary)]">{instances.length} 个已安装</div>
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen className="size-4 text-accent-500" />
+                <h2 className="text-[13px] font-semibold">教程</h2>
               </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/models')}
-              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-accent-500/30 hover:bg-accent-500/[0.03]"
-            >
-              <Package className="size-4 text-accent-500" />
-              <div>
-                <div className="text-[12.5px] font-medium">模型</div>
-                <div className="text-[11px] text-[var(--color-text-tertiary)]">
-                  {(env?.device.diskFree ?? 0) > 0 ? `${bytes(env?.device.diskFree)} 可用` : '管理权重'}
-                </div>
-              </div>
-            </button>
-          </div>
-
-          <Card className="px-4 py-3">
-            <div className="flex items-center gap-2 text-[12px] font-medium">
-              <Wrench className="size-3.5 text-[var(--color-text-tertiary)]" />
-              小提示
+              <span className="text-[10px] text-[var(--color-text-tertiary)]">从示例开始</span>
             </div>
-            <p className="mt-1.5 text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
-              16 GB 机器建议先用 768² + 8 步 DMD；首次下载 bf16 权重约 27 GB，也可以先用社区 int8 包。
-            </p>
+            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+              {tutorials.map((tutorial) => (
+                <button
+                  key={tutorial.id}
+                  type="button"
+                  onClick={() => startTutorial(tutorial)}
+                  className="group flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-white/35 p-3 text-left transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:bg-white/55 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
+                >
+                  <span className="flex size-7 items-center justify-center rounded-lg bg-accent-500/12 text-accent-600 dark:text-accent-300">
+                    {tutorial.icon}
+                  </span>
+                  <span className="text-[11.5px] font-medium leading-5">{tutorial.title}</span>
+                  <span className="text-[10px] leading-4 text-[var(--color-text-tertiary)]">
+                    {tutorial.description}
+                  </span>
+                  <span className="mt-auto inline-flex items-center gap-1 text-[10px] text-accent-600 dark:text-accent-300">
+                    {tutorial.tag === 'Layout' ? '载入布局' : '载入 Prompt'}
+                    <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="size-4 text-accent-500" />
+                <h2 className="text-[13px] font-semibold">最近作品</h2>
+              </div>
+              <Button tone="ghost" onClick={() => navigate('/gallery')}>
+                画廊
+              </Button>
+            </div>
+            {recent.length === 0 ? (
+              <div className="mt-2 flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-4 py-8 text-center">
+                <Wand2 className="size-5 text-[var(--color-text-tertiary)]" />
+                <p className="text-[11px] text-[var(--color-text-secondary)]">生成的作品会自动出现在这里</p>
+                <p className="text-[10px] text-[var(--color-text-tertiary)]">
+                  也可以去设置里添加已有的输出目录
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {recent.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => navigate('/gallery')}
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-tertiary)]"
+                  >
+                    <img
+                      src={cloverUrl(item.path)}
+                      alt={item.name}
+                      loading="lazy"
+                      className="size-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            <h2 className="text-[13px] font-semibold">设备与建议</h2>
+            <div className="mt-2 space-y-2 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-tertiary)]">加速器</span>
+                <span className="font-medium">{env?.gpu.name ?? '检测中'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-tertiary)]">内存</span>
+                <span className="font-medium">
+                  {env ? `${Math.round(env.device.memoryTotal / 1024 ** 3)} GB` : '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-tertiary)]">建议档位</span>
+                <span className="font-medium">
+                  {env ? `${env.recommendation.width}² · ${env.recommendation.steps} 步` : '—'}
+                </span>
+              </div>
+            </div>
+            <Button tone="secondary" className="mt-3 w-full" onClick={() => navigate('/settings')}>
+              查看环境报告
+            </Button>
+          </Card>
+
+          <Card className="p-4">
+            <h2 className="text-[13px] font-semibold">快捷入口</h2>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {[
+                { label: '模型库', to: '/models', icon: <Boxes className="size-3.5" /> },
+                { label: '画廊', to: '/gallery', icon: <ImageIcon className="size-3.5" /> },
+                { label: '创作', to: '/studio', icon: <Wand2 className="size-3.5" /> },
+                { label: '设置', to: '/settings', icon: <Sparkles className="size-3.5" /> },
+              ].map((entry) => (
+                <button
+                  key={entry.to}
+                  type="button"
+                  onClick={() => navigate(entry.to)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-white/35 px-2.5 py-2 text-[11px] text-[var(--color-text-secondary)] transition hover:border-accent-400/40 hover:text-accent-700 dark:bg-white/[0.03] dark:hover:text-accent-200',
+                  )}
+                >
+                  {entry.icon}
+                  {entry.label}
+                </button>
+              ))}
+            </div>
           </Card>
         </div>
       </div>
-
-      <Card>
-        <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-5 py-3">
-          <h2 className="text-[13.5px] font-semibold">{t('home.recent')}</h2>
-          <Button tone="ghost" onClick={() => navigate('/instances')}>
-            全部实例
-          </Button>
-        </div>
-        {recent.length === 0 ? (
-          <div className="px-5 py-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
-            {t('instances.empty')}，创建一个来开始。
-          </div>
-        ) : (
-          <div className="divide-y divide-[var(--color-border-subtle)]">
-            {recent.map((instance) => (
-              <button
-                key={instance.id}
-                type="button"
-                onClick={() => navigate(`/instances/${instance.id}`)}
-                className="flex w-full items-center gap-3 px-5 py-2.5 text-left transition hover:bg-[var(--color-surface-secondary)]"
-              >
-                <StatusDot status={instance.status === 'ok' ? 'ok' : instance.status === 'missing' ? 'error' : 'warn'} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[12.5px] font-medium">{instance.name}</span>
-                    {instance.channel === 'stable' ? <Pill tone="moss">稳定版</Pill> : null}
-                    {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
-                    {instance.dirty ? <Pill tone="amber">有本地改动</Pill> : null}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-                    {instance.branch} · {instance.shortCommit} · {relative(instance.lastUsedAt ?? instance.createdAt)}
-                  </div>
-                </div>
-                <ArrowRight className="size-3.5 text-[var(--color-text-tertiary)]" />
-              </button>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {updates?.error ? (
-        <Card className="border-amber-500/25 bg-amber-500/[0.05] px-4 py-3 text-[11.5px] text-amber-700 dark:text-amber-300">
-          更新检查失败：{updates.error}
-        </Card>
-      ) : null}
     </div>
   )
 }

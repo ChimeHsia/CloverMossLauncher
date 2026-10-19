@@ -120,7 +120,7 @@ export function InstanceDetailPage(): React.JSX.Element {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-[22px] font-semibold tracking-tight">{instance.name}</h1>
-            {instance.channel === 'stable' ? <Pill tone="moss">稳定版</Pill> : null}
+            {instance.channel === 'stable' ? <Pill tone="accent">稳定版</Pill> : null}
             {instance.channel === 'experimental' ? <Pill tone="amber">实验</Pill> : null}
             {instance.channel === 'custom' ? <Pill tone="blue">自定义</Pill> : null}
             {instance.dirty ? <Pill tone="amber">有本地改动</Pill> : null}
@@ -163,7 +163,7 @@ export function InstanceDetailPage(): React.JSX.Element {
         <Card className="px-5 py-4">
           <div className="flex items-center justify-between">
             <h2 className="text-[13px] font-semibold">运行时</h2>
-            <Pill tone={runtime?.state === 'ready' ? 'moss' : runtime?.state === 'error' ? 'red' : 'amber'}>
+            <Pill tone={runtime?.state === 'ready' ? 'accent' : runtime?.state === 'error' ? 'red' : 'amber'}>
               {runtime?.state === 'ready'
                 ? '就绪'
                 : runtime?.state === 'error'

@@ -38,7 +38,6 @@ export interface DeviceInfo {
   diskFree: number
   dataPath: string
   modelsPath: string
-  acrylic: boolean
 }
 
 export interface GpuInfo {
@@ -120,6 +119,18 @@ export interface Settings {
   pythonPath: string | null
   autoCheckUpdates: boolean
   dismissedAnnouncements: string[]
+  sidebarCollapsed: boolean
+  galleryRoots: string[]
+  homeBackground: string | null
+}
+
+export interface AppNotification {
+  id: string
+  tone: 'info' | 'success' | 'warning' | 'error'
+  title: string
+  message: string
+  createdAt: string
+  read: boolean
 }
 
 export interface Announcement {
@@ -262,6 +273,33 @@ export interface DownloadTask {
   updatedAt: string
 }
 
+export interface GalleryItem {
+  id: string
+  path: string
+  name: string
+  dir: string
+  root: string
+  size: number
+  mtime: number
+  ext: string
+  width?: number
+  height?: number
+  prompt?: string
+  seed?: number | null
+}
+
+export interface GalleryPage {
+  items: GalleryItem[]
+  nextCursor: string | null
+  total: number
+  scannedAt: string
+}
+
+export interface GalleryDetail extends GalleryItem {
+  negativePrompt?: string
+  parameters?: string
+}
+
 export interface AppInfo {
   name: string
   version: string
@@ -272,6 +310,7 @@ export interface AppInfo {
   arch: string
   dataPath: string
   modelsPath: string
+  acrylic: boolean
 }
 
 export interface IpcError {

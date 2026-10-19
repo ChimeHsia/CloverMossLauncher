@@ -1,4 +1,16 @@
-import { ExternalLink, FolderOpen, HardDrive, Info, RefreshCw, Save, Terminal } from 'lucide-react'
+import {
+  ExternalLink,
+  FolderOpen,
+  HardDrive,
+  ImagePlus,
+  Info,
+  MonitorCog,
+  Plus,
+  RefreshCw,
+  Save,
+  Terminal,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Ipc } from '@shared/channels'
 import type { AppInfo, Settings } from '@shared/types'
@@ -7,7 +19,7 @@ import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
 import { useApp } from '../store'
 import { Switch } from '@openai/apps-sdk-ui/components/Switch'
-import { Button, Card, Pill, Segmented, cn, useToast } from '../components/ui'
+import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../components/ui'
 
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
@@ -49,6 +61,35 @@ export function SettingsPage(): React.JSX.Element {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function persist(patch: Partial<Settings>): Promise<void> {
+    try {
+      await saveSettings(patch)
+      setDraft((previous) => (previous ? { ...previous, ...patch } : previous))
+      toast.push('已保存', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }
+
+  async function addGalleryRoot(): Promise<void> {
+    const path = await call<string | null>(Ipc.pickDialog, { kind: 'folder', title: '选择画廊目录' })
+    if (!path) return
+    const roots = draft?.galleryRoots ?? []
+    if (roots.includes(path)) return
+    await persist({ galleryRoots: [...roots, path] })
+  }
+
+  async function removeGalleryRoot(root: string): Promise<void> {
+    const roots = (draft?.galleryRoots ?? []).filter((item) => item !== root)
+    await persist({ galleryRoots: roots })
+  }
+
+  async function pickBackground(): Promise<void> {
+    const path = await call<string | null>(Ipc.pickDialog, { kind: 'image', title: '选择首页背景图' })
+    if (!path) return
+    await persist({ homeBackground: path })
   }
 
   async function checkUpdates(): Promise<void> {
@@ -101,7 +142,7 @@ export function SettingsPage(): React.JSX.Element {
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <Pill tone="moss">简体中文</Pill>
+                <Pill tone="accent">简体中文</Pill>
                 <Pill tone="neutral">English（soon）</Pill>
               </div>
             </div>
@@ -229,6 +270,101 @@ export function SettingsPage(): React.JSX.Element {
               </div>
               <Pill tone="neutral">共享 runtime</Pill>
             </div>
+          </div>
+        </Card>
+
+        <Card className="px-5 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold">画廊与背景</h2>
+            <Pill tone="neutral">{draft.galleryRoots.length} 个自定义路径</Pill>
+          </div>
+          <p className="mt-1.5 text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
+            默认读取应用输出目录与各实例的 outputs；可以添加任意本地文件夹作为画廊来源。
+          </p>
+          <div className="mt-2.5 space-y-1.5">
+            {draft.galleryRoots.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[var(--color-border)] px-2.5 py-2 text-[10.5px] text-[var(--color-text-tertiary)]">
+                使用默认输出目录
+              </div>
+            ) : (
+              draft.galleryRoots.map((root) => (
+                <div
+                  key={root}
+                  className="flex items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-white/35 px-2.5 py-1.5 dark:bg-white/[0.03]"
+                >
+                  <FolderOpen className="size-3.5 shrink-0 text-accent-500" />
+                  <span className="min-w-0 flex-1 truncate font-mono text-[10px]">{root}</span>
+                  <button
+                    type="button"
+                    onClick={() => void removeGalleryRoot(root)}
+                    className="text-[var(--color-text-tertiary)] hover:text-red-500"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Button tone="secondary" onClick={() => void addGalleryRoot()}>
+              <span className="inline-flex items-center gap-1.5">
+                <Plus className="size-3.5" /> 添加文件夹
+              </span>
+            </Button>
+            <Button tone="ghost" onClick={() => void saveSettings({ galleryRoots: [] })}>
+              恢复默认
+            </Button>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-[var(--color-border-subtle)] pt-2.5">
+            <div className="min-w-0">
+              <div className="text-[12px] font-medium">首页背景图</div>
+              <div className="mt-0.5 truncate text-[10px] text-[var(--color-text-tertiary)]">
+                {draft.homeBackground ?? '默认渐变'}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {draft.homeBackground ? (
+                <Button tone="ghost" onClick={() => void persist({ homeBackground: null })}>
+                  清除
+                </Button>
+              ) : null}
+              <Button tone="secondary" onClick={() => void pickBackground()}>
+                <span className="inline-flex items-center gap-1.5">
+                  <ImagePlus className="size-3.5" /> 选择图片
+                </span>
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="px-5 py-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold">设备与诊断</h2>
+            <Button tone="ghost" onClick={() => void refreshEnv()}>
+              <span className="inline-flex items-center gap-1.5">
+                <MonitorCog className="size-3.5" /> 重新检测
+              </span>
+            </Button>
+          </div>
+          <div className="mt-2.5 space-y-2">
+            {(env?.checks ?? []).map((check) => (
+              <div key={check.id} className="flex items-start gap-2.5">
+                <StatusDot status={check.status} className="mt-1.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[11.5px] font-medium">{check.label}</span>
+                    <span className="truncate text-right text-[10.5px] text-[var(--color-text-secondary)]">
+                      {check.value}
+                    </span>
+                  </div>
+                  {check.detail ? (
+                    <p className="mt-0.5 text-[10px] leading-4 text-[var(--color-text-tertiary)]">{check.detail}</p>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+            {!env ? <div className="text-[10.5px] text-[var(--color-text-tertiary)]">正在检测…</div> : null}
           </div>
         </Card>
 

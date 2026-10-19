@@ -1,14 +1,15 @@
-# 实现状态（M1–M3）
+# 实现状态（M1–M3 + UI v0.2）
 
 - 日期：2026-10-19
-- 范围：可运行的 Electron 启动器骨架 + 环境报告 + 公告/更新检查 + 实例/运行时 + 模型目录/下载
+- 范围：Electron 启动器、环境报告、公告/更新、实例/运行时、模型/下载、
+  通知中心、画廊、创作台与 layout 标注器
 - 对应路线图：[M1 / M2 / M3](roadmap.md)
 
 ## 1. 现在能跑什么
 
 ```bash
 pnpm install
-pnpm dev                 # 开发模式，窗口 960×640
+pnpm dev                 # 开发模式，默认 1180×760 小窗（非全屏）
 pnpm build               # 构建 main / preload / renderer
 ```
 
@@ -21,50 +22,73 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 ## 2. 已完成
 
+### 2.1 基础（M1–M3）
+
 | 模块 | 实现 |
 | --- | --- |
-| 应用壳 | Electron 44 + electron-vite 6 + React 19 + Tailwind 4 + `@openai/apps-sdk-ui`；960×640 小窗、hiddenInset 标题栏、深浅色 |
-| IPC | preload 仅暴露 `invoke` / `on`；主进程 zod 校验；`IpcResult` 统一错误 |
-| 环境报告 | 系统/CPU/内存（vm_stat 可回收内存）/磁盘/GPU（macOS system_profiler、Windows CIM、Linux lspci）/Python 发现/git/uv/网络探测/7860 端口；按内存给出推荐档位 |
-| 公告与更新 | 读取 `release/manifest.json`（开发期本地优先）与公告 markdown；支持多镜像、缓存、已读/不再显示 |
-| 实例管理 | bare git 镜像、分支/提交列表、worktree 创建、固定 commit、稳定版标记（main HEAD 或 manifest 推荐提交）、删除/保留输出、dirty 检测 |
-| 运行时 | Python 发现、`uv venv`/`venv`、按依赖锁哈希共享、独立运行时、`uv pip`/`pip` 安装、日志事件、状态机 |
-| 模型/适配器 | 读取 `release/models.json`，展示官方/社区量化/DMD；HF API 文件树、断点续传、LFS sha256 校验、HF 兼容缓存（blobs/snapshots/refs）、暂停/继续、磁盘保护 |
-| 设置 | 主题、网络策略与手动镜像、模型目录、Python 路径、更新开关、版本信息 |
-| 安全 | contextIsolation、sandbox、无 nodeIntegration、CSP、外链只走系统浏览器、路径白名单、更新清单 schema |
+| 应用壳 | Electron 44 + electron-vite 6 + React 19 + Tailwind 4 + `@openai/apps-sdk-ui`；1180×760、hiddenInset、深浅色 |
+| IPC | preload 仅暴露 `invoke` / `on` / `acrylic`；主进程 zod 校验；`IpcResult` 统一错误 |
+| 环境报告 | 系统/CPU/内存（vm_stat 可回收）/磁盘/GPU（system_profiler、CIM、lspci）/Python/git/uv/网络/7860；推荐档位 |
+| 公告与更新 | 读取 `release/manifest.json`（开发期本地优先）与公告 markdown；镜像、缓存、已读 |
+| 实例管理 | bare git 镜像、分支/提交、worktree、固定 commit、稳定版标记、删除保留输出、dirty 检测 |
+| 运行时 | `uv venv`/`venv`、依赖锁哈希共享、独立运行时、`uv pip`/`pip`、日志事件、状态机 |
+| 模型/适配器 | `release/models.json`、HF API 文件树、断点续传、LFS sha256、HF 兼容缓存、暂停/继续、磁盘保护 |
+| 设置 | 主题、网络/镜像、模型目录、Python 路径、画廊路径、首页背景、更新开关 |
+
+### 2.2 UI v0.2
+
+| 模块 | 实现 |
+| --- | --- |
+| 视觉 | **无绿色**；白色/浅蓝/冷灰，强调色 `#2563eb`；深色为海军蓝；卡片/侧栏/顶栏统一 `glass` 半透明层 |
+| 亚克力 | macOS `vibrancy: under-window` + 透明背景；Windows `backgroundMaterial: acrylic`；不支持平台回退蓝白渐变 |
+| 侧栏 | 212 px ↔ 64 px 折叠；图标 rail、tooltip、状态持久化；顶部栏同步切换按钮 |
+| 通知中心 | 右上角抽屉，默认打开；上半「公告」（release）、下半「应用内通知」两块圆角卡片；离开首页自动收起，Bell 可随时打开 |
+| 首页 | “今天想在 Moss 中画点什么？” + Prompt + 教程 chips + 我的实例 + 教程案例 + 最近作品 + 设备建议 |
+| 创作台 | Prompt / 负面词 / 尺寸 / 8·20·50 步 / CFG / Seed / 实例选择；生成按钮提示 M4 |
+| Layout 标注器 | 画框、移动、右下角缩放、物体/人物/文字标签、caption/text 编辑、画布尺寸、summary/meta/canvas |
+| 官方编译器 | 草稿 `abs + xyxy` → 模型 `abs_centralized + yxyx`；校验尺寸/区域/文字/越界；与官方 `compile_prompt.py` 对拍一致 |
+| 画廊 | 默认 outputs + 实例 outputs + 自定义目录；`clover://` 协议；48 张/页 + IntersectionObserver；`content-visibility`；PNG/sidecar 元数据；“用作布局底图” |
+| 设置补充 | 画廊目录增删、首页背景选择、设备与诊断完整报告 |
 
 ## 3. 实测证据
 
 在本机 **Apple M3 / 16 GB / macOS 15.7.7** 上验证：
 
-| 验证 | 命令 | 结果 |
+| 验证 | 命令 / 方式 | 结果 |
 | --- | --- | --- |
-| 构建 | `pnpm build` | main 70 KB、preload 0.5 KB、renderer 1.65 MB + 172 KB CSS |
+| 构建 | `pnpm build` | 通过 |
 | 类型 | `pnpm typecheck` | 通过 |
 | 自检 | `electron . --smoke` | 8 项检查；GPU=Apple M3；Python 3.13.5/3.12.7/3.11.9/3.10.18；网络选中清华 PyPI + hf-mirror |
-| 公告 | `--smoke` | 本地 manifest → 1 条公告，source=local |
-| 实例 | `--scenario=create` | 克隆 96 MB 镜像，创建 worktree，`moss-main-c1355e6`，稳定版 |
-| 共享运行时 | `--scenario=second` | 旧 commit 实例复用同一 runtime `py3135-a02c6928` |
-| 依赖安装 | `--scenario=install` | 43 个包、785 MB；torch 2.14.1、diffusers 0.41.0、transformers 5.20.1；`torch.backends.mps.is_available() == True`；官方 `inference_runtime` 可 import |
-| 模型下载 | `--scenario=download-test` | 10 个文件 / 12.5 MB；HF 缓存布局正确；`transformers` 在 `HF_HUB_OFFLINE=1` 下可解析 |
+| 实例 | `--scenario=create` | 克隆 96 MB 镜像，worktree，`moss-main-c1355e6`，稳定版 |
+| 共享运行时 | `--scenario=second` | 旧 commit 实例复用 `py3135-a02c6928` |
+| 依赖安装 | `--scenario=install` | 43 包 / 785 MB；torch 2.14.1 + MPS；官方 `inference_runtime` 可 import |
+| 模型下载 | `--scenario=download-test` | 10 文件 / 12.5 MB；HF 缓存布局；`transformers` 离线解析 |
+| 画廊 | 本地 8 张测试图 | 3 列网格、分页、元数据（prompt/seed）、详情、布局底图交接正常 |
+| Layout 编译器 | `node --experimental-strip-types` 跑 `layout.ts` | 官方示例输出逐字段一致：文本 `[-416,-384,-288,384]`、物体 `[-192,-288,384,288]` |
+| 通知中心 | `--screenshot` | 默认打开、两块圆角卡片；进入创作/画廊后自动收起 |
+| 侧栏 | `--screenshot` | 212 ↔ 64 折叠正常，内容区自适应 |
 
-截图（由 `--screenshot` 自动生成）：
+截图（`--screenshot` 自动生成）：
 
-![首页（深色）](assets/home-dark.png)
-![首页（浅色）](assets/home-light.png)
-![实例](assets/instances.png)
-![新建实例](assets/create-instance.png)
-![实例详情](assets/instance-detail.png)
-![模型](assets/models.png)
-![设置](assets/settings.png)
+![首页](assets/home.webp)
+![通知中心](assets/notifications.webp)
+![创作台](assets/studio.webp)
+![画廊](assets/gallery.webp)
+![画廊详情](assets/gallery-detail.webp)
+![折叠侧栏](assets/sidebar-collapsed.webp)
+![设置](assets/settings.webp)
 
 ## 4. 与设计文档的差异（有意为之）
 
-1. **渲染层暂放在 `apps/desktop/src/renderer`**，不是独立的 `apps/renderer`。M5 做 WebUI 时抽出，避免现在引入 workspace 解析复杂度。
-2. **状态用 JSON 文件而非 SQLite**（`settings.json`、`instance.json`、`runtime.json`）。实例量小，JSON 足够；M4 接任务/日志时再上 SQLite。
-3. **下载队列只在内存**，重启后丢失；已完成的缓存保留。M4 持久化。
-4. **模型/适配器只做了目录与下载**，实例的模型绑定、适配器启用/强度 UI 留到 M4。
-5. **未实现 runner/Gradio 启动、进度翻译、诊断卡片、WebUI、应用更新安装**——这些是 M4/M5。
+1. **渲染层暂放在 `apps/desktop/src/renderer`**，不是独立 `apps/renderer`；M5 做 WebUI 时抽出。
+2. **状态用 JSON 文件而非 SQLite**；M4 接任务/日志时再上。
+3. **下载队列只在内存**，重启后丢失；已完成缓存保留。
+4. **模型/适配器只做了目录与下载**；实例绑定、启用/强度留到 M4。
+5. **创作台的“开始生成”仍是提示**：运行后端在 M4 接入；layout 编译与 Prompt 已可用。
+6. **画廊测试图只在 `.dev-data/`**，不随仓库分发；真实作品来自用户输出目录。
+7. **亚克力只在 macOS / Windows 生效**；Linux/截图模式回退到渐变背景。
+8. **标注器的画框/拖拽/缩放交互已实现**，但还没有自动化 E2E；建议在接 runner 前手工验收一次。
+9. **画廊只做了分页 + content-visibility**，没有做 DOM 行级虚拟化；1 万张量级仍建议后续加窗口化。
 
 ## 5. 开发辅助
 
@@ -77,10 +101,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ... electron . --scenario=second
 ... electron . --scenario=install
 
-# 下载一个 12 MB 的 HF 测试仓库（验证缓存布局）
+# 下载一个 12 MB 的 HF 测试仓库
 ... electron . --scenario=download-test
 
-# 生成 5 张界面截图到 .dev-data/
+# 生成首页/通知/创作/画廊/折叠/设置等截图到 .dev-data/
 ... electron . --screenshot
 ```
 
@@ -93,4 +117,5 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - 诊断规则与弹窗预算（防循环）；
 - 任务/日志落盘（SQLite）；
 - 实例模型绑定与适配器强度；
-- 下载队列持久化与速度统计。
+- 下载队列持久化与速度统计；
+- 创作台接上 runner 后，把“开始生成”变成真实流程。

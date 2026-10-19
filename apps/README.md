@@ -18,10 +18,10 @@ apps/desktop/
     index.html
     src/main.tsx
     src/App.tsx             HashRouter + 侧栏布局
-    src/pages/              Home / Instances / InstanceDetail / Models / Settings
-    src/components/         layout（Sidebar / Topbar）+ ui（Card / Pill / Modal / Toast / Progress）
-    src/store.ts            Zustand
-    src/lib/                api / format / i18n
+    src/pages/              Home / Studio / Gallery / Instances / InstanceDetail / Models / Settings
+    src/components/         layout（Sidebar / Topbar）/ NotificationPanel / ui / ErrorBoundary
+    src/store.ts            Zustand（含通知、创作草稿、画廊底图）
+    src/lib/                layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
     src/styles.css          Tailwind 4 + Apps SDK UI + Moss token
   src/shared/               types / channels / schemas
   out/                      构建产物（gitignored）
@@ -77,19 +77,29 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 | 项 | 值 |
 | --- | --- |
-| 默认尺寸 | 960 × 640（居中，不最大化） |
-| 最小尺寸 | 840 × 560 |
-| 标题栏 | macOS `hiddenInset`；Windows 原生 |
+| 默认尺寸 | 1180 × 760（居中，不最大化） |
+| 最小尺寸 | 960 × 640 |
+| 标题栏 | macOS `hiddenInset` + `vibrancy: under-window`；Windows Acrylic |
 | 启动 | 先出窗口，环境扫描后台完成 |
+| 侧栏 | 212 px ↔ 64 px 折叠，状态持久化 |
 
 ## 通信
 
-渲染层只依赖 `lib/api.ts` 的 `call` / `onEvent`：
+渲染层只依赖 `lib/api.ts` 的 `call` / `onEvent`；本地图片走 `clover://local?path=…`
+自定义协议（只允许画廊根目录与首页背景）：
 
 - 主进程每个 channel 都用 zod 校验入参；
 - 统一返回 `{ ok, data } | { ok, error }`；
 - 进度类事件单向推送（`event:download`、`event:runtime-log`、`event:instances-changed`）；
 - 渲染层用 Zustand 归约，页面不直接接触 `ipcRenderer`。
+
+## 画廊与 layout
+
+- `src/main/services/gallery.ts`：扫描 outputs / 自定义目录，5 s 缓存，cursor 分页；
+- `src/renderer/src/lib/layout.ts`：草稿 `abs+xyxy` → 模型 `abs_centralized+yxyx`，
+  与官方 `compile_prompt.py` 对拍一致；
+- `clover://` 协议在 `main/index.ts` 里注册 scheme、在 `registerGalleryProtocol()` 里处理；
+- 画廊卡片用 `content-visibility: auto`，图片 `loading="lazy"`。
 
 ## 打包（M6）
 
