@@ -209,6 +209,8 @@ export function normalizeSignature(ruleId: string, raw: string): string {
 }
 
 export function toDiagnostic(rule: ErrorRule, raw: string, jobId?: string): Omit<Diagnostic, 'id' | 'count' | 'firstAt' | 'lastAt' | 'toast'> {
+  const match = rule.regex?.exec(raw)
+  const render = (text: string): string => text.replace(/\{(\d+)\}/g, (_, index: string) => match?.[Number(index)] ?? '未知')
   const solutions: DiagnosticSolution[] = (rule.solutions ?? []).map((solution) => ({
     label: solution.label,
     action: solution.action,
@@ -219,8 +221,8 @@ export function toDiagnostic(rule: ErrorRule, raw: string, jobId?: string): Omit
     jobId,
     ruleId: rule.id,
     severity: rule.severity,
-    title: rule.title,
-    explain: rule.explain,
+    title: render(rule.title),
+    explain: render(rule.explain),
     solutions,
     raw: raw.slice(-4000),
     signature: normalizeSignature(rule.id, raw),
