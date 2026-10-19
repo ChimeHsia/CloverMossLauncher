@@ -305,33 +305,34 @@ export function HomePage(): React.JSX.Element {
       <div className="min-h-[18vh] flex-1" />
 
       <section className="glass-strong mb-12 overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)]">
+        <div className="flex h-10 items-center gap-2 px-3">
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
-            className="flex h-10 w-full items-center gap-2 px-3 text-left hover:bg-white/[0.025]"
+            aria-expanded={!collapsed}
+            aria-controls="launch-stack"
+            className="flex h-full min-w-0 flex-1 items-center gap-2 text-left hover:bg-white/[0.025]"
           >
             <ListChecks className="size-3.5 text-[var(--color-text-tertiary)]" />
             <span className="text-[11px] font-medium">运行中的 Case</span>
             <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
               {runningCount} 进行中 · {queuedCount} 待处理
             </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                setSort((value) => (value === 'started' ? 'name' : 'started'))
-              }}
-              className="ml-auto inline-flex items-center gap-1 text-[9px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
-            >
-              {sort === 'started' ? '启动时间' : '名称'}
-            </button>
             <ChevronDown
-              className={cn('ml-0.5 size-4 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
+              className={cn('ml-auto size-4 shrink-0 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
             />
           </button>
+          <button
+            type="button"
+            onClick={() => setSort((value) => (value === 'started' ? 'name' : 'started'))}
+            aria-label={`排序：${sort === 'started' ? '启动时间' : '名称'}，点击切换`}
+            className="inline-flex h-full shrink-0 items-center text-[9px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
+          >
+            {sort === 'started' ? '启动时间' : '名称'}
+          </button>
+        </div>
 
-          {!collapsed && activeRows.length > 0 ? (
-            <div className="border-t border-[var(--color-border-subtle)]">
+            <div id="launch-stack" hidden={collapsed || activeRows.length === 0} className="border-t border-[var(--color-border-subtle)]">
               {activeRows.map((row) => {
                 const running = row.state === 'running' || row.state === 'starting'
                 const queued = row.state === 'queued'
@@ -402,7 +403,6 @@ export function HomePage(): React.JSX.Element {
                 )
               })}
             </div>
-          ) : null}
       </section>
 
       <div className="sticky bottom-0 z-20 mt-3">
