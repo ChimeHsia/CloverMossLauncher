@@ -146,7 +146,7 @@ export function SettingsPage(): React.JSX.Element {
                   value={String(draft[key] ?? '')}
                   placeholder={placeholder}
                   onChange={(event) => patch({ [key]: event.target.value || null } as Partial<Settings>)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-moss-500"
+                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
                 />
               </label>
             ))}
@@ -182,7 +182,7 @@ export function SettingsPage(): React.JSX.Element {
                 value={draft.modelsRoot ?? ''}
                 placeholder="例如 /Volumes/Data/CloverMoss/models"
                 onChange={(event) => patch({ modelsRoot: event.target.value || null })}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-moss-500"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
               />
             </label>
             <p className="text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
@@ -200,7 +200,7 @@ export function SettingsPage(): React.JSX.Element {
                 value={draft.pythonPath ?? ''}
                 placeholder="/opt/homebrew/bin/python3.12"
                 onChange={(event) => patch({ pythonPath: event.target.value || null })}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-moss-500"
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500"
               />
             </label>
             <div className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
@@ -292,7 +292,7 @@ export function SettingsPage(): React.JSX.Element {
               onClick={() =>
                 void call(Ipc.openExternal, { url: 'https://github.com/CloverIris/CloverMossLauncher' })
               }
-              className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-moss-600 hover:underline dark:text-moss-300"
+              className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-accent-600 hover:underline dark:text-accent-300"
             >
               项目主页与文档 <ExternalLink className="size-3" />
             </button>

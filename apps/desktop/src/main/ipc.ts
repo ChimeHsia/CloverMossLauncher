@@ -59,6 +59,7 @@ export function registerIpc(): void {
     arch: process.arch,
     dataPath: paths.root(),
     modelsPath: paths.models(getSettings().modelsRoot),
+    acrylic: process.platform === 'darwin' || process.platform === 'win32',
   }))
 
   handle(Ipc.settingsGet, null, () => getSettings())

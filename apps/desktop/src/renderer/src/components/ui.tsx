@@ -25,7 +25,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)]',
+        'glass rounded-xl border border-[var(--color-border-subtle)]',
         className,
       )}
       {...rest}
@@ -36,7 +36,7 @@ export function Card({
 }
 
 const statusColor: Record<CheckStatus, string> = {
-  ok: 'bg-emerald-500',
+  ok: 'bg-sky-500',
   warn: 'bg-amber-500',
   error: 'bg-red-500',
   unknown: 'bg-neutral-400',
@@ -50,7 +50,7 @@ type PillTone = 'neutral' | 'moss' | 'amber' | 'red' | 'blue'
 
 const pillTone: Record<PillTone, string> = {
   neutral: 'border-[var(--color-border)] text-[var(--color-text-secondary)]',
-  moss: 'border-moss-500/25 bg-moss-500/10 text-moss-600 dark:text-moss-300',
+  moss: 'border-accent-500/25 bg-accent-500/10 text-accent-600 dark:text-accent-300',
   amber: 'border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300',
   red: 'border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300',
   blue: 'border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300',
@@ -144,7 +144,7 @@ export function ProgressBar({
       <div
         className={cn(
           'h-full rounded-full transition-[width] duration-300 ease-out',
-          tone === 'moss' ? 'bg-moss-500' : 'bg-[var(--color-text-tertiary)]',
+          tone === 'moss' ? 'bg-accent-500' : 'bg-[var(--color-text-tertiary)]',
         )}
         style={{ width: `${width}%` }}
       />
@@ -214,7 +214,7 @@ export function Modal({
     >
       <div
         className={cn(
-          'flex max-h-[82vh] w-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] shadow-2xl',
+          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border-subtle)] shadow-2xl',
           width,
         )}
         onMouseDown={(event) => event.stopPropagation()}
@@ -259,7 +259,7 @@ export function useToast(): { push: (message: string, tone?: ToastTone) => void 
 
 const toastIcon: Record<ToastTone, ReactNode> = {
   info: <Info className="size-4 text-sky-500" />,
-  success: <Check className="size-4 text-emerald-500" />,
+  success: <Check className="size-4 text-sky-500" />,
   error: <AlertCircle className="size-4 text-red-500" />,
 }
 
@@ -281,7 +281,7 @@ export function ToastProvider({ children }: { children: ReactNode }): React.JSX.
         {items.map((item) => (
           <div
             key={item.id}
-            className="pointer-events-auto flex items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] px-3 py-2.5 text-[12.5px] shadow-lg"
+            className="glass-strong pointer-events-auto flex items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] px-3 py-2.5 text-[12.5px] shadow-lg"
           >
             {toastIcon[item.tone]}
             <span className="leading-5">{item.message}</span>

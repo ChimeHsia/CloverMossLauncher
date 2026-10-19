@@ -29,7 +29,7 @@ const groupTitles: Record<CheckItem['group'], string> = {
 
 const announcementTone: Record<string, string> = {
   info: 'border-sky-500/20 bg-sky-500/[0.04]',
-  success: 'border-emerald-500/20 bg-emerald-500/[0.04]',
+  success: 'border-sky-500/20 bg-sky-500/[0.04]',
   warning: 'border-amber-500/25 bg-amber-500/[0.05]',
   critical: 'border-red-500/25 bg-red-500/[0.05]',
 }
@@ -91,7 +91,7 @@ export function HomePage(): React.JSX.Element {
         <Card className={cn('relative overflow-hidden px-5 py-4', announcementTone[announcement.level])}>
           <div className="mb-1.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-moss-500 dark:text-moss-300" />
+              <Sparkles className="size-4 text-accent-500 dark:text-accent-300" />
               <span className="text-[12.5px] font-semibold">{announcement.title}</span>
               {announcement.pinned ? <Pill tone="moss">置顶</Pill> : null}
             </div>
@@ -137,7 +137,7 @@ export function HomePage(): React.JSX.Element {
       ) : null}
 
       {updates?.updateAvailable ? (
-        <Card className="flex items-center justify-between gap-3 border-moss-500/25 bg-moss-500/[0.06] px-5 py-3">
+        <Card className="flex items-center justify-between gap-3 border-accent-500/25 bg-accent-500/[0.06] px-5 py-3">
           <div className="text-[12.5px]">
             新版本 <span className="font-semibold">{updates.latestVersion}</span> 可用，当前 {updates.currentVersion}。
           </div>
@@ -208,10 +208,10 @@ export function HomePage(): React.JSX.Element {
         </Card>
 
         <div className="space-y-5">
-          <Card className="overflow-hidden border-moss-500/20 bg-moss-500/[0.05]">
+          <Card className="overflow-hidden border-accent-500/20 bg-accent-500/[0.05]">
             <div className="px-5 py-4">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-moss-600 dark:text-moss-300">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-accent-600 dark:text-accent-300">
                   {t('home.recommended')}
                 </span>
                 {env ? <Pill tone="moss">{env.recommendation.quant.toUpperCase()}</Pill> : null}
@@ -233,7 +233,7 @@ export function HomePage(): React.JSX.Element {
                   </p>
                 </>
               ) : (
-                <div className="mt-3 h-16 animate-pulse rounded-md bg-moss-500/10" />
+                <div className="mt-3 h-16 animate-pulse rounded-md bg-accent-500/10" />
               )}
               <Button tone="primary" className="mt-4 w-full" onClick={() => navigate('/instances')}>
                 <span className="inline-flex items-center gap-1.5">
@@ -247,9 +247,9 @@ export function HomePage(): React.JSX.Element {
             <button
               type="button"
               onClick={() => navigate('/instances')}
-              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-moss-500/30 hover:bg-moss-500/[0.03]"
+              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-accent-500/30 hover:bg-accent-500/[0.03]"
             >
-              <Boxes className="size-4 text-moss-500" />
+              <Boxes className="size-4 text-accent-500" />
               <div>
                 <div className="text-[12.5px] font-medium">实例</div>
                 <div className="text-[11px] text-[var(--color-text-tertiary)]">{instances.length} 个已安装</div>
@@ -258,9 +258,9 @@ export function HomePage(): React.JSX.Element {
             <button
               type="button"
               onClick={() => navigate('/models')}
-              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-moss-500/30 hover:bg-moss-500/[0.03]"
+              className="flex flex-col items-start gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-3.5 py-3 text-left transition hover:border-accent-500/30 hover:bg-accent-500/[0.03]"
             >
-              <Package className="size-4 text-moss-500" />
+              <Package className="size-4 text-accent-500" />
               <div>
                 <div className="text-[12.5px] font-medium">模型</div>
                 <div className="text-[11px] text-[var(--color-text-tertiary)]">

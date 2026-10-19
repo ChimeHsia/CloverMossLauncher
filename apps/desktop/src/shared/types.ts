@@ -38,6 +38,7 @@ export interface DeviceInfo {
   diskFree: number
   dataPath: string
   modelsPath: string
+  acrylic: boolean
 }
 
 export interface GpuInfo {

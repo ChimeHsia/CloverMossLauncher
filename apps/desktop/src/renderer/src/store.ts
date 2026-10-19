@@ -119,6 +119,7 @@ export const useApp = create<AppStore>((set, get) => {
       if (get().ready || get().loading) return
       set({ loading: true, error: null })
       try {
+        document.documentElement.dataset.acrylic = String(window.clover.acrylic)
         const settings = await call<Settings>(Ipc.settingsGet)
         applyTheme(settings.theme)
         set({ settings })

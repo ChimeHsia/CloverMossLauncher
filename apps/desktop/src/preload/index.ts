@@ -11,6 +11,7 @@ const api = {
   },
   platform: process.platform,
   version: process.versions.electron,
+  acrylic: process.argv.includes('--clover-acrylic'),
 }
 
 contextBridge.exposeInMainWorld('clover', api)

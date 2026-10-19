@@ -36,7 +36,7 @@ export function Sidebar(): React.JSX.Element {
   const activeDownloads = downloads.filter((task) => task.state === 'running' || task.state === 'queued').length
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-[var(--color-border-subtle)] bg-[var(--color-surface-secondary)] px-2.5 py-3">
+    <aside className="glass flex w-52 shrink-0 flex-col border-r border-[var(--color-border-subtle)] px-2.5 py-3">
       <nav className="flex flex-col gap-0.5">
         {navItems.map((item) => {
           const Icon = item.icon
@@ -129,7 +129,7 @@ export function Topbar(): React.JSX.Element {
   const title = titles[location.pathname] ?? (location.pathname.startsWith('/instances') ? t('instances.title') : '')
 
   return (
-    <header className="drag flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface)] pl-20 pr-3">
+    <header className="glass drag flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] pl-20 pr-3">
       <div className="flex min-w-0 items-center gap-2">
         <span className="text-[12.5px] font-medium text-[var(--color-text-secondary)]">{title}</span>
         {scanning ? (

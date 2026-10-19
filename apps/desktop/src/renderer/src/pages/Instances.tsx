@@ -181,7 +181,7 @@ export function InstancesPage(): React.JSX.Element {
           {instances.map((instance) => (
             <Card
               key={instance.id}
-              className="group flex items-center gap-4 px-4 py-3 transition hover:border-moss-500/25"
+              className="group flex items-center gap-4 px-4 py-3 transition hover:border-accent-500/25"
             >
               <StatusDot
                 status={instance.status === 'ok' ? 'ok' : instance.status === 'missing' ? 'error' : 'warn'}
@@ -274,7 +274,7 @@ export function InstancesPage(): React.JSX.Element {
                     setBranch(event.target.value)
                     void loadCommits(event.target.value)
                   }}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-moss-500"
+                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
                 >
                   {branches.map((item) => (
                     <option key={item.name} value={item.name}>
@@ -290,7 +290,7 @@ export function InstancesPage(): React.JSX.Element {
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={commit ? `moss-${branch}-${commit.slice(0, 7)}` : '自动生成'}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-moss-500"
+                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-[12.5px] outline-none focus:border-accent-500"
                 />
               </label>
             </div>
@@ -316,14 +316,14 @@ export function InstancesPage(): React.JSX.Element {
                       className={cn(
                         'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left transition',
                         commit === item.sha
-                          ? 'bg-moss-500/10 ring-1 ring-inset ring-moss-500/30'
+                          ? 'bg-accent-500/10 ring-1 ring-inset ring-accent-500/30'
                           : 'hover:bg-[var(--color-surface-secondary)]',
                       )}
                     >
                       <span
                         className={cn(
                           'mt-1 size-2.5 shrink-0 rounded-full border',
-                          commit === item.sha ? 'border-moss-500 bg-moss-500' : 'border-[var(--color-border-strong)]',
+                          commit === item.sha ? 'border-accent-500 bg-accent-500' : 'border-[var(--color-border-strong)]',
                         )}
                       />
                       <div className="min-w-0 flex-1">

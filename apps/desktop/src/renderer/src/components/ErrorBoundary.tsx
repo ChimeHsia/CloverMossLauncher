@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
           ) : null}
           <button
             type="button"
-            className="rounded-full bg-moss-500 px-4 py-1.5 text-[12px] text-white"
+            className="rounded-full bg-accent-500 px-4 py-1.5 text-[12px] text-white"
             onClick={() => window.location.reload()}
           >
             重新加载

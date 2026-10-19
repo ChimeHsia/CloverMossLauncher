@@ -7,6 +7,7 @@ declare global {
       on(channel: string, callback: (data: unknown) => void): () => void
       platform: string
       version: string
+      acrylic: boolean
     }
   }
 }

@@ -20,7 +20,7 @@ export function App(): React.JSX.Element {
   return (
     <ToastProvider>
       <HashRouter>
-        <div className="flex h-full flex-col bg-[var(--color-surface-secondary)] text-[var(--color-text)]">
+        <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
           <Topbar />
           <div className="flex min-h-0 flex-1">
             <Sidebar />

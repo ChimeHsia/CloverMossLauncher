@@ -30,6 +30,7 @@ if (noSandbox) {
 }
 
 function createWindow(show = true): BrowserWindow {
+  const acrylic = !screenshot && (process.platform === 'darwin' || process.platform === 'win32')
   const win = new BrowserWindow({
     width: 960,
     height: 640,
@@ -39,12 +40,17 @@ function createWindow(show = true): BrowserWindow {
     title: 'CloverMoss',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: '#0e100f',
+    ...(process.platform === 'darwin'
+      ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const }
+      : {}),
+    ...(process.platform === 'win32' ? { backgroundMaterial: 'acrylic' as const } : {}),
+    backgroundColor: acrylic ? '#00000000' : '#0b1220',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      additionalArguments: [acrylic ? '--clover-acrylic' : '--clover-opaque'],
     },
   })
 
