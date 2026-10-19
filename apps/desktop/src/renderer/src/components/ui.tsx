@@ -5,12 +5,15 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentProps,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import type { CheckStatus } from '@shared/types'
 
 export function cn(...values: Array<string | false | null | undefined>): string {
@@ -190,15 +193,7 @@ export function EmptyState({
   )
 }
 
-export function Modal({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  footer,
-  width = 'max-w-2xl',
-}: {
+interface DialogProps {
   open: boolean
   onClose: () => void
   title: string
@@ -206,35 +201,71 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   width?: string
-}): React.JSX.Element | null {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+}
+
+function Dialog({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  width,
+  sheet = false,
+}: DialogProps & { sheet?: boolean }): React.JSX.Element | null {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const backdropPressed = useRef(false)
+  const titleId = useId()
+  const descriptionId = useId()
+
+  useLayoutEffect(() => {
+    const element = dialog.current
+    if (!open || !element) return
+    const trigger = document.activeElement
+    // Native modal dialogs own the top layer, background inertness, focus trap
+    // and focus restoration, including when another dialog opens above them.
+    element.showModal()
+    return () => {
+      element.close()
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6 backdrop-blur-[2px]"
-      onMouseDown={onClose}
+  return createPortal(
+    <dialog
+      ref={dialog}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      className={cn('app-dialog', sheet && 'app-dialog-sheet')}
+      onCancel={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onClose()
+      }}
+      onMouseDown={(event) => {
+        backdropPressed.current = event.target === event.currentTarget
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        if (backdropPressed.current && event.target === event.currentTarget) onClose()
+        backdropPressed.current = false
+      }}
     >
       <div
         className={cn(
-          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] shadow-2xl',
-          width,
+          'glass-strong flex w-full flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-2xl',
+          sheet ? 'h-full border-l' : 'max-h-[82vh]',
+          width ?? (sheet ? 'max-w-[520px]' : 'max-w-2xl'),
         )}
-        onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <div>
-            <h2 className="text-[15px] font-semibold">{title}</h2>
+          <div className="min-w-0 break-words">
+            <h2 id={titleId} className="text-[15px] font-semibold">{title}</h2>
             {description ? (
-              <p className="mt-1 text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
+              <p id={descriptionId} className="mt-1 break-all text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
             ) : null}
           </div>
           <IconButton label="关闭" onClick={onClose}>
@@ -243,75 +274,22 @@ export function Modal({
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer ? (
-          <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
+          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
             {footer}
           </footer>
         ) : null}
       </div>
-    </div>
+    </dialog>,
+    document.body,
   )
 }
 
-export function Sheet({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  footer,
-  width = 'max-w-[520px]',
-}: {
-  open: boolean
-  onClose: () => void
-  title: string
-  description?: string
-  children: ReactNode
-  footer?: ReactNode
-  width?: string
-}): React.JSX.Element | null {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+export function Modal(props: DialogProps): React.JSX.Element {
+  return <Dialog {...props} />
+}
 
-  if (!open) return null
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-[2px]"
-      onMouseDown={onClose}
-    >
-      <div
-        className={cn(
-          'glass-strong flex h-full w-full flex-col border-l border-[var(--color-border-subtle)] shadow-2xl',
-          width,
-        )}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <div>
-            <h2 className="text-[15px] font-semibold">{title}</h2>
-            {description ? (
-              <p className="mt-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
-            ) : null}
-          </div>
-          <IconButton label="关闭" onClick={onClose}>
-            <X className="size-4" />
-          </IconButton>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? (
-          <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
-            {footer}
-          </footer>
-        ) : null}
-      </div>
-    </div>
-  )
+export function Sheet(props: DialogProps): React.JSX.Element {
+  return <Dialog {...props} sheet />
 }
 
 type ToastTone = 'info' | 'success' | 'error'
