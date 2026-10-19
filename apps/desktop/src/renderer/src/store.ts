@@ -149,9 +149,11 @@ function upsertDiagnostic(list: Diagnostic[], diagnostic: Diagnostic): Diagnosti
 }
 
 function upsertDownload(list: DownloadTask[], task: DownloadTask): DownloadTask[] {
-  const next = list.filter((item) => item.id !== task.id)
-  next.unshift(task)
-  return next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  // Progress and state updates must not move existing rows in the queue.
+  if (list.some((item) => item.id === task.id)) {
+    return list.map((item) => item.id === task.id ? task : item)
+  }
+  return [...list, task]
 }
 
 export const useApp = create<AppStore>((set, get) => {
