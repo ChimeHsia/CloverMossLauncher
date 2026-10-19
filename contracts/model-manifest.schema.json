@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clovermoss.dev/schemas/model-manifest.schema.json",
+  "title": "CloverMoss model bundle manifest (clover.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "name", "license", "components"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$" },
+    "name": { "type": "string", "maxLength": 128 },
+    "description": { "type": "string", "maxLength": 1024 },
+    "license": { "type": "string", "description": "SPDX id, e.g. Apache-2.0" },
+    "base_model": { "type": "string" },
+    "source": { "type": "string", "format": "uri" },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["txt2img", "layout", "lora", "dmd"] },
+      "uniqueItems": true
+    },
+    "components": {
+      "type": "object",
+      "required": ["dit", "text_encoder", "vae", "tokenizer", "scheduler"],
+      "additionalProperties": false,
+      "properties": {
+        "dit": { "$ref": "#/$defs/component" },
+        "text_encoder": { "$ref": "#/$defs/component" },
+        "vae": { "$ref": "#/$defs/component" },
+        "tokenizer": { "$ref": "#/$defs/component" },
+        "scheduler": { "$ref": "#/$defs/component" }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "steps": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "guidance_scale": { "type": "number", "minimum": 0 },
+          "max_resolution": { "type": "integer", "minimum": 256, "maximum": 4096 },
+          "quant": { "type": "string", "enum": ["bf16", "fp16", "int8", "int4", "mixed"] },
+          "stream_blocks": { "type": "boolean" }
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_memory_gb": { "type": "number", "minimum": 1 },
+        "recommended_memory_gb": { "type": "number", "minimum": 1 },
+        "disk_gb": { "type": "number", "minimum": 0.1 }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "description": "file path -> sha256 (hex). Paths relative to bundle root.",
+      "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "path"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "mnn-blocks",
+            "mnn-graph",
+            "mnn-llm",
+            "safetensors",
+            "json",
+            "tokenizer"
+          ]
+        },
+        "path": { "type": "string" },
+        "precision": { "type": "string", "enum": ["bf16", "fp16", "fp32", "int8", "int4", "mixed"] },
+        "blocks": { "type": "integer", "minimum": 1 },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

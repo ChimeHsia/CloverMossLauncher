@@ -1,0 +1,36 @@
+# build / binaries
+build/
+dist/
+*.o
+*.a
+*.dylib
+*.so
+*.dll
+*.metallib
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+uv.lock
+
+# node
+node_modules/
+.pnpm-store/
+
+# local data (never commit weights)
+models/
+outputs/
+runs/
+*.safetensors
+*.mnn
+*.mnn.weight
+*.onnx
+*.gguf
+
+# tooling
+.DS_Store
+.idea/
+.vscode/
+*.log

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clovermoss.dev/schemas/job.schema.json",
+  "title": "CloverMoss generation job",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model", "prompt", "width", "height"],
+  "properties": {
+    "model": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Installed model bundle id (directory name)."
+    },
+    "prompt": { "type": "string", "minLength": 1, "maxLength": 32768 },
+    "negative_prompt": { "type": "string", "default": "", "maxLength": 8192 },
+    "width": { "type": "integer", "minimum": 256, "maximum": 4096, "multipleOf": 16 },
+    "height": { "type": "integer", "minimum": 256, "maximum": 4096, "multipleOf": 16 },
+    "profile": {
+      "type": "string",
+      "enum": ["auto", "base", "dmd8", "custom"],
+      "default": "auto",
+      "description": "auto resolves from model manifest and device memory."
+    },
+    "steps": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "guidance_scale": { "type": "number", "minimum": 0, "maximum": 20 },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "batch": { "type": "integer", "minimum": 1, "maximum": 8, "default": 1 },
+    "adapters": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+          "strength": { "type": "number", "minimum": -2, "maximum": 2, "default": 1.0 }
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "description": "MOSS-Image JSON layout (absolute pixel coordinates). Passed through to the prompt as-is.",
+      "additionalProperties": true
+    },
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": { "type": "integer", "minimum": 64, "maximum": 4096, "default": 4096 },
+        "bucket": { "type": "integer", "enum": [128, 256, 512, 1024, 2048, 4096] }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string", "enum": ["png", "webp", "jpeg"], "default": "png" },
+        "embed_metadata": { "type": "boolean", "default": true },
+        "dir": { "type": "string", "description": "Relative to outputs root." }
+      }
+    },
+    "priority": { "type": "integer", "minimum": -10, "maximum": 10, "default": 0 },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string", "enum": ["auto", "8gb", "16gb", "24gb", "unlimited"], "default": "auto" },
+        "quant": { "type": "string", "enum": ["auto", "int8", "int4", "bf16"], "default": "auto" },
+        "stream_blocks": { "type": "boolean", "default": false }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "profile": { "const": "dmd8" } } },
+      "then": { "properties": { "guidance_scale": { "const": 1.0 } } }
+    }
+  ]
+}
