@@ -63,10 +63,10 @@ export async function ensureMirror(settings: Settings, source = DEFAULT_SOURCE):
       { timeoutMs: 180_000 },
     )
     if (result.code !== 0) {
-      // fetch 失败不代表镜像坏了：已有对象仍然可用（离线可回滚），
-      // 此时删掉重建会连带丢掉可用缓存，且重建通常同样失败。
-      // 这里只上报失败，是否重建交给下一次 mirrorHealthy() 判断。
-      throw new Error(`拉取最新分支失败：${firstLine(result.stderr) || firstLine(result.stdout)}`)
+      // fetch 失败不代表镜像坏了：已有对象仍然可用，离线仍可创建实例与回滚。
+      // 因此只上报进度、不抛错也不删除镜像；若镜像确实损坏，下一次
+      // mirrorHealthy() 会返回 false 并触发重建。
+      progress('fetch', `拉取最新分支失败，使用本地缓存：${firstLine(result.stderr) || firstLine(result.stdout)}`)
     }
   })().finally(() => ensuring.delete(key))
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -45,53 +45,57 @@ function mirrorPath(name) {
   return path
 }
 
-test('healthy bare mirror 判定为健康', async () => {
+test('健康的 bare 镜像判定为健康', async () => {
   const mirror = mirrorPath('healthy')
   await git(['clone', '-q', '--bare', source, mirror])
   assert.equal(await mirrorHealthy(mirror, exec), true)
 })
 
-test('目录不存在 判定为不健康', async () => {
+test('目录不存在判定为不健康', async () => {
   assert.equal(await mirrorHealthy(join(root, 'nope.git'), exec), false)
 })
 
-test('HEAD 指向非法引用 判定为不健康', async () => {
+test('HEAD 文件存在但 refs 为空（clone 极早期中断）判定为不健康', async () => {
   const mirror = mirrorPath('invalid-head')
   await git(['clone', '-q', '--bare', source, mirror])
+  // 复刻 git clone 极早期中断留下的状态
   writeFileSync(join(mirror, 'HEAD'), 'ref: refs/heads/.invalid\n')
+  rmSync(join(mirror, 'refs'), { recursive: true, force: true })
+  mkdirSync(join(mirror, 'refs', 'heads'), { recursive: true })
+  rmSync(join(mirror, 'packed-refs'), { force: true })
+  // 关键：HEAD 文件确实存在，旧逻辑会因此误判为已安装
+  assert.equal(existsSync(join(mirror, 'HEAD')), true)
   assert.equal(await mirrorHealthy(mirror, exec), false)
 })
 
-test('refs 与 objects 残缺（克隆中断）判定为不健康', async () => {
-  const mirror = mirrorPath('interrupted')
+test('有分支但 objects 缺失判定为不健康', async () => {
+  const mirror = mirrorPath('lost-objects')
   await git(['clone', '-q', '--bare', source, mirror])
-  rmSync(join(mirror, 'refs'), { recursive: true, force: true })
   rmSync(join(mirror, 'objects'), { recursive: true, force: true })
-  mkdirSync(join(mirror, 'refs', 'heads'), { recursive: true })
   mkdirSync(join(mirror, 'objects'), { recursive: true })
   assert.equal(await mirrorHealthy(mirror, exec), false)
 })
 
-test('只有 HEAD 文件、没有分支 判定为不健康', async () => {
-  const mirror = mirrorPath('empty')
-  const empty = join(root, 'empty-source.git')
-  mkdirSync(empty, { recursive: true })
-  await git(['init', '-q', '--bare'], empty)
-  await git(['clone', '-q', '--bare', empty, mirror])
-  // 关键断言：HEAD 文件确实存在，旧逻辑会因此误判为已安装
-  const headExists = await import('node:fs').then((fs) => fs.existsSync(join(mirror, 'HEAD')))
-  assert.equal(headExists, true)
-  assert.equal(await mirrorHealthy(mirror, exec), false)
+test('HEAD 指向不存在的分支但其它分支完好，仍判定为健康（不可误删）', async () => {
+  // 远端 HEAD 指向不存在分支时，git clone --bare 就会留下这种镜像，
+  // 它实际可用（for-each-ref / worktree add 均正常），不应被判定为损坏。
+  const brokenHeadSource = join(root, 'broken-head-source.git')
+  mkdirSync(brokenHeadSource, { recursive: true })
+  await git(['init', '-q', '--bare'], brokenHeadSource)
+  await git(['-C', brokenHeadSource, 'fetch', source, 'refs/heads/*:refs/heads/*'])
+  writeFileSync(join(brokenHeadSource, 'HEAD'), 'ref: refs/heads/does-not-exist\n')
+
+  const mirror = mirrorPath('dangling-head')
+  await git(['clone', '-q', '--bare', brokenHeadSource, mirror])
+  assert.equal(await mirrorHealthy(mirror, exec), true)
 })
 
-test('fetch 失败时不得删除仍可用的镜像（离线缓存保护）', async () => {
-  const mirror = mirrorPath('keep-on-fetch-fail')
-  await git(['clone', '-q', '--bare', source, mirror])
-  await git(['-C', mirror, 'remote', 'set-url', 'origin', 'https://127.0.0.1:1/nope.git'])
-
-  const fetchResult = await git(['-C', mirror, 'fetch', '--prune', 'origin', '+refs/heads/*:refs/heads/*'])
-  assert.notEqual(fetchResult.code, 0, '预期 fetch 失败')
-
-  // 镜像本身仍然健康，不应被重建逻辑删掉
-  assert.equal(await mirrorHealthy(mirror, exec), true)
+test('空仓库（无任何分支）判定为不健康', async () => {
+  const emptySource = join(root, 'empty-source.git')
+  mkdirSync(emptySource, { recursive: true })
+  await git(['init', '-q', '--bare'], emptySource)
+  const mirror = mirrorPath('empty')
+  await git(['clone', '-q', '--bare', emptySource, mirror])
+  assert.equal(existsSync(join(mirror, 'HEAD')), true)
+  assert.equal(await mirrorHealthy(mirror, exec), false)
 })
