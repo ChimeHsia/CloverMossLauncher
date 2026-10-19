@@ -20,6 +20,7 @@ import { call } from '../lib/api'
 import { cloverUrl } from '../lib/clover'
 import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
+import { clearSavedSettings, pendingSettings } from '../lib/settingsDraft'
 import { useApp } from '../store'
 import { Switch } from '@openai/apps-sdk-ui/components/Switch'
 import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../components/ui'
@@ -27,39 +28,40 @@ import { Button, Card, Pill, Segmented, StatusDot, cn, useToast } from '../compo
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
   const { settings, env, devices, updates, saveSettings, refreshEnv, refreshDevices, checkForUpdates } = useApp()
-  const [draft, setDraft] = useState<Settings | null>(settings)
+  const [edits, setEdits] = useState<Partial<Settings>>({})
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    setDraft(settings)
-  }, [settings])
 
   useEffect(() => {
     void call<AppInfo>(Ipc.appInfo).then(setAppInfo).catch(() => undefined)
   }, [])
 
-  const dirty = useMemo(
-    () => Boolean(draft && settings && JSON.stringify(draft) !== JSON.stringify(settings)),
-    [draft, settings],
+  const changes = useMemo(
+    () => settings ? pendingSettings(settings, edits) : {},
+    [settings, edits],
   )
+  const draft = settings ? { ...settings, ...edits } : null
+  const dirty = Object.keys(changes).length > 0
 
   if (!draft) {
     return <div className="py-20 text-center text-[12px] text-[var(--color-text-tertiary)]">{t('common.loading')}</div>
   }
 
   function patch(next: Partial<Settings>): void {
-    setDraft((previous) => (previous ? { ...previous, ...next } : previous))
+    setEdits((previous) => {
+      const merged = { ...previous, ...next }
+      return settings && !saving ? pendingSettings(settings, merged) : merged
+    })
   }
 
   async function save(): Promise<void> {
-    if (!draft) return
+    if (!draft || !dirty || saving) return
     setSaving(true)
     try {
-      await saveSettings(draft)
+      await saveSettings(changes)
+      setEdits((previous) => clearSavedSettings(previous, changes))
       toast.push('设置已保存', 'success')
-      await refreshEnv()
-      await refreshDevices()
+      await Promise.all([refreshEnv(), refreshDevices()])
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     } finally {
@@ -70,7 +72,7 @@ export function SettingsPage(): React.JSX.Element {
   async function persist(patch: Partial<Settings>): Promise<void> {
     try {
       await saveSettings(patch)
-      setDraft((previous) => (previous ? { ...previous, ...patch } : previous))
+      setEdits((previous) => clearSavedSettings(previous, patch))
       toast.push('已保存', 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -140,7 +142,7 @@ export function SettingsPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">{t('settings.title')}</h1>
           <p className="mt-1 text-[12.5px] text-[var(--color-text-secondary)]">
-            外观、网络、存储与运行时。修改后点右下角保存。
+            网络、存储、设备与运行时修改后保存；目录选择和背景操作立即生效。
           </p>
         </div>
         <Button tone="primary" onClick={() => void save()} disabled={!dirty || saving}>
@@ -389,7 +391,7 @@ export function SettingsPage(): React.JSX.Element {
                 <Plus className="size-3.5" /> 添加文件夹
               </span>
             </Button>
-            <Button tone="ghost" onClick={() => void saveSettings({ galleryRoots: [] })}>
+            <Button tone="ghost" onClick={() => void persist({ galleryRoots: [] })}>
               恢复默认
             </Button>
           </div>
