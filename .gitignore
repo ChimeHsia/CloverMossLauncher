@@ -18,11 +18,13 @@ uv.lock
 # node
 node_modules/
 .pnpm-store/
+apps/desktop/out/
 
 # local data (never commit weights)
 models/
 outputs/
 runs/
+.dev-data/
 *.safetensors
 *.mnn
 *.mnn.weight

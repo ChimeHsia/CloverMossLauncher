@@ -1,7 +1,7 @@
 # 架构文档 · CloverMoss Launcher
 
 - 版本：v0.1（2026-10-19）
-- 状态：待评审
+- 状态：M1–M3 已落地，M4 进行中；实现差异见 [status.md](status.md)
 - 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---
@@ -52,20 +52,25 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 ## 3. 代码结构（monorepo）
 
 ```
-apps/
-  desktop/            Electron 主进程 + preload + 打包配置（electron-vite）
-  renderer/           React 应用（桌面与 Web 共用）
-  web/                Fastify：静态资源 + /api + /events
-packages/
-  core/               领域服务（Node only）：见 §2
-  contracts/          zod schema + TS 类型（由 contracts/*.json 生成/校验）
-  parsers/            ANSI/tqdm/错误规则（纯函数，无 IO）
-  ui/                 设计系统封装、布局、通用组件
-  testing/            fake runtime、fixtures、msw handlers
-release/              manifest.json + 公告 markdown（更新源）
-runner/               薄 runner（Python，随应用分发）
-docs/  contracts/     设计与协议
+apps/desktop/
+  electron.vite.config.ts
+  src/main/           Electron 主进程 + 领域服务 + IPC
+    services/         env / network / git / runtimes / instances / models / updates
+    lib/              paths / run / events
+  src/preload/        contextBridge（只暴露 invoke / on）
+  src/renderer/       React 19 + Tailwind 4 + Apps SDK UI
+    src/pages/        Home / Instances / InstanceDetail / Models / Settings
+    src/components/   layout + ui（Card / Pill / Modal / Toast / Progress）
+    src/store.ts      Zustand
+  src/shared/         types / channels / zod schemas
+release/              manifest.json + 公告 markdown + 模型目录 + 错误规则
+contracts/            协议与 schema（release / runner / job）
+docs/  tools/         设计与预算工具
 ```
+
+> M1–M3 采用单包（`apps/desktop`）。M5 做 WebUI 时把 `src/renderer` 抽到
+> `apps/renderer`、把服务层抽到 `packages/core`，让桌面与 Web 共用；现在不提前拆，
+> 避免 workspace 解析和构建复杂度拖慢首个可运行版本。
 
 工具链：`pnpm` workspace、TypeScript strict、`electron-vite`、`vitest`、`playwright`、
 ESLint + Prettier、`zod` 运行时校验。
@@ -86,12 +91,13 @@ Diagnostic{ id, jobId, ruleId, severity, title, signature, count, payload }
 Announcement { id, level, title, body, startsAt, endsAt, dismissedAt }
 ```
 
-SQLite（`better-sqlite3`，WAL）表：`instances`、`runtimes`、`models`、`instance_models`、
-`adapters`、`instance_adapters`、`downloads`、`jobs`、`logs`、`diagnostics`、
-`announcements`、`settings`、`schema_migrations`。
+**当前实现（M1–M3）**：JSON 文件——`settings.json`、`instances/<id>/instance.json`、
+> `runtimes/<id>/runtime.json`；下载队列只在内存。
 
-> 选 `better-sqlite3` 的理由：同步 API 简化主进程事务；CI 用 prebuild + electron-rebuild。
-> 备选 `node:sqlite`（若 Electron 内置版本稳定）可去掉原生模块。
+**M4 计划**：SQLite（`better-sqlite3`，WAL）表 `instances`、`runtimes`、`models`、
+`instance_models`、`adapters`、`downloads`、`jobs`、`logs`、`diagnostics`、`settings`、
+`schema_migrations`。选它的理由是同步 API 简化主进程事务；CI 用 prebuild +
+electron-rebuild，备选 `node:sqlite`。
 
 ## 5. 磁盘布局
 
@@ -116,7 +122,10 @@ SQLite（`better-sqlite3`，WAL）表：`instances`、`runtimes`、`models`、`i
     thumbnails/
 ```
 
-所有路径可迁移：设置里改根目录，启动时校验并更新 DB 中的相对路径。
+所有路径可迁移：设置里改根目录，启动时校验并更新记录中的相对路径。
+
+开发模式把 `<appData>` 换成仓库内 `.dev-data/`，避免测试污染真实用户目录；
+`ELECTRON_RUN_AS_NODE=1` 的 CI 环境需要启动前临时去掉该变量。
 
 ## 6. Git 与实例生命周期
 
@@ -492,10 +501,10 @@ window.clover = {
 
 | 里程碑 | 内容 | 验收 |
 | --- | --- | --- |
-| M0 | 文档、契约、schema、空壳仓库 | 文档评审通过 |
-| M1 | Electron 壳 + 首页 + 环境报告 | 冷启动 ≤ 1.5 s，报告准确 |
-| M2 | git 镜像 + 实例 + 运行时 | 能装 3 个不同 commit 的实例并切换 |
-| M3 | 模型/适配器 + 下载队列 | 断点续传、哈希校验、暂停恢复 |
-| M4 | Supervisor + runner + 解析 + 诊断 | 进度条与 10 类错误卡片可用 |
-| M5 | Gradio + WebUI + 更新/公告 | 双 WebUI 可访问，更新验签通过 |
-| M6 | 打包、公证、Windows、Beta | 干净机器 30 min 内出图 |
+| M0 | 文档、契约、schema | ✅ 已完成（评审待补） |
+| M1 | Electron 壳 + 首页 + 环境报告 | ✅ 已实现，macOS arm64 实测 |
+| M2 | git 镜像 + 实例 + 运行时 | ✅ 基础完成；托管 Python / 更新 UI 待补 |
+| M3 | 模型/适配器 + 下载队列 | ✅ 下载与 HF 缓存实测；绑定 UI 待补 |
+| M4 | Supervisor + runner + 解析 + 诊断 | ⏳ 当前 |
+| M5 | Gradio + WebUI + 更新/公告 | 计划 |
+| M6 | 打包、公证、Windows、Beta | 计划 |

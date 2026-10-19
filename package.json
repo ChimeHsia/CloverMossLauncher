@@ -1,0 +1,12 @@
+{
+  "name": "clovermoss-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.14.2",
+  "scripts": {
+    "dev": "pnpm --filter @clover/desktop dev",
+    "build": "pnpm --filter @clover/desktop build",
+    "typecheck": "pnpm --filter @clover/desktop typecheck",
+    "smoke": "pnpm --filter @clover/desktop smoke"
+  }
+}

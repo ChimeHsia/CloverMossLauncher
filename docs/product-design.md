@@ -1,7 +1,7 @@
 # 产品设计文档 · CloverMoss Launcher
 
 - 版本：v0.1（2026-10-19）
-- 状态：待评审
+- 状态：M1–M3 已实现，M4 进行中；实现状态见 [status.md](status.md)
 - 关联：[架构文档](architecture.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
 ---

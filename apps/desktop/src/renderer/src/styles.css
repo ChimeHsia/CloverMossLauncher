@@ -1,0 +1,229 @@
+@import "tailwindcss";
+@import "@openai/apps-sdk-ui/css";
+@source "../../../node_modules/@openai/apps-sdk-ui";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-moss-50: #eef6f1;
+  --color-moss-100: #d7ebdf;
+  --color-moss-200: #b0d7c2;
+  --color-moss-300: #7fbc9d;
+  --color-moss-400: #4f9d78;
+  --color-moss-500: #2f6b4f;
+  --color-moss-600: #285b43;
+  --color-moss-700: #214a37;
+  --color-moss-800: #1a3a2b;
+  --color-moss-900: #12271d;
+
+  /* Apps SDK UI resets the default Tailwind palette; re-declare the few
+     semantic accents the launcher uses. */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-sky-300: #7dd3fc;
+  --color-sky-500: #0ea5e9;
+  --color-sky-700: #0369a1;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-amber-300: #fcd34d;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-red-300: #fca5a5;
+  --color-red-500: #ef4444;
+  --color-red-700: #b91c1c;
+}
+
+:root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-moss-400) 35%, transparent);
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+/* Brand accent: keep Apps SDK UI semantics, swap primary solid to Moss. */
+html[data-theme="light"] {
+  --color-background-primary-solid: #2f6b4f;
+  --color-background-primary-solid-hover: #285b43;
+  --color-background-primary-solid-active: #214a37;
+  --color-text-primary-solid: #ffffff;
+}
+
+html[data-theme="dark"] {
+  --color-background-primary-solid: #2f6b4f;
+  --color-background-primary-solid-hover: #3b7d5d;
+  --color-background-primary-solid-active: #285b43;
+  --color-text-primary-solid: #ffffff;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Announcement / release notes markdown */
+.clover-md > :first-child {
+  margin-top: 0;
+}
+
+.clover-md > :last-child {
+  margin-bottom: 0;
+}
+
+.clover-md h1,
+.clover-md h2,
+.clover-md h3,
+.clover-md h4 {
+  margin: 0.9em 0 0.35em;
+  color: var(--color-text);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.clover-md h1 {
+  font-size: 15px;
+}
+
+.clover-md h2 {
+  font-size: 13.5px;
+}
+
+.clover-md h3 {
+  font-size: 12.5px;
+}
+
+.clover-md p {
+  margin: 0.45em 0;
+}
+
+.clover-md ul,
+.clover-md ol {
+  margin: 0.45em 0;
+  padding-left: 1.15em;
+}
+
+.clover-md ul {
+  list-style: disc;
+}
+
+.clover-md ol {
+  list-style: decimal;
+}
+
+.clover-md li {
+  margin: 0.15em 0;
+}
+
+.clover-md a {
+  color: var(--color-moss-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+[data-theme="dark"] .clover-md a {
+  color: var(--color-moss-300);
+}
+
+.clover-md code {
+  border-radius: 4px;
+  background: var(--color-surface-tertiary);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.clover-md pre {
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--color-surface-secondary);
+  padding: 10px 12px;
+}
+
+.clover-md pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.clover-md blockquote {
+  margin: 0.5em 0;
+  border-left: 2px solid var(--color-border);
+  padding-left: 10px;
+  color: var(--color-text-secondary);
+}
+
+.clover-md img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.clover-md hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.clover-md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.clover-md th,
+.clover-md td {
+  border: 1px solid var(--color-border-subtle);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: color-mix(in oklab, var(--color-text-tertiary) 45%, transparent);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
