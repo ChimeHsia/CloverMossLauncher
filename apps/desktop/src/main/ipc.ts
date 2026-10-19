@@ -27,6 +27,16 @@ import { openWindow } from './windows'
 import { listDevices } from './services/devices'
 import { listCases, removeCase, saveCase } from './services/cases'
 import { getOnboardingStatus } from './services/onboarding'
+import {
+  createTrainerVersion,
+  ensureTrainerRuntime,
+  installTrainerRuntime,
+  listTrainerVersions,
+  removeTrainerVersion,
+  trainerDoctor,
+  trainerMirrorInfo,
+} from './services/trainers'
+import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 
 function toResult<T>(fn: () => Promise<T> | T): Promise<IpcResult<T>> {
   return Promise.resolve()
@@ -86,6 +96,27 @@ export function registerIpc(): void {
   })
 
   handle(Ipc.onboardingStatus, null, () => getOnboardingStatus(getSettings()))
+
+  handle(Ipc.trainerMirror, null, () => trainerMirrorInfo(getSettings()))
+
+  handle(Ipc.trainerBranches, null, () => listTrainerBranches(getSettings()))
+
+  handle(Ipc.trainerCommits, schemas.trainerCommits, ({ branch, limit }) =>
+    listTrainerCommits(getSettings(), branch, limit),
+  )
+
+  handle(Ipc.trainerVersions, null, () => listTrainerVersions(getSettings()))
+
+  handle(Ipc.trainerCreate, schemas.trainerCreate, (input) => createTrainerVersion(getSettings(), input))
+
+  handle(Ipc.trainerRemove, schemas.trainerId, async ({ id }) => {
+    await removeTrainerVersion(getSettings(), id)
+    return true
+  })
+
+  handle(Ipc.trainerInstall, schemas.trainerId, ({ id }) => installTrainerRuntime(getSettings(), id))
+
+  handle(Ipc.trainerDoctor, schemas.trainerId, ({ id }) => trainerDoctor(getSettings(), id))
 
   handle(Ipc.settingsGet, null, () => getSettings())
 

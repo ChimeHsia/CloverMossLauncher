@@ -1,0 +1,374 @@
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  GitBranch,
+  GraduationCap,
+  Loader2,
+  Play,
+  RefreshCw,
+  Server,
+  Stethoscope,
+  Trash2,
+  Wand2,
+} from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Ipc } from '@shared/channels'
+import type { BranchInfo, CommitInfo, Settings, TrainerRuntimeInfo, TrainerVersion } from '@shared/types'
+import { call } from '../lib/api'
+import { dateTime } from '../lib/format'
+import { openWindow } from '../lib/windows'
+import { useApp } from '../store'
+import { Button, Card, EmptyState, Modal, Pill, Spinner, cn, useToast } from '../components/ui'
+
+const runtimeLabel: Record<TrainerVersion['runtimeState'], string> = {
+  missing: '未装环境',
+  created: '环境已建',
+  installing: '安装中',
+  ready: '环境就绪',
+  error: '环境失败',
+}
+
+export function TrainingPage(): React.JSX.Element {
+  const toast = useToast()
+  const settings = useApp((state) => state.settings)
+  const env = useApp((state) => state.env)
+  const [mirror, setMirror] = useState<{ ready: boolean; path: string } | null>(null)
+  const [versions, setVersions] = useState<TrainerVersion[]>([])
+  const [branches, setBranches] = useState<BranchInfo[]>([])
+  const [commits, setCommits] = useState<CommitInfo[]>([])
+  const [branch, setBranch] = useState('main')
+  const [commit, setCommit] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [doctor, setDoctor] = useState<{ id: string; ok: boolean; output: string } | null>(null)
+
+  const refresh = useCallback(async () => {
+    const [mirrorInfo, list] = await Promise.all([
+      call<{ ready: boolean; path: string }>(Ipc.trainerMirror),
+      call<TrainerVersion[]>(Ipc.trainerVersions),
+    ])
+    setMirror(mirrorInfo)
+    setVersions(list)
+    return mirrorInfo
+  }, [])
+
+  const loadCommits = useCallback(async (name: string) => {
+    const rows = await call<CommitInfo[]>(Ipc.trainerCommits, { branch: name, limit: 80 })
+    setCommits(rows)
+    setCommit((current) => current || rows[0]?.sha || '')
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    if (!mirror?.ready || branches.length > 0) return
+    void (async () => {
+      try {
+        const next = await call<BranchInfo[]>(Ipc.trainerBranches)
+        setBranches(next)
+        const defaultBranch = next.find((item) => item.isDefault)?.name ?? next[0]?.name ?? 'main'
+        setBranch(defaultBranch)
+        await loadCommits(defaultBranch)
+      } catch {
+        // keep page usable without a mirror
+      }
+    })()
+  }, [mirror?.ready, branches.length, loadCommits])
+
+  async function deployOrUpdate(): Promise<void> {
+    setBusy('mirror')
+    try {
+      const next = await call<BranchInfo[]>(Ipc.trainerBranches)
+      setBranches(next)
+      const defaultBranch = next.find((item) => item.isDefault)?.name ?? next[0]?.name ?? 'main'
+      setBranch(defaultBranch)
+      await loadCommits(defaultBranch)
+      await refresh()
+      toast.push('训练器仓库已更新', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function createVersion(): Promise<void> {
+    if (!commit) return
+    setBusy('create')
+    try {
+      const version = await call<TrainerVersion>(Ipc.trainerCreate, { branch, commit })
+      await refresh()
+      toast.push(`已创建 ${version.name}`, 'success')
+      setCommit('')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function install(version: TrainerVersion): Promise<void> {
+    setBusy(version.id)
+    try {
+      await call<TrainerRuntimeInfo>(Ipc.trainerInstall, { id: version.id })
+      await refresh()
+      toast.push('训练环境已就绪', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+      await refresh()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function runDoctor(version: TrainerVersion): Promise<void> {
+    setBusy(version.id)
+    try {
+      const result = await call<{ ok: boolean; output: string }>(Ipc.trainerDoctor, { id: version.id })
+      setDoctor({ id: version.id, ...result })
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function remove(version: TrainerVersion): Promise<void> {
+    setBusy(version.id)
+    try {
+      await call(Ipc.trainerRemove, { id: version.id })
+      await refresh()
+      toast.push('已删除训练版本', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const localCuda = env?.gpu.kind === 'nvidia'
+  const selectedVersion = versions[0]
+
+  return (
+    <div className="space-y-4 pb-8">
+      <header>
+        <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+          <GraduationCap className="size-3.5" />
+          Kohaku Trainer · External
+        </div>
+        <h1 className="mt-1.5 text-[25px] font-semibold tracking-[-0.02em]">训练</h1>
+        <p className="mt-1 max-w-[700px] text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
+          把 KohakuMossTrainer 部署到你的目录，按 commit 管理版本和 Python 环境；训练窗口负责配置、数据缓存和运行。
+          启动器不打包上游代码。
+        </p>
+        <button
+          type="button"
+          onClick={() => void call(Ipc.openExternal, { url: 'https://github.com/KohakuBlueleaf/KohakuMossTrainer' })}
+          className="mt-1 inline-flex items-center gap-1 text-[9.5px] text-accent-300 hover:underline"
+        >
+          KohakuMossTrainer · KohakuMoss License 1.0 <ExternalLink className="size-2.5" />
+        </button>
+      </header>
+
+      {!localCuda ? (
+        <div className="flex items-start gap-2.5 rounded-[6px] border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+          <p className="text-[10.5px] leading-5 text-[var(--color-text-secondary)]">
+            当前设备没有 CUDA（macOS/MPS 不受 KohakuMossTrainer 支持）。这里可以部署版本、创建环境和编辑配置；
+            真正训练需要 Linux/Windows + NVIDIA，或下一阶段的 SSH 训练主机。
+          </p>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[12.5px] font-medium">
+              <GitBranch className="size-3.5" />
+              训练器仓库
+            </div>
+            <Pill tone={mirror?.ready ? 'accent' : 'neutral'}>{mirror?.ready ? '已拉取' : '未部署'}</Pill>
+          </div>
+          <p className="mt-1 break-all font-mono text-[9.5px] text-[var(--color-text-tertiary)]">
+            {mirror?.path ?? '尚未拉取'}
+          </p>
+          <p className="mt-0.5 break-all text-[9px] text-[var(--color-text-tertiary)]">
+            根目录：{settings?.trainerRoot ?? '默认 .dev-data/trainer'}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="flex min-w-[110px] flex-col gap-1">
+              <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">分支</span>
+              <select
+                value={branch}
+                onChange={(event) => {
+                  setBranch(event.target.value)
+                  void loadCommits(event.target.value)
+                }}
+                className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+              >
+                {(branches.length ? branches : [{ name: 'main', sha: '', isDefault: true, isStable: false }]).map((item) => (
+                  <option key={item.name} value={item.name}>
+                    {item.name}{item.isStable ? ' · stable' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-[220px] flex-1 flex-col gap-1">
+              <span className="text-[8px] uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">提交</span>
+              <select
+                value={commit}
+                onChange={(event) => setCommit(event.target.value)}
+                disabled={commits.length === 0}
+                className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+              >
+                {commits.length === 0 ? <option value="">先拉取仓库</option> : null}
+                {commits.map((item) => (
+                  <option key={item.sha} value={item.sha}>
+                    {item.short} · {item.subject.slice(0, 48)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <Button tone="secondary" onClick={() => void deployOrUpdate()} disabled={busy === 'mirror'}>
+              <span className="inline-flex items-center gap-1.5">
+                {busy === 'mirror' ? <Spinner className="size-3" /> : <Download className="size-3" />}
+                {mirror?.ready ? '拉取更新' : '拉取训练器'}
+              </span>
+            </Button>
+            <Button tone="primary" onClick={() => void createVersion()} disabled={!commit || busy === 'create'}>
+              <span className="inline-flex items-center gap-1.5">
+                {busy === 'create' ? <Spinner className="size-3" /> : <Wand2 className="size-3" />}
+                创建版本
+              </span>
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[12.5px] font-medium">
+              <Server className="size-3.5" />
+              训练主机
+            </div>
+            <Pill tone="neutral">Local · 1</Pill>
+          </div>
+          <div className="mt-3 flex items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-2">
+            <span className="size-1.5 rounded-full bg-amber-400" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px]">本机</div>
+              <div className="text-[9px] text-[var(--color-text-tertiary)]">
+                {env?.gpu.name ?? '正在检测'} · {localCuda ? 'CUDA 可用于训练' : '不支持 MPS 训练'}
+              </div>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center justify-between rounded-[5px] border border-dashed border-[var(--color-border-subtle)] px-2.5 py-2 opacity-60">
+            <div>
+              <div className="text-[10.5px]">SSH 训练主机</div>
+              <div className="text-[9px] text-[var(--color-text-tertiary)]">多 host 配置 · 下一阶段</div>
+            </div>
+            <Pill tone="neutral">Soon</Pill>
+          </div>
+          <p className="mt-2 text-[9px] leading-4 text-[var(--color-text-tertiary)]">
+            远端路径、密钥和 host 数据模型已预留；远程执行在下一阶段接入。
+          </p>
+        </Card>
+      </div>
+
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-[14px] font-semibold">已安装的训练版本</h2>
+          <p className="mt-0.5 text-[10px] text-[var(--color-text-tertiary)]">
+            每个版本固定 commit + 独立 worktree，环境按依赖锁共享。
+          </p>
+        </div>
+        <Button tone="ghost" onClick={() => void refresh()}>
+          <RefreshCw className="size-3.5" />
+        </Button>
+      </div>
+
+      {versions.length === 0 ? (
+        <EmptyState
+          icon={<GraduationCap className="size-7" />}
+          title="还没有训练版本"
+          description="先拉取 trainer 仓库，选择一个 commit 创建版本；然后在训练窗口里配置数据集和权重。"
+          action={
+            <Button tone="secondary" onClick={() => void deployOrUpdate()}>
+              拉取训练器
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-2">
+          {versions.map((version) => (
+            <Card key={version.id} className="p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11.5px] font-medium">{version.name}</span>
+                    <Pill tone={version.channel === 'stable' ? 'accent' : 'neutral'}>{version.channel}</Pill>
+                    <Pill tone={version.runtimeState === 'ready' ? 'accent' : version.runtimeState === 'error' ? 'red' : 'amber'}>
+                      {runtimeLabel[version.runtimeState]}
+                    </Pill>
+                    {version.dirty ? <Pill tone="amber">有本地修改</Pill> : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[9px] text-[var(--color-text-tertiary)]">
+                    <span>{version.shortCommit}</span>
+                    <span>{dateTime(version.commitDate)}</span>
+                    <span className="truncate">{version.subject}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Button
+                    tone="secondary"
+                    onClick={() => void install(version)}
+                    disabled={busy === version.id}
+                  >
+                    {busy === version.id ? <Spinner className="size-3" /> : <Download className="size-3" />}
+                    {version.runtimeState === 'ready' ? '重装环境' : '安装环境'}
+                  </Button>
+                  <Button tone="ghost" onClick={() => void runDoctor(version)} disabled={version.runtimeState !== 'ready'}>
+                    <Stethoscope className="size-3.5" />
+                  </Button>
+                  <Button tone="primary" onClick={() => openWindow('trainer')}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Play className="size-3" /> 训练窗口
+                    </span>
+                  </Button>
+                  <Button tone="ghost" onClick={() => void remove(version)} disabled={busy === version.id}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedVersion ? (
+        <p className="text-[9px] text-[var(--color-text-tertiary)]">
+          训练窗口默认使用最新版本；环境体检会运行 <code className="rounded bg-white/[0.05] px-1">kohakumoss-doctor</code>。
+        </p>
+      ) : null}
+
+      <Modal
+        open={Boolean(doctor)}
+        onClose={() => setDoctor(null)}
+        title="KohakuMoss Doctor"
+        description="环境体检输出"
+        width="max-w-3xl"
+        footer={<Button tone="secondary" onClick={() => setDoctor(null)}>关闭</Button>}
+      >
+        <pre className="max-h-[50vh] overflow-auto rounded-[4px] bg-black/30 p-3 font-mono text-[10px] leading-5 text-[var(--color-text-secondary)]">
+          {doctor?.output || '没有输出'}
+        </pre>
+      </Modal>
+    </div>
+  )
+}

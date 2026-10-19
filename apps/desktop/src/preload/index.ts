@@ -15,7 +15,8 @@ const api = {
   windowKind: (process.argv.find((arg) => arg.startsWith('--clover-window='))?.split('=')[1] ?? 'launcher') as
     | 'launcher'
     | 'creator'
-    | 'terminal',
+    | 'terminal'
+    | 'trainer',
   channel: process.argv.find((arg) => arg.startsWith('--clover-channel='))?.split('=')[1] ?? 'dev',
 }
 

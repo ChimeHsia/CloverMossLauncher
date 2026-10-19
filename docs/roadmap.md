@@ -142,6 +142,14 @@
 复用 [未来引擎架构](future-inference-engine.md)：MNN 为主、MPS 仅 oracle、MLX 条件触发。
 启动器通过 `RuntimeAdapter` 接入，UI 与协议不变。
 
+## Trainer v0.4 · Kohaku Trainer 外部窗口
+
+- ✅ trainer 仓库 runtime clone、bare mirror、per-commit worktree；
+- ✅ 独立 venv / lock hash / `kohakumoss-doctor`；
+- ✅ Training 页 + 训练窗口表单 / 命令预览；
+- ⏳ 训练执行、loss、数据缓存、导出/采样；
+- ⏳ SSH 多 host 与远端执行。
+
 ## V2+ · 训练器桥接
 
 外部进程接入 KohakuMoss 或其它训练器（[ADR-0002](decisions/0002-trainer-backend.md)），

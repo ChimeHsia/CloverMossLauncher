@@ -88,6 +88,12 @@ export function SettingsPage(): React.JSX.Element {
     await persist({ galleryRoots: roots })
   }
 
+  async function pickTrainerRoot(): Promise<void> {
+    const path = await call<string | null>(Ipc.pickDialog, { kind: 'folder', title: '选择训练器根目录' })
+    if (!path) return
+    await persist({ trainerRoot: path })
+  }
+
   async function pickBackground(): Promise<void> {
     const path = await call<string | null>(Ipc.pickDialog, { kind: 'image', title: '选择首页背景图' })
     if (!path) return
@@ -222,6 +228,17 @@ export function SettingsPage(): React.JSX.Element {
                 className="w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-accent-500/60"
               />
             </label>
+            <div className="flex items-end justify-between gap-2 border-t border-[var(--color-border-subtle)] pt-2.5">
+              <label className="min-w-0 flex-1 space-y-1">
+                <span className="text-[10.5px] text-[var(--color-text-tertiary)]">训练器根目录（Kohaku Trainer）</span>
+                <div className="truncate font-mono text-[10px] text-[var(--color-text-secondary)]">
+                  {draft.trainerRoot ?? '默认 .dev-data/trainer'}
+                </div>
+              </label>
+              <Button tone="secondary" onClick={() => void pickTrainerRoot()}>
+                选择
+              </Button>
+            </div>
             <p className="text-[10.5px] leading-4 text-[var(--color-text-tertiary)]">
               迁移目录不会自动搬文件；建议先在新位置下载，再删除旧缓存。
             </p>

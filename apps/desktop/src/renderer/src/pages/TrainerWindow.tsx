@@ -1,0 +1,281 @@
+import { AlertTriangle, CheckCircle2, FolderOpen, GraduationCap, Play, Stethoscope, Terminal } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Ipc } from '@shared/channels'
+import type { TrainerVersion } from '@shared/types'
+import { call } from '../lib/api'
+import { openWindow } from '../lib/windows'
+import { useApp } from '../store'
+import { Button, Card, EmptyState, Pill, Spinner, cn, useToast } from '../components/ui'
+
+const ALGOS = ['lora', 'locon', 'loha', 'lokr', 'dora', 'oft', 'boft', 'ia3', 'full']
+
+function Field({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+        {label}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+const inputClass =
+  'h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60'
+
+export function TrainerWindow(): React.JSX.Element {
+  const toast = useToast()
+  const env = useApp((state) => state.env)
+  const [versions, setVersions] = useState<TrainerVersion[]>([])
+  const [versionId, setVersionId] = useState('')
+  const [weights, setWeights] = useState('')
+  const [dataset, setDataset] = useState('')
+  const [runName, setRunName] = useState('moss-lora')
+  const [algo, setAlgo] = useState('lora')
+  const [steps, setSteps] = useState('4000')
+  const [lr, setLr] = useState('1e-4')
+  const [dim, setDim] = useState('32')
+  const [alpha, setAlpha] = useState('32')
+  const [batch, setBatch] = useState('1')
+  const [resolution, setResolution] = useState('1024')
+  const [overrides, setOverrides] = useState('')
+  const [doctor, setDoctor] = useState<{ ok: boolean; output: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void call<TrainerVersion[]>(Ipc.trainerVersions)
+      .then((rows) => {
+        setVersions(rows)
+        setVersionId((current) => current || rows[0]?.id || '')
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const version = versions.find((item) => item.id === versionId)
+  const hasCuda = env?.gpu.kind === 'nvidia'
+  const ready = version?.runtimeState === 'ready'
+
+  const configPath = `configs/user/${runName || 'moss-lora'}.py`
+  const overrideArgs = overrides
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.includes('=') && !line.startsWith('#'))
+    .map((line) => `--set ${line}`)
+    .join(' ')
+
+  const command = useMemo(
+    () =>
+      [
+        `kohakumoss-config new train --weights ${weights || '<weights>'} --data ${dataset || '<dataset>'} --source kohya --algo ${algo} --name ${runName || 'moss-lora'} --steps ${steps || '4000'}`,
+        `kogine run scripts/train/moss.py --config ${configPath} --set LR=${lr || '1e-4'} --set DIM=${dim || '32'} --set ALPHA=${alpha || '32'} --set MICROBATCHES=${batch || '1'} --set TARGET_AREA=${Number(resolution || '1024') ** 2}${overrideArgs ? ` ${overrideArgs}` : ''}`,
+      ].join('\n'),
+    [weights, dataset, algo, runName, steps, lr, dim, alpha, batch, resolution, configPath, overrideArgs],
+  )
+
+  async function pick(kind: 'weights' | 'dataset'): Promise<void> {
+    const path = await call<string | null>(Ipc.pickDialog, { kind: 'folder', title: kind === 'weights' ? '选择 MOSS 权重目录' : '选择数据集目录' })
+    if (!path) return
+    if (kind === 'weights') setWeights(path)
+    else setDataset(path)
+  }
+
+  async function check(): Promise<void> {
+    if (!version) {
+      toast.push('先创建一个训练版本', 'error')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await call<{ ok: boolean; output: string }>(Ipc.trainerDoctor, { id: version.id })
+      setDoctor(result)
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function start(): void {
+    if (!hasCuda) {
+      toast.push('本机没有 CUDA；请连接 SSH 训练主机（下一阶段）或使用 NVIDIA 机器', 'info')
+      return
+    }
+    toast.push('训练执行接入将在下一阶段完成；当前可以复制命令到共享终端运行', 'info')
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[1080px] space-y-4 px-6 py-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
+            <GraduationCap className="size-3.5" />
+            Kohaku Trainer · External
+          </div>
+          <h1 className="mt-1.5 text-[23px] font-semibold tracking-[-0.02em]">训练窗口</h1>
+          <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">
+            表单生成 trainer 配置；高级项直接透传 <code className="rounded bg-white/[0.05] px-1">--set KEY=VALUE</code>。
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button tone="ghost" onClick={() => openWindow('launcher', '/training')}>
+            训练页
+          </Button>
+          <Button tone="secondary" onClick={() => void check()} disabled={busy || !ready}>
+            {busy ? <Spinner className="size-3" /> : <Stethoscope className="size-3.5" />}
+            环境体检
+          </Button>
+        </div>
+      </header>
+
+      {!hasCuda ? (
+        <div className="flex items-start gap-2 rounded-[6px] border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+          <p className="text-[10px] leading-4 text-[var(--color-text-secondary)]">
+            当前设备没有 CUDA，不能启动真实训练。可以编辑配置、预览命令；Linux/Windows NVIDIA 或 SSH host 在后续阶段接入。
+          </p>
+        </div>
+      ) : null}
+
+      {versions.length === 0 ? (
+        <EmptyState
+          icon={<GraduationCap className="size-7" />}
+          title="还没有训练版本"
+          description="先去训练页拉取 KohakuMossTrainer 并创建一个 commit 版本。"
+          action={
+            <Button tone="primary" onClick={() => openWindow('launcher', '/training')}>
+              去训练页
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card className="p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[12.5px] font-medium">训练配置</h2>
+              <Pill tone={ready ? 'accent' : 'amber'}>{ready ? '环境就绪' : '环境未就绪'}</Pill>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <Field label="训练版本">
+                <select value={versionId} onChange={(event) => setVersionId(event.target.value)} className={inputClass}>
+                  {versions.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name} · {item.shortCommit}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="算法">
+                <select value={algo} onChange={(event) => setAlgo(event.target.value)} className={inputClass}>
+                  {ALGOS.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </Field>
+              <div className="col-span-2 grid grid-cols-[1fr_auto] gap-1">
+                <Field label="MOSS 权重目录">
+                  <input value={weights} onChange={(event) => setWeights(event.target.value)} placeholder="/path/to/MOSS-Image-Base" className={inputClass} />
+                </Field>
+                <button type="button" onClick={() => void pick('weights')} className="mt-4 flex size-7 items-center justify-center rounded-[4px] border border-[var(--color-border-subtle)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
+                  <FolderOpen className="size-3.5" />
+                </button>
+              </div>
+              <div className="col-span-2 grid grid-cols-[1fr_auto] gap-1">
+                <Field label="数据集目录">
+                  <input value={dataset} onChange={(event) => setDataset(event.target.value)} placeholder="/path/to/dataset（kohya 文件夹）" className={inputClass} />
+                </Field>
+                <button type="button" onClick={() => void pick('dataset')} className="mt-4 flex size-7 items-center justify-center rounded-[4px] border border-[var(--color-border-subtle)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]">
+                  <FolderOpen className="size-3.5" />
+                </button>
+              </div>
+              <Field label="Run 名称">
+                <input value={runName} onChange={(event) => setRunName(event.target.value.replace(/[^a-zA-Z0-9_-]/g, '-'))} className={inputClass} />
+              </Field>
+              <Field label="目标边长">
+                <input value={resolution} onChange={(event) => setResolution(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+              </Field>
+              <Field label="Steps">
+                <input value={steps} onChange={(event) => setSteps(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+              </Field>
+              <Field label="LR">
+                <input value={lr} onChange={(event) => setLr(event.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Dim">
+                <input value={dim} onChange={(event) => setDim(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+              </Field>
+              <Field label="Alpha">
+                <input value={alpha} onChange={(event) => setAlpha(event.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Microbatch">
+                <input value={batch} onChange={(event) => setBatch(event.target.value.replace(/[^0-9]/g, ''))} className={inputClass} />
+              </Field>
+            </div>
+
+            <Field label="高级覆盖（每行 KEY=VALUE）">
+              <textarea
+                value={overrides}
+                onChange={(event) => setOverrides(event.target.value)}
+                placeholder={'MEMORY_PROFILE=balanced\nSAVE_EVERY=250'}
+                className="mt-0.5 h-16 w-full resize-none rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 py-1.5 font-mono text-[9.5px] leading-4 outline-none focus:border-accent-500/60"
+              />
+            </Field>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Button tone="primary" onClick={start} disabled={!version || !ready}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Play className="size-3" /> 开始训练
+                </span>
+              </Button>
+              <Button tone="secondary" onClick={() => void check()} disabled={!ready || busy}>
+                环境体检
+              </Button>
+              <Button tone="ghost" disabled>
+                数据检查 · 下一阶段
+              </Button>
+              <Button tone="ghost" disabled>
+                导出 / 采样 · 下一阶段
+              </Button>
+            </div>
+          </Card>
+
+          <div className="space-y-4">
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[12.5px] font-medium">命令预览</h2>
+                <Pill tone="neutral">copy-ready</Pill>
+              </div>
+              <pre className="mt-2 max-h-[320px] overflow-auto whitespace-pre-wrap rounded-[4px] bg-black/25 p-3 font-mono text-[9.5px] leading-5 text-[var(--color-text-secondary)]">
+                {command}
+              </pre>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[9px] text-[var(--color-text-tertiary)]">
+                  {ready ? '环境就绪；执行入口在下一阶段接入' : '先在训练页安装环境'}
+                </span>
+                <Button
+                  tone="ghost"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(command)
+                    toast.push('命令已复制', 'success')
+                  }}
+                >
+                  复制
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center gap-2 text-[12px] font-medium">
+                <Terminal className="size-3.5" /> 环境体检
+              </div>
+              {doctor ? (
+                <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap rounded-[4px] bg-black/25 p-2.5 font-mono text-[9px] leading-4 text-[var(--color-text-secondary)]">
+                  {doctor.output || '没有输出'}
+                </pre>
+              ) : (
+                <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                  训练页安装环境后，可以在这里运行 <code className="rounded bg-white/[0.05] px-1">kohakumoss-doctor</code>。
+                </p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -6,6 +6,7 @@ const messages = {
   'nav.instances': '实例',
   'nav.gallery': '画廊',
   'nav.models': '模型',
+  'nav.trainer': '训练',
   'nav.run': '运行',
   'nav.diagnostics': '诊断',
   'nav.settings': '设置',

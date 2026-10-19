@@ -1,4 +1,4 @@
-# 实现状态（M1–M4 + UI v0.3）
+# 实现状态（M1–M4 + UI v0.4）
 
 - 日期：2026-10-19
 - 范围：三窗口启动器、OOBE、启动条/运行栈、官方 Gradio、xterm 终端、
@@ -63,6 +63,19 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | OOBE | 启动器内全屏遮罩；实例/运行时/模型三行；可关闭；每次启动检查 |
 | 创作窗口 | 独立 BrowserWindow；Studio/画廊；生成入口提示下一轮 Clover 后端 |
 
+### 2.4 Kohaku Trainer 基座（外部）
+
+| 模块 | 实现 |
+| --- | --- |
+| Trainer 仓库 | `trainerGit.ts`：runtime clone `KohakuBlueleaf/KohakuMossTrainer` → `trainerRoot/git/kohaku-trainer.git`；分支/commit/tag v0.1.0 |
+| 版本 | bare mirror + per-commit worktree；`trainer.json`；channel stable/experimental；dirty/status |
+| 环境 | `trainers.ts`：独立 venv、lock hash、`uv pip install -e .`、`kohakumoss-doctor` |
+| Training 页 | 训练器仓库路径、部署/更新、commit 选择、创建版本、环境安装、doctor、SSH 占位 |
+| 训练窗口 | 独立 `trainer` 窗口；版本/权重/数据集/算法/steps/LR/Dim/Alpha/batch/分辨率/高级覆盖；命令预览、doctor、复制 |
+| 许可边界 | 窗口显示 `Kohaku Trainer · External`，链接 KohakuMoss License 1.0；安装包不打包上游 |
+| SSH | `TrainingHost` 类型与页面占位；多 host / 远端路径 / 密钥 / 执行下一阶段 |
+| 终端 | Job kind 增加 `training`；终端行区分训练/推理（训练执行下一阶段） |
+
 ## 3. 实测证据
 
 在本机 **Apple M3 / 16 GB / macOS 15.7.7**：
@@ -77,6 +90,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 启动条 | `--screenshot` 点击“启动” | 缺权重预检生成 E_MODEL 诊断 + toast，不误下载 |
 | 设备枚举 | 首页 | `Apple M3 · Metal / MPS` + CPU |
 | 终端 | `--screenshot` | xterm 显示模拟任务 stdout/stderr |
+| Trainer 部署 | `--scenario=trainer-deploy` | clone mirror、创建 commit worktree `kohaku-3bcd751` |
+| 训练 UI | `--screenshot` | training 页 + trainer 窗口正常渲染 |
 | 布局编译器 | Node 跑 `layout.ts` | 与官方示例逐字段一致 |
 
 截图：
@@ -89,6 +104,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ![诊断](assets/diagnostics.webp)
 ![设置](assets/settings.webp)
 ![实例](assets/instances.webp)
+![训练页](assets/training.webp)
+![训练窗口](assets/trainer.webp)
 
 ## 4. 与目标的差距（有意保留）
 
@@ -96,6 +113,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 2. **Project 持久化未做**：Studio 的画布/JSON 仍只在内存；Project 将独立于 Case。
 3. **Cases 已持久化，运行排队只在会话内**：`cases.json` 保存配置，队列重启丢失；下一轮落盘。
 4. **创作窗口“开始生成”暂不接任务**：等 Clover 常驻后端。
+4.1 **训练执行/SSH 尚未接入**：本机无 CUDA，训练窗口当前只做配置/命令预览/doctor；训练 Case 与 loss 下一阶段。
 5. **官方 Gradio 未真机验收**：本机没有 27 GB SFT 权重；代码路径已接，预检会拦截。
 6. **同设备并发只做默认 1 个 + 排队**：强制并发/显存配额后续。
 7. **设备维护页未做**：当前只自动枚举 + 下拉。

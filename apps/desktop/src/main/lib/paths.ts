@@ -27,6 +27,13 @@ export const paths = {
   downloads: () => join(root(), 'downloads'),
   cache: () => join(root(), 'cache'),
   logs: () => join(root(), 'logs'),
+  trainerRoot: (custom?: string | null) => (custom ? resolve(custom) : join(root(), 'trainer')),
+  trainerGit: () => join(root(), 'trainer', 'git'),
+  trainerMirror: () => join(root(), 'trainer', 'git', 'kohaku-trainer.git'),
+  trainerVersions: () => join(root(), 'trainer', 'versions'),
+  trainerVersion: (id: string) => join(root(), 'trainer', 'versions', id),
+  trainerRuntimes: () => join(root(), 'trainer', 'runtimes'),
+  trainerRuntime: (id: string) => join(root(), 'trainer', 'runtimes', id),
 }
 
 export function ensureDirs(customModelsRoot?: string | null): void {
@@ -42,6 +49,9 @@ export function ensureDirs(customModelsRoot?: string | null): void {
     paths.downloads(),
     paths.cache(),
     paths.logs(),
+    paths.trainerGit(),
+    paths.trainerVersions(),
+    paths.trainerRuntimes(),
   ]
   for (const dir of dirs) mkdirSync(dir, { recursive: true })
 }

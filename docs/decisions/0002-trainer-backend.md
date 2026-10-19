@@ -1,8 +1,20 @@
 # ADR-0002：KohakuMossTrainer 不作为 git submodule，而是外部训练后端
 
-- 状态：**已决定**
+- 状态：**已决定（2026-10-19 修订）**
 - 日期：2026-10-19
 - 结论：**不嵌入、不 vendor、不作为 submodule**；以"外部进程 + 契约"方式可选接入。
+
+## 0. 修订：运行时部署 + 独立训练窗口（2026-10-19）
+
+产品决定增加“训练”主线。修订后的边界：
+
+- **仍然不 vendor、不作为 submodule、安装包不包含上游代码**；
+- 允许启动器在用户配置的 `trainerRoot` 里 **runtime clone** 上游仓库，建 bare mirror + per-commit worktree；
+- 训练器以 **独立的 Kohaku Trainer（External）窗口** 出现，主产品仍叫 CloverMoss；
+- 环境按 lock hash 管理，但只安装到 trainerRoot 下；推理与训练环境隔离；
+- SSH 训练主机在下一阶段接入，同一 host 模型。
+
+这不改变“训练内核不进入主仓库”的核心结论；它只是把“用户手动 clone”变成“启动器代为 clone + 管理版本/环境”。
 
 ## 1. 背景
 
@@ -53,7 +65,23 @@
    我们既要跟上游修 bug，又要维护自己的 patch，合并成本高于收益。
 5. **形态**：它是应用而非库。应用的正确集成边界是**进程**，不是源码树。
 
-### 4.2 桥接怎么做
+### 4.2 桥接怎么做（修订）
+
+训练器现在由启动器的 Trainer 服务管理：
+
+```
+训练页 → trainerRoot/git/kohaku-trainer.git（bare mirror）
+       → versions/<commit>（worktree）
+       → runtimes/<lockHash>（独立 venv）
+训练窗口 → form / config preview / doctor / run
+共享终端 → inference + training 两种 Case
+```
+
+- 仍然通过 **外部 Python 进程** 运行上游 `kogine`，不 import 上游代码；
+- SSH host 的执行仍通过系统 `ssh`，远端维护自己的 mirror/worktree/venv；
+- 许可：窗口明确标为 `Kohaku Trainer · External`，展示 KohakuMoss License 1.0 链接。
+
+### 4.2.1 原桥接设计
 
 ```
 launcher ── 发现/体检 ──> 用户自备环境（uv/conda/venv）

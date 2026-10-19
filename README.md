@@ -3,18 +3,20 @@
 > 为 [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) 做的跨平台启动器：
 > 像 Minecraft Launcher 一样选版本、选设备、启动；创作和终端各有一个独立窗口。
 
-**状态：v0.3 三窗口启动器。** 启动器 / 创作 / 终端可分可合；OOBE、启动条、运行栈、
-官方 Gradio 启动、xterm 终端已落地。Clover 常驻后端和 Project 持久化在下一轮。
+**状态：v0.4 四窗口启动器。** 启动器 / 创作 / 终端 / Kohaku Trainer；OOBE、启动条、
+运行栈、官方 Gradio、xterm、Trainer 部署与版本/环境基座已落地。Clover 常驻后端、
+训练执行与 SSH host 在下一阶段。
 
 ![首次启动 OOBE](docs/assets/oobe.webp)
 
-## 三窗口
+## 四窗口
 
 | 窗口 | 负责 |
 | --- | --- |
 | **启动器** | 首页启动条、运行栈、实例、模型、画廊、诊断、设置、OOBE |
 | **创作** | Studio、layout 画布、JSON 编译、画廊 |
 | **终端** | 左侧 Case 列表、右侧 xterm、stdout/stderr/stdin |
+| **Kohaku Trainer** | trainer 仓库部署、版本/worktree、环境、训练表单与 config 预览（外部） |
 
 窗口共用同一套 React 前端和深灰亚克力 token；标题栏居中显示 `CloverMoss` +
 `dev`/`release` + 版本号，没有侧栏 Logo。
@@ -48,6 +50,19 @@
 ![创作窗口](docs/assets/studio.webp)
 
 ![终端窗口](docs/assets/terminal.webp)
+
+![训练页](docs/assets/training.webp)
+
+![训练窗口](docs/assets/trainer.webp)
+
+### Kohaku Trainer（外部）
+
+- trainer 仓库 runtime clone 到用户配置的 `trainerRoot`，**不打包、不 submodule**；
+- bare mirror + per-commit worktree；环境按 lock hash 创建/复用；
+- 训练窗口表单生成 `kohakumoss-config` / `kogine` 命令，可预览/复制；
+- 页面提供版本、环境安装与 `kohakumoss-doctor`；
+- 当前 macOS 无 CUDA：可部署/管理/编辑，真实训练与 SSH host 下一阶段；
+- 训练窗口标题明确为 `Kohaku Trainer · External`，展示 KohakuMoss License 1.0。
 
 ## OOBE
 
@@ -96,13 +111,13 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 ```text
 apps/desktop/
   src/main/
-    windows.ts          启动器 / 创作 / 终端三窗口
+    windows.ts          启动器 / 创作 / 终端 / Kohaku Trainer 四窗口
     services/           env / git / runtimes / instances / models / gallery /
                         supervisor / parsers / diagnostics / devices / cases / onboarding
     ipc.ts              类型化 IPC + zod
   src/preload/          contextBridge（windowKind / acrylic / channel）
   src/renderer/
-    src/pages/          Home / Studio / Gallery / Terminal / Instances / Models / Diagnostics / Settings
+    src/pages/          Home / Studio / Gallery / Terminal / Training / TrainerWindow / Instances / Models / Diagnostics / Settings
     src/components/     AppTitlebar / layout / NotificationPanel / Oobe / ui
     src/lib/            layout 编译器 / clover / windows / api
 runner/                 薄 Python runner（NDJSON + simulate）
@@ -121,7 +136,8 @@ docs/                   产品、架构、状态、layout 规范、截图
 
 ## 已知限制
 
-- Clover 常驻后端、Project 持久化、图层系统在下一轮；
+- 训练执行、loss/终端训练 Case、SSH 训练主机在下一阶段；
+- Clover 常驻后端、Project 持久化、图层系统在后续；
 - 创作窗口的“开始生成”目前提示下一轮，不直接起任务；
 - Cases 与排队只在本次启动器会话内保存，重启丢失；
 - 官方 Gradio 真实启动需要 27 GB SFT 权重，本机未下载，未做真机验收；

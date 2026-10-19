@@ -206,7 +206,7 @@ export function TerminalPage(): React.JSX.Element {
                     {job.caseName ?? job.instanceName}
                   </span>
                   <span className="mt-0.5 block truncate text-[9.5px] text-[var(--color-text-tertiary)]">
-                    {stateLabel[job.state]} · {job.instanceName}
+                    {job.kind === 'training' ? '训练' : '推理'} · {stateLabel[job.state]} · {job.instanceName}
                   </span>
                 </span>
                 {(job.state === 'running' || job.state === 'starting') ? (
@@ -260,7 +260,7 @@ export function TerminalPage(): React.JSX.Element {
             </span>
             {active ? (
               <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
-                {stateLabel[active.state]} · PID {active.pid ?? '—'}
+                {active.kind === 'training' ? '训练' : '推理'} · {stateLabel[active.state]} · PID {active.pid ?? '—'}
               </span>
             ) : null}
           </div>

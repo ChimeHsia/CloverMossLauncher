@@ -6,6 +6,8 @@ import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, listInstances } from './services/instances'
 import { installDeps } from './services/runtimes'
 import { cancelJob, getJob, getJobLogs, startJob } from './services/supervisor'
+import { createTrainerVersion, listTrainerVersions } from './services/trainers'
+import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 import { matchRule, parseTqdm } from './services/parsers'
 import { registerIpc } from './ipc'
 import { scanEnvironment } from './services/env'
@@ -307,6 +309,24 @@ app.whenReady().then(async () => {
     return
   }
 
+  if (scenario === 'trainer-deploy') {
+    try {
+      const settings = getSettings()
+      const branches = await listTrainerBranches(settings)
+      const branch = branches.find((item) => item.isDefault)?.name ?? branches[0]?.name ?? 'main'
+      const commits = await listTrainerCommits(settings, branch, 3)
+      if (!commits[0]) throw new Error('训练器没有提交')
+      const version = await createTrainerVersion(settings, { branch, commit: commits[0].sha })
+      const versions = await listTrainerVersions(settings)
+      console.log(JSON.stringify({ scenario: 'trainer-deploy', branch, commits: commits.length, version, versions: versions.length }, null, 2))
+      app.exit(0)
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    }
+    return
+  }
+
   if (scenario === 'windows') {
     const launcher = createAppWindow('launcher', false)
     await new Promise<void>((resolve) => launcher.webContents.once('did-finish-load', () => resolve()))
@@ -352,12 +372,13 @@ app.whenReady().then(async () => {
       ['/instances/moss-main-9d799c1', 'instance-detail'],
       ['/diagnostics', 'diagnostics'],
       ['/gallery', 'gallery-launcher'],
+      ['/training', 'training'],
       ['/models', 'models'],
       ['/settings', 'settings'],
     ]
     for (const [route, name] of routes) {
       await launcher.webContents.executeJavaScript(`location.hash = '#${route}'`)
-      await new Promise((resolve) => setTimeout(resolve, 900))
+      await new Promise((resolve) => setTimeout(resolve, route === '/training' ? 2800 : 900))
       const image = await launcher.webContents.capturePage()
       writeFileSync(join(app.getPath('userData'), `screenshot-${name}.png`), image.toPNG())
     }
@@ -377,6 +398,12 @@ app.whenReady().then(async () => {
     await new Promise((resolve) => setTimeout(resolve, 2200))
     const terminalShot = await terminal.webContents.capturePage()
     writeFileSync(join(app.getPath('userData'), 'screenshot-terminal.png'), terminalShot.toPNG())
+
+    const trainer = createAppWindow('trainer', false)
+    await new Promise<void>((resolve) => trainer.webContents.once('did-finish-load', () => resolve()))
+    await new Promise((resolve) => setTimeout(resolve, 2200))
+    const trainerShot = await trainer.webContents.capturePage()
+    writeFileSync(join(app.getPath('userData'), 'screenshot-trainer.png'), trainerShot.toPNG())
 
     console.log('screenshots written to', app.getPath('userData'))
     app.exit(0)

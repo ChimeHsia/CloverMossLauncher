@@ -394,6 +394,8 @@ export interface StartJobInput {
   caseName?: string
   backend?: 'official' | 'clover'
   deviceId?: string
+  kind?: 'inference' | 'training'
+  trainerVersionId?: string
   prompt: string
   negativePrompt?: string
   width: number
@@ -468,6 +470,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     caseName: input.caseName,
     backend: input.backend,
     deviceId: input.deviceId,
+    kind: input.kind ?? 'inference',
     mode,
     state: 'starting',
     stage: 'idle',

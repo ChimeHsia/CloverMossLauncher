@@ -122,6 +122,7 @@ export interface Settings {
   sidebarCollapsed: boolean
   galleryRoots: string[]
   homeBackground: string | null
+  trainerRoot: string | null
 }
 
 export interface AppNotification {
@@ -273,6 +274,54 @@ export interface DownloadTask {
   updatedAt: string
 }
 
+export type TrainingHostKind = 'local' | 'ssh'
+export type TrainerChannel = 'stable' | 'experimental' | 'custom'
+export type TrainerRuntimeState = 'missing' | 'created' | 'installing' | 'ready' | 'error'
+
+export interface TrainingHost {
+  id: string
+  name: string
+  kind: TrainingHostKind
+  host?: string
+  user?: string
+  port?: number
+  identityFile?: string
+  trainerRoot: string
+  status: 'unchecked' | 'ok' | 'error'
+  lastCheckedAt?: string
+}
+
+export interface TrainerVersion {
+  id: string
+  name: string
+  branch: string
+  commit: string
+  shortCommit: string
+  commitDate: string
+  subject: string
+  author: string
+  channel: TrainerChannel
+  path: string
+  runtimeId: string
+  runtimeState: TrainerRuntimeState
+  createdAt: string
+  lastUsedAt?: string | null
+  dirty: boolean
+  status: 'ok' | 'missing'
+}
+
+export interface TrainerRuntimeInfo {
+  id: string
+  versionId: string
+  path: string
+  python: string
+  pythonVersion: string
+  lockHash: string
+  state: TrainerRuntimeState
+  deps: string[]
+  createdAt: string
+}
+
 export type LaunchBackend = 'official' | 'clover'
 export type DeviceKind = 'mps' | 'cuda' | 'cpu'
 
@@ -363,6 +412,8 @@ export interface JobStartInput {
   caseName?: string
   backend?: LaunchBackend
   deviceId?: string
+  kind?: 'inference' | 'training'
+  trainerVersionId?: string
   prompt: string
   negativePrompt?: string
   width: number
@@ -393,6 +444,8 @@ export interface JobRecord {
   caseName?: string
   backend?: LaunchBackend
   deviceId?: string
+  kind?: 'inference' | 'training'
+  trainerVersionId?: string
   mode: JobMode
   state: JobState
   stage: JobStage

@@ -5,12 +5,14 @@ import { openWindow } from '../lib/windows'
 import { cn, IconButton } from './ui'
 
 interface AppTitlebarProps {
-  kind: 'launcher' | 'creator' | 'terminal'
+  kind: 'launcher' | 'creator' | 'terminal' | 'trainer'
   collapsed?: boolean
   onToggleSidebar?: () => void
   notificationsOpen?: boolean
   onToggleNotifications?: () => void
   unread?: number
+  appName?: string
+  appTag?: string
   right?: ReactNode
 }
 
@@ -21,6 +23,8 @@ export function AppTitlebar({
   notificationsOpen,
   onToggleNotifications,
   unread = 0,
+  appName = 'CloverMoss',
+  appTag,
   right,
 }: AppTitlebarProps): React.JSX.Element {
   const env = useApp((state) => state.env)
@@ -53,7 +57,7 @@ export function AppTitlebar({
       </div>
 
       <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-baseline gap-1.5">
-        <span className="text-[12px] font-semibold tracking-[-0.01em] text-[var(--color-text)]">CloverMoss</span>
+        <span className="text-[12px] font-semibold tracking-[-0.01em] text-[var(--color-text)]">{appName}</span>
         <span
           className={cn(
             'rounded-[2px] border px-1 py-px text-[8px] font-semibold uppercase leading-[11px] tracking-[0.08em]',
@@ -62,7 +66,7 @@ export function AppTitlebar({
               : 'border-accent-500/30 text-accent-300',
           )}
         >
-          {channel}
+          {appTag ?? channel}
         </span>
         <span className="text-[9px] tabular-nums text-[var(--color-text-tertiary)]">{version}</span>
       </div>

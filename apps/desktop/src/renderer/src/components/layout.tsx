@@ -7,6 +7,7 @@ import {
   PanelLeftOpen,
   Settings as SettingsIcon,
   Stethoscope,
+  Dumbbell,
   Wand2,
   type LucideIcon,
 } from 'lucide-react'
@@ -26,6 +27,7 @@ const launcherNav: NavItem[] = [
   { to: '/', key: 'nav.home', icon: Home, end: true },
   { to: '/instances', key: 'nav.instances', icon: Boxes },
   { to: '/models', key: 'nav.models', icon: Package },
+  { to: '/training', key: 'nav.trainer', icon: Dumbbell },
   { to: '/gallery', key: 'nav.gallery', icon: Images },
   { to: '/diagnostics', key: 'nav.diagnostics', icon: Stethoscope },
 ]

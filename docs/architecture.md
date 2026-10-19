@@ -1,6 +1,6 @@
 # 架构文档 · CloverMoss Launcher
 
-- 版本：v0.3（2026-10-19）
+- 版本：v0.4（2026-10-19）
 - 状态：三窗口 UI + M1–M4 基础已落地；实现差异与验收边界见 [status.md](status.md)
 - 关联：[产品设计](product-design.md) · [ADR-0003](decisions/0003-launcher-first.md)
 
@@ -55,6 +55,7 @@ V1 是**编排器**：Electron 壳 + 领域服务 + 外部 Python 运行时。�
 LauncherWindow  首页（启动条 + 运行栈）/ 实例 / 模型 / 诊断 / 设置 / OOBE
 CreatorWindow   Studio / 画布 / layout JSON / 画廊
 TerminalWindow  Case 列表 + xterm（stdout/stderr/stdin）
+TrainerWindow   Kohaku Trainer 外部：配置/命令预览/doctor/训练运行
 ```
 
 - 同一套 renderer bundle，preload 通过 `--clover-window=<kind>` 暴露 `windowKind`；
@@ -69,12 +70,13 @@ apps/desktop/
   electron.vite.config.ts
   src/main/           Electron 主进程 + 领域服务 + IPC
     services/         env / network / git / runtimes / instances / models / updates / gallery /
-                      supervisor / parsers / diagnostics / devices / cases / onboarding
+                      supervisor / parsers / diagnostics / devices / cases / onboarding /
+                      trainerGit / trainers
     windows.ts        启动器 / 创作 / 终端三窗口
     lib/              paths / run / events
   src/preload/        contextBridge（只暴露 invoke / on / acrylic）
   src/renderer/       React 19 + Tailwind 4 + Apps SDK UI
-    src/pages/        Home / Studio / Gallery / Terminal / Diagnostics / Instances / InstanceDetail / Models / Settings
+    src/pages/        Home / Studio / Gallery / Terminal / Training / TrainerWindow / Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/   AppTitlebar / layout / NotificationPanel / Oobe / ui / ErrorBoundary
     src/lib/          layout.ts（官方 layout 编译器）/ clover.ts / api / format / i18n
     src/store.ts      Zustand（含通知、创作草稿、画廊底图）
@@ -579,4 +581,5 @@ window.clover = {
 | UI v0.3 | 三窗口 + 启动条/运行栈 + OOBE + 终端 + Fluent 深灰 | ✅ 已实现；Clover 后端下一轮 |
 | M4 | Supervisor + runner + 解析 + 诊断 | ✅ 基础完成（simulate/取消/解析实测；真实权重待验收） |
 | M5 | Gradio + WebUI + 更新/公告 | 计划 |
+| Trainer v0.4 | Kohaku Trainer 外部窗口 / 版本 / 环境 / 配置预览 | ✅ 基座；执行/SSH 下一阶段 |
 | M6 | 打包、公证、Windows、Beta | 计划 |

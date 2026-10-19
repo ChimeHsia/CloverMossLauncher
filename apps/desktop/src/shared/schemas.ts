@@ -18,6 +18,7 @@ export const schemas = {
       sidebarCollapsed: z.boolean(),
       galleryRoots: z.array(z.string().max(4096)).max(20),
       homeBackground: z.string().max(4096).nullable(),
+      trainerRoot: z.string().max(4096).nullable(),
     })
     .partial(),
 
@@ -65,9 +66,22 @@ export const schemas = {
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
 
   windowOpen: z.object({
-    kind: z.enum(['launcher', 'creator', 'terminal']),
+    kind: z.enum(['launcher', 'creator', 'terminal', 'trainer']),
     route: z.string().regex(/^\/[a-z0-9/_-]*$/i).max(120).optional(),
   }),
+
+  trainerCommits: z.object({
+    branch: z.string().min(1).max(120),
+    limit: z.number().int().min(1).max(200).default(80),
+  }),
+
+  trainerCreate: z.object({
+    branch: z.string().min(1).max(120),
+    commit: z.string().min(7).max(64),
+    name: z.string().max(120).optional(),
+  }),
+
+  trainerId: z.object({ id: z.string().min(1).max(120) }),
 
   caseSave: z.object({
     id: z.string().max(80).optional(),
@@ -97,6 +111,7 @@ export const schemas = {
     caseName: z.string().max(120).optional(),
     backend: z.enum(['official', 'clover']).optional(),
     deviceId: z.string().max(120).optional(),
+    kind: z.enum(['inference', 'training']).optional(),
     port: z.number().int().min(1024).max(65535).nullable().optional(),
     extraArgs: z.string().max(2000).optional(),
   }),

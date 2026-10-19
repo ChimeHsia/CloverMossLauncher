@@ -20,6 +20,8 @@ import { InstancesPage } from './pages/Instances'
 import { ModelsPage } from './pages/Models'
 import { SettingsPage } from './pages/Settings'
 import { TerminalPage } from './pages/Terminal'
+import { TrainingPage } from './pages/Training'
+import { TrainerWindow } from './pages/TrainerWindow'
 import { useApp } from './store'
 import { cloverUrl } from './lib/clover'
 
@@ -84,6 +86,7 @@ function LauncherShell(): React.JSX.Element {
                 <Route path="/instances" element={<InstancesPage />} />
                 <Route path="/instances/:id" element={<InstanceDetailPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/training" element={<TrainingPage />} />
                 <Route path="/gallery" element={<GalleryPage />} />
                 <Route path="/diagnostics" element={<DiagnosticsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
@@ -128,6 +131,18 @@ function CreatorShell(): React.JSX.Element {
   )
 }
 
+function TrainerShell(): React.JSX.Element {
+  const backgroundStyle = useAppBackground()
+  return (
+    <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
+      <AppTitlebar kind="trainer" appName="Kohaku Trainer" appTag="external" />
+      <div className="min-h-0 flex-1 overflow-y-auto" style={backgroundStyle}>
+        <TrainerWindow />
+      </div>
+    </div>
+  )
+}
+
 function TerminalShell(): React.JSX.Element {
   const backgroundStyle = useAppBackground()
   return (
@@ -158,6 +173,8 @@ export function App(): React.JSX.Element {
         </HashRouter>
       ) : kind === 'terminal' ? (
         <TerminalShell />
+      ) : kind === 'trainer' ? (
+        <TrainerShell />
       ) : (
         <HashRouter>
           <LauncherShell />

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 
-export type WindowKind = 'launcher' | 'creator' | 'terminal'
+export type WindowKind = 'launcher' | 'creator' | 'terminal' | 'trainer'
 
 const windows = new Map<WindowKind, BrowserWindow>()
 const isDev = !app.isPackaged
@@ -11,6 +11,7 @@ const config: Record<WindowKind, { width: number; height: number; minWidth: numb
   launcher: { width: 1180, height: 760, minWidth: 960, minHeight: 640, route: '/', title: 'CloverMoss' },
   creator: { width: 1320, height: 860, minWidth: 1040, minHeight: 680, route: '/studio', title: 'CloverMoss Creator' },
   terminal: { width: 1120, height: 720, minWidth: 900, minHeight: 560, route: '/terminal', title: 'CloverMoss Terminal' },
+  trainer: { width: 1280, height: 840, minWidth: 980, minHeight: 640, route: '/trainer', title: 'Kohaku Trainer' },
 }
 
 export function createAppWindow(kind: WindowKind, show = true): BrowserWindow {

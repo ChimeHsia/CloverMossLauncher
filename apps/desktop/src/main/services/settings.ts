@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarCollapsed: false,
   galleryRoots: [],
   homeBackground: null,
+  trainerRoot: null,
 }
 
 let cache: Settings | null = null
