@@ -5,6 +5,7 @@ import type { Diagnostic } from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
+import { loadRules, toDiagnostic } from './parsers'
 
 const FILE = () => join(paths.root(), 'diagnostics.json')
 const MAX = 200
@@ -20,7 +21,14 @@ function load(): Diagnostic[] {
   try {
     if (!existsSync(FILE())) return []
     const parsed = JSON.parse(readFileSync(FILE(), 'utf8')) as Diagnostic[]
-    return Array.isArray(parsed) ? parsed.slice(0, MAX) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.slice(0, MAX).map((item) => {
+      if (!/\{\d+\}/.test(`${item.title} ${item.explain}`)) return item
+      const rule = loadRules().find((candidate) => candidate.id === item.ruleId)
+      if (!rule) return item
+      const rendered = toDiagnostic(rule, item.raw, item.jobId)
+      return { ...item, title: rendered.title, explain: rendered.explain }
+    })
   } catch {
     return []
   }
@@ -64,6 +72,8 @@ export function pushDiagnostic(input: DiagnosticInput): Diagnostic {
     existing.count += 1
     existing.lastAt = now
     existing.raw = input.raw
+    existing.title = input.title
+    existing.explain = input.explain
     items = [existing, ...current.filter((item) => item.id !== existing.id)]
     emit(Events.diagnostic, { ...existing, toast: false })
     persist()

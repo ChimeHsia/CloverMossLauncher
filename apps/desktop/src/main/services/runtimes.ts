@@ -94,23 +94,40 @@ export async function pickPython(settings: Settings): Promise<{ path: string; ve
   throw new Error('未找到 Python 3.10+。可在设置中指定解释器，或稍后安装托管 Python。')
 }
 
-export function parseDepsFromPyproject(instanceDir: string): string[] {
+function withUiDependencies(deps: string[], uiDeps: string[] = []): string[] {
+  const combined = [...deps, ...uiDeps]
+  if (!combined.some((dep) => /^gradio(?:\s|[<>=!~;\[@]|$)/i.test(dep))) {
+    combined.push('gradio>=6.30')
+  }
+  return [...new Set(combined)]
+}
+
+export function parseDepsFromPyproject(instanceDir: string, includeUi = false): string[] {
+  let deps = [...MOSS_DEPS]
+  let uiDeps: string[] = []
   try {
     const text = readFileSync(join(instanceDir, 'pyproject.toml'), 'utf8')
     const project = text.match(/\[project\][\s\S]*?(?=\n\[|$)/)
     if (project) {
-      const deps = project[0].match(/dependencies\s*=\s*\[([\s\S]*?)\]/)
-      if (deps) {
-        const list = [...deps[1]!.matchAll(/["']([^"']+)["']/g)]
+      const declared = project[0].match(/dependencies\s*=\s*\[([\s\S]*?)\]/)
+      if (declared) {
+        const list = [...declared[1]!.matchAll(/["']([^"']+)["']/g)]
           .map((match) => match[1]!)
           .filter((dep) => !dep.startsWith('-e') && dep.trim().length > 0)
-        if (list.length) return list
+        if (list.length) deps = list
       }
+    }
+    if (includeUi) {
+      const optional = text.match(/\[project\.optional-dependencies\][\s\S]*?(?=\n\[|$)/)
+      const ui = optional?.[0].match(/^\s*ui\s*=\s*\[([\s\S]*?)\]/m)
+      uiDeps = [...(ui?.[1] ?? '').matchAll(/["']([^"']+)["']/g)]
+        .map((match) => match[1]!)
+        .filter((dep) => !dep.startsWith('-e') && dep.trim().length > 0)
     }
   } catch {
     // fall through
   }
-  return [...MOSS_DEPS]
+  return includeUi ? withUiDependencies(deps, uiDeps) : deps
 }
 
 function lockHash(pythonVersionText: string, deps: string[]): string {
@@ -152,7 +169,7 @@ export interface EnsureRuntimeInput {
 }
 
 export async function ensureRuntime(input: EnsureRuntimeInput): Promise<RuntimeInfo> {
-  const deps = parseDepsFromPyproject(input.instanceDir)
+  const deps = parseDepsFromPyproject(input.instanceDir, true)
   const python = input.python ?? (await pickPython(input.settings))
   const lock = lockHash(python.version, deps)
 
@@ -194,11 +211,21 @@ export async function ensureRuntime(input: EnsureRuntimeInput): Promise<RuntimeI
   return runtime
 }
 
-export async function installDeps(runtimeId: string, settings: Settings, logger?: Logger): Promise<RuntimeInfo> {
+export async function installDeps(
+  runtimeId: string,
+  settings: Settings,
+  logger?: Logger,
+  instanceDir?: string,
+): Promise<RuntimeInfo> {
   const runtime = await readRuntime(runtimeId)
   if (!runtime) throw new Error('运行时不存在')
   const loggerForRun = logFor(runtimeId, runtime.instanceId, logger)
 
+  const source = instanceDir ?? paths.instance(runtime.instanceId)
+  runtime.deps = existsSync(join(source, 'pyproject.toml'))
+    ? parseDepsFromPyproject(source, true)
+    : withUiDependencies(runtime.deps)
+  runtime.lockHash = lockHash(runtime.pythonVersion, runtime.deps)
   runtime.state = 'installing'
   await writeRuntime(runtime)
 

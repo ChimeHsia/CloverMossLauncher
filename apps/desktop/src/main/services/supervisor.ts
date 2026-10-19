@@ -370,7 +370,7 @@ function finish(job: JobRecord, runningJob: RunningJob, code: number | null): vo
   pushDiagnostic(diagnostic)
   update(job, {
     state: 'failed',
-    error: { code: rule.id, message: rule.title },
+    error: { code: rule.id, message: diagnostic.title },
     endedAt: new Date().toISOString(),
     exitCode,
   })
