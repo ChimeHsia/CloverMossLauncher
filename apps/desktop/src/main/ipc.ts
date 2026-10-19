@@ -38,6 +38,7 @@ import {
   startTrainerRun,
 } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
+import { listTrainingHosts, removeTrainingHost, saveTrainingHost } from './services/trainingHosts'
 
 function toResult<T>(fn: () => Promise<T> | T): Promise<IpcResult<T>> {
   return Promise.resolve()
@@ -99,6 +100,15 @@ export function registerIpc(): void {
   handle(Ipc.onboardingStatus, null, () => getOnboardingStatus(getSettings()))
 
   handle(Ipc.trainerMirror, null, () => trainerMirrorInfo(getSettings()))
+
+  handle(Ipc.trainerHosts, null, () => listTrainingHosts(getSettings()))
+
+  handle(Ipc.trainerHostSave, schemas.trainerHostSave, (input) => saveTrainingHost(input))
+
+  handle(Ipc.trainerHostRemove, schemas.trainerHostRemove, ({ id }) => {
+    removeTrainingHost(id)
+    return true
+  })
 
   handle(Ipc.trainerBranches, null, () => listTrainerBranches(getSettings()))
 

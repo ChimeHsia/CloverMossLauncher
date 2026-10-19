@@ -8,6 +8,7 @@ import { installDeps } from './services/runtimes'
 import { cancelJob, getJob, getJobLogs, startJob, startTrainingJob } from './services/supervisor'
 import { createTrainerVersion, listTrainerVersions } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
+import { listTrainingHosts, removeTrainingHost, saveTrainingHost } from './services/trainingHosts'
 import { matchRule, parseTqdm } from './services/parsers'
 import { registerIpc } from './ipc'
 import { scanEnvironment } from './services/env'
@@ -306,6 +307,22 @@ app.whenReady().then(async () => {
       console.error(error)
       app.exit(1)
     }
+    return
+  }
+
+  if (scenario === 'trainer-host') {
+    const host = saveTrainingHost({
+      name: 'Test 4090',
+      host: '192.0.2.10',
+      user: 'trainer',
+      port: 22,
+      trainerRoot: '~/CloverMossTrainer',
+    })
+    const before = listTrainingHosts(getSettings())
+    removeTrainingHost(host.id)
+    const after = listTrainingHosts(getSettings())
+    console.log(JSON.stringify({ scenario: 'trainer-host', saved: host, before: before.length, after: after.length }, null, 2))
+    app.exit(0)
     return
   }
 

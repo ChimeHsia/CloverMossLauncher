@@ -75,6 +75,18 @@ export const schemas = {
     limit: z.number().int().min(1).max(200).default(80),
   }),
 
+  trainerHostSave: z.object({
+    id: z.string().max(80).optional(),
+    name: z.string().max(120).default(''),
+    host: z.string().min(1).max(255),
+    user: z.string().min(1).max(120),
+    port: z.number().int().min(1).max(65535).optional(),
+    identityFile: z.string().max(4096).optional(),
+    trainerRoot: z.string().min(1).max(4096),
+  }),
+
+  trainerHostRemove: z.object({ id: z.string().min(1).max(80) }),
+
   trainerRun: z.object({
     versionId: z.string().min(1).max(120),
     action: z.enum(['train', 'inspect_data', 'cache_text', 'cache_latents', 'export', 'sample']),

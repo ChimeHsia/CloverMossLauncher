@@ -73,9 +73,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Training 页 | 训练器仓库路径、部署/更新、commit 选择、创建版本、环境安装、doctor、SSH 占位 |
 | 训练窗口 | 独立 `trainer` 窗口；版本/权重/数据集/算法/steps/LR/Dim/Alpha/batch/分辨率/高级覆盖；命令预览、doctor、复制；CUDA 下启动 train/检查/缓存 |
 | 许可边界 | 窗口显示 `Kohaku Trainer · External`，链接 KohakuMoss License 1.0；安装包不打包上游 |
-| SSH | `TrainingHost` 类型与页面占位；多 host / 远端路径 / 密钥 / 执行下一阶段 |
+| SSH | `trainingHosts.ts` 持久化 + 页面增删；host/user/port/identityFile/trainerRoot；连接/远端执行下一阶段 |
 | 终端 | Job kind `training`；训练 job 进入共享终端，行区分训练/推理 |
-| 训练执行 | `startTrainingJob`：spawn、日志、step/loss 解析、取消、成功/失败；`trainer-job` 模拟验证 |
+| 训练执行 | `startTrainingJob`：spawn、日志、step/loss 解析、取消、成功/失败；`trainer-job` 模拟验证；训练 job 进终端 |
+| 数据/导出 | 检查数据、缓存文本、缓存潜变量可启动；导出/采样弹窗命令入口 |
 
 ## 3. 实测证据
 
@@ -94,6 +95,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Trainer 部署 | `--scenario=trainer-deploy` | clone mirror、创建 commit worktree `kohaku-3bcd751` |
 | 训练 UI | `--screenshot` | training 页 + trainer 窗口正常渲染 |
 | 训练 job | `--scenario=trainer-job` | succeeded，step 5、loss 0.1、5 行日志；终端可见 training Case |
+| SSH host | `--scenario=trainer-host` | 保存/读取/删除 host；local + ssh 列表 |
 | 布局编译器 | Node 跑 `layout.ts` | 与官方示例逐字段一致 |
 
 截图：
@@ -115,7 +117,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 2. **Project 持久化未做**：Studio 的画布/JSON 仍只在内存；Project 将独立于 Case。
 3. **Cases 已持久化，运行排队只在会话内**：`cases.json` 保存配置，队列重启丢失；下一轮落盘。
 4. **创作窗口“开始生成”暂不接任务**：等 Clover 常驻后端。
-4.1 **训练执行仅 CUDA 主机可用**：Mac 无 CUDA，本机不能验收；SSH 远端执行、导出/采样尚未接入。
+4.1 **训练执行仅 CUDA 主机可用**：Mac 无 CUDA，本机不能验收；SSH 远端执行、导出/采样真实执行尚未接入。
 5. **官方 Gradio 未真机验收**：本机没有 27 GB SFT 权重；代码路径已接，预检会拦截。
 6. **同设备并发只做默认 1 个 + 排队**：强制并发/显存配额后续。
 7. **设备维护页未做**：当前只自动枚举 + 下拉。

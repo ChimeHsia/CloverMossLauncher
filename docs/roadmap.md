@@ -147,7 +147,7 @@
 - ✅ trainer 仓库 runtime clone、bare mirror、per-commit worktree；
 - ✅ 独立 venv / lock hash / `kohakumoss-doctor`；
 - ✅ Training 页 + 训练窗口表单 / 命令预览；
-- ✅ 本机 CUDA 训练 job、step/loss、共享终端；数据检查/缓存入口；
+- ✅ 本机 CUDA 训练 job、step/loss、共享终端；数据检查/缓存入口；导出/采样命令入口；SSH host CRUD；
 - ⏳ 导出/采样、真实 CUDA 验收；
 - ⏳ SSH 多 host 与远端执行。
 

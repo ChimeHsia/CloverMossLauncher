@@ -5,7 +5,7 @@ import type { JobRecord, TrainerVersion } from '@shared/types'
 import { call } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, ProgressBar, Spinner, useToast } from '../components/ui'
+import { Button, Card, EmptyState, Modal, Pill, ProgressBar, Spinner, useToast } from '../components/ui'
 
 const ALGOS = ['lora', 'locon', 'loha', 'lokr', 'dora', 'oft', 'boft', 'ia3', 'full']
 
@@ -43,6 +43,7 @@ export function TrainerWindow(): React.JSX.Element {
   const [doctor, setDoctor] = useState<{ ok: boolean; output: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
+  const [auxOpen, setAuxOpen] = useState<'export' | 'sample' | null>(null)
 
   useEffect(() => {
     void call<TrainerVersion[]>(Ipc.trainerVersions)
@@ -96,6 +97,15 @@ export function TrainerWindow(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
+  }
+
+  function buildExport(): string {
+    const step = trainingJob?.metrics?.step ?? (Number(steps) || 1000)
+    return `kogine run scripts/export/export.py --set WEIGHTS=${weights || '<weights>'} --set ADAPTER=runs/moss/${runName || 'moss-lora'}/checkpoints/step_${String(step).padStart(8, '0')}/trainable.safetensors --set OUT=${runName || 'moss-lora'}.safetensors`
+  }
+
+  function buildSample(): string {
+    return `kohakumoss-config new sample --weights ${weights || '<weights>'} --adapter runs/moss/${runName || 'moss-lora'}/export/${runName || 'moss-lora'}-comfy.safetensors --name ${runName || 'moss-lora'}-sample\nkogine run scripts/sample/sample.py --config configs/user/${runName || 'moss-lora'}-sample.py --set PROMPT="a lighthouse on a rocky coast at sunset"`
   }
 
   async function runAction(action: 'train' | 'inspect_data' | 'cache_text' | 'cache_latents'): Promise<void> {
@@ -273,8 +283,11 @@ export function TrainerWindow(): React.JSX.Element {
               <Button tone="ghost" onClick={() => void runAction('cache_latents')} disabled={!ready || !hasCuda || starting !== null}>
                 缓存潜变量
               </Button>
-              <Button tone="ghost" disabled>
-                导出 / 采样 · 下一阶段
+              <Button tone="ghost" onClick={() => setAuxOpen('export')}>
+                导出命令
+              </Button>
+              <Button tone="ghost" onClick={() => setAuxOpen('sample')}>
+                采样命令
               </Button>
             </div>
           </Card>
@@ -345,6 +358,32 @@ export function TrainerWindow(): React.JSX.Element {
           </div>
         </div>
       )}
+
+      <Modal
+        open={Boolean(auxOpen)}
+        onClose={() => setAuxOpen(null)}
+        title={auxOpen === 'export' ? '导出适配器命令' : '采样命令'}
+        description="命令入口；真实执行在 CUDA 主机/远端阶段接入。"
+        width="max-w-3xl"
+        footer={
+          <div className="flex gap-1.5">
+            <Button tone="ghost" onClick={() => setAuxOpen(null)}>关闭</Button>
+            <Button
+              tone="primary"
+              onClick={() => {
+                void navigator.clipboard.writeText(auxOpen === 'export' ? buildExport() : buildSample())
+                toast.push('命令已复制', 'success')
+              }}
+            >
+              复制命令
+            </Button>
+          </div>
+        }
+      >
+        <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-[4px] bg-black/25 p-3 font-mono text-[9.5px] leading-5 text-[var(--color-text-secondary)]">
+          {auxOpen === 'export' ? buildExport() : buildSample()}
+        </pre>
+      </Modal>
     </div>
   )
 }

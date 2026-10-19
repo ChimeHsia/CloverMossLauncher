@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Ipc } from '@shared/channels'
-import type { BranchInfo, CommitInfo, Settings, TrainerRuntimeInfo, TrainerVersion } from '@shared/types'
+import type { BranchInfo, CommitInfo, TrainerRuntimeInfo, TrainerVersion, TrainingHost } from '@shared/types'
 import { call } from '../lib/api'
 import { dateTime } from '../lib/format'
 import { openWindow } from '../lib/windows'
@@ -36,6 +36,9 @@ export function TrainingPage(): React.JSX.Element {
   const env = useApp((state) => state.env)
   const [mirror, setMirror] = useState<{ ready: boolean; path: string } | null>(null)
   const [versions, setVersions] = useState<TrainerVersion[]>([])
+  const [hosts, setHosts] = useState<TrainingHost[]>([])
+  const [hostOpen, setHostOpen] = useState(false)
+  const [hostForm, setHostForm] = useState({ name: '', host: '', user: '', port: '22', identityFile: '', trainerRoot: '~/CloverMossTrainer' })
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [branch, setBranch] = useState('main')
@@ -44,12 +47,14 @@ export function TrainingPage(): React.JSX.Element {
   const [doctor, setDoctor] = useState<{ id: string; ok: boolean; output: string } | null>(null)
 
   const refresh = useCallback(async () => {
-    const [mirrorInfo, list] = await Promise.all([
+    const [mirrorInfo, list, hostList] = await Promise.all([
       call<{ ready: boolean; path: string }>(Ipc.trainerMirror),
       call<TrainerVersion[]>(Ipc.trainerVersions),
+      call<TrainingHost[]>(Ipc.trainerHosts),
     ])
     setMirror(mirrorInfo)
     setVersions(list)
+    setHosts(hostList)
     return mirrorInfo
   }, [])
 
@@ -133,6 +138,35 @@ export function TrainingPage(): React.JSX.Element {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     } finally {
       setBusy(null)
+    }
+  }
+
+  async function saveHost(): Promise<void> {
+    try {
+      await call(Ipc.trainerHostSave, {
+        name: hostForm.name,
+        host: hostForm.host,
+        user: hostForm.user,
+        port: Number(hostForm.port) || 22,
+        identityFile: hostForm.identityFile,
+        trainerRoot: hostForm.trainerRoot,
+      })
+      await refresh()
+      setHostOpen(false)
+      setHostForm({ name: '', host: '', user: '', port: '22', identityFile: '', trainerRoot: '~/CloverMossTrainer' })
+      toast.push('SSH 主机已保存（执行下一阶段接入）', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }
+
+  async function removeHost(host: TrainingHost): Promise<void> {
+    if (host.kind === 'local') return
+    try {
+      await call(Ipc.trainerHostRemove, { id: host.id })
+      await refresh()
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
     }
   }
 
@@ -225,7 +259,7 @@ export function TrainingPage(): React.JSX.Element {
                 disabled={commits.length === 0}
                 className="h-7 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
               >
-                {commits.length === 0 ? <option value="">先拉取仓库</option> : null}
+                {commits.length === 0 ? <option value="">{mirror?.ready ? '正在读取提交…' : '先拉取仓库'}</option> : null}
                 {commits.map((item) => (
                   <option key={item.sha} value={item.sha}>
                     {item.short} · {item.subject.slice(0, 48)}
@@ -257,26 +291,39 @@ export function TrainingPage(): React.JSX.Element {
               <Server className="size-3.5" />
               训练主机
             </div>
-            <Pill tone="neutral">Local · 1</Pill>
-          </div>
-          <div className="mt-3 flex items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-2">
-            <span className="size-1.5 rounded-full bg-amber-400" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10.5px]">本机</div>
-              <div className="text-[9px] text-[var(--color-text-tertiary)]">
-                {env?.gpu.name ?? '正在检测'} · {localCuda ? 'CUDA 可用于训练' : '不支持 MPS 训练'}
-              </div>
+            <div className="flex items-center gap-1">
+              <Pill tone="neutral">{hosts.length} host</Pill>
+              <Button tone="ghost" onClick={() => setHostOpen(true)}>添加 SSH</Button>
             </div>
           </div>
-          <div className="mt-2 flex items-center justify-between rounded-[5px] border border-dashed border-[var(--color-border-subtle)] px-2.5 py-2 opacity-60">
-            <div>
-              <div className="text-[10.5px]">SSH 训练主机</div>
-              <div className="text-[9px] text-[var(--color-text-tertiary)]">多 host 配置 · 下一阶段</div>
-            </div>
-            <Pill tone="neutral">Soon</Pill>
+          <div className="mt-3 space-y-1.5">
+            {hosts.map((host) => {
+              const local = host.kind === 'local'
+              return (
+                <div key={host.id} className="flex items-center gap-2 rounded-[5px] border border-[var(--color-border-subtle)] px-2.5 py-2">
+                  <span className={cn('size-1.5 rounded-full', local ? (localCuda ? 'bg-accent-400' : 'bg-amber-400') : 'bg-neutral-500')} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10.5px]">{host.name}</span>
+                      {local ? <Pill tone="neutral">Local</Pill> : <Pill tone="neutral">SSH</Pill>}
+                    </div>
+                    <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
+                      {local
+                        ? `${env?.gpu.name ?? '正在检测'} · ${localCuda ? 'CUDA 可用于训练' : '不支持 MPS 训练'}`
+                        : `${host.user}@${host.host}:${host.port ?? 22} · ${host.trainerRoot}`}
+                    </div>
+                  </div>
+                  {!local ? (
+                    <button type="button" onClick={() => void removeHost(host)} className="text-[var(--color-text-tertiary)] hover:text-red-300">
+                      <Trash2 className="size-3" />
+                    </button>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
           <p className="mt-2 text-[9px] leading-4 text-[var(--color-text-tertiary)]">
-            远端路径、密钥和 host 数据模型已预留；远程执行在下一阶段接入。
+            SSH 使用系统 ssh/密钥；远端 trainerRoot、版本与环境在下一阶段执行。
           </p>
         </Card>
       </div>
@@ -356,6 +403,49 @@ export function TrainingPage(): React.JSX.Element {
           训练窗口默认使用最新版本；环境体检会运行 <code className="rounded bg-white/[0.05] px-1">kohakumoss-doctor</code>。
         </p>
       ) : null}
+
+      <Modal
+        open={hostOpen}
+        onClose={() => setHostOpen(false)}
+        title="添加 SSH 训练主机"
+        description="只保存连接信息，不存密码；使用系统 ssh 和密钥/agent。"
+        width="max-w-xl"
+        footer={
+          <div className="flex gap-1.5">
+            <Button tone="ghost" onClick={() => setHostOpen(false)}>取消</Button>
+            <Button tone="primary" onClick={() => void saveHost()} disabled={!hostForm.host || !hostForm.user || !hostForm.trainerRoot}>
+              保存主机
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-2 gap-2.5">
+          <label className="col-span-2 space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">名称</span>
+            <input value={hostForm.name} onChange={(e) => setHostForm({ ...hostForm, name: e.target.value })} placeholder="4090 训练机" className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none" />
+          </label>
+          <label className="space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">Host / IP</span>
+            <input value={hostForm.host} onChange={(e) => setHostForm({ ...hostForm, host: e.target.value })} placeholder="192.168.1.20" className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none" />
+          </label>
+          <label className="space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">用户</span>
+            <input value={hostForm.user} onChange={(e) => setHostForm({ ...hostForm, user: e.target.value })} placeholder="ubuntu" className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none" />
+          </label>
+          <label className="space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">端口</span>
+            <input value={hostForm.port} onChange={(e) => setHostForm({ ...hostForm, port: e.target.value.replace(/[^0-9]/g, '') })} className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none" />
+          </label>
+          <label className="space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">Identity file（可空，走 ssh config）</span>
+            <input value={hostForm.identityFile} onChange={(e) => setHostForm({ ...hostForm, identityFile: e.target.value })} placeholder="~/.ssh/id_ed25519" className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 font-mono text-[10px] outline-none" />
+          </label>
+          <label className="col-span-2 space-y-1 text-[10px]">
+            <span className="text-[var(--color-text-tertiary)]">远端 trainerRoot</span>
+            <input value={hostForm.trainerRoot} onChange={(e) => setHostForm({ ...hostForm, trainerRoot: e.target.value })} className="h-7 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 font-mono text-[10px] outline-none" />
+          </label>
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(doctor)}
