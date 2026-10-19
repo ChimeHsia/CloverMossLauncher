@@ -64,6 +64,7 @@ export async function ensureTrainerMirror(settings: Settings): Promise<void> {
     if (!(await mirrorHealthy(mirror, run))) {
       await rm(mirror, { recursive: true, force: true })
       await cloneMirror(settings)
+      if (!(await mirrorHealthy(mirror, run))) throw new Error('克隆后的训练器仓库没有可用分支')
       return
     }
     progress('正在拉取训练器分支与标签')
@@ -85,7 +86,7 @@ export async function listTrainerBranches(settings: Settings): Promise<BranchInf
   await ensureTrainerMirror(settings)
   const mirror = trainerMirror(settings)
   const result = await run('git', ['-C', mirror, 'for-each-ref', '--format=%(refname:short)|%(objectname)', 'refs/heads'], { timeoutMs: 10_000 })
-  if (result.code !== 0) return []
+  if (result.code !== 0) throw new Error(`读取训练器分支失败：${firstLine(result.stderr) || firstLine(result.stdout)}`)
   const tag = await run('git', ['-C', mirror, 'rev-parse', '--verify', 'refs/tags/v0.1.0^{commit}'], { timeoutMs: 5000 })
   const stable = tag.code === 0 ? firstLine(tag.stdout) : ''
   return result.stdout
@@ -106,7 +107,7 @@ export async function listTrainerCommits(settings: Settings, branch: string, lim
     ['-C', trainerMirror(settings), 'log', `-n${limit}`, '--format=%H%x1f%h%x1f%ct%x1f%s%x1f%an', safe],
     { timeoutMs: 15_000 },
   )
-  if (result.code !== 0) return []
+  if (result.code !== 0) throw new Error(`读取训练器提交失败：${firstLine(result.stderr) || firstLine(result.stdout)}`)
   return result.stdout
     .split('\n')
     .filter(Boolean)

@@ -53,6 +53,7 @@ export const schemas = {
     .partial(),
 
   gitCommits: z.object({
+    source: urlLike.optional(),
     branch: z.string().min(1).max(120),
     limit: z.number().int().min(1).max(200).default(60),
   }),
@@ -69,6 +70,7 @@ export const schemas = {
   instanceRemoteHost: z.object({ hostId: z.string().min(1).max(80) }),
 
   instanceRemoteCommits: z.object({
+    source: urlLike.optional(),
     hostId: z.string().min(1).max(80),
     branch: z.string().min(1).max(120),
     limit: z.number().int().min(1).max(200).default(80),

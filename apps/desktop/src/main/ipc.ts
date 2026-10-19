@@ -266,7 +266,7 @@ export function registerIpc(): void {
     return listBranches()
   })
 
-  handle(Ipc.gitCommits, schemas.gitCommits, ({ branch, limit }) => listCommits(branch, limit))
+  handle(Ipc.gitCommits, schemas.gitCommits, ({ branch, limit, source }) => listCommits(branch, limit, source))
 
   handle(Ipc.instancesList, null, () => listInstances())
 
@@ -278,10 +278,10 @@ export function registerIpc(): void {
     return remoteMossBranches(roots)
   })
 
-  handle(Ipc.instanceRemoteCommits, schemas.instanceRemoteCommits, async ({ hostId, branch, limit }) => {
+  handle(Ipc.instanceRemoteCommits, schemas.instanceRemoteCommits, async ({ hostId, branch, limit, source }) => {
     const roots = await remoteRoots(getSettings(), hostId)
-    await ensureRemoteMirror(roots)
-    return remoteMossCommits(roots, branch, limit)
+    await ensureRemoteMirror(roots, source)
+    return remoteMossCommits(roots, branch, limit, source)
   })
 
   handle(Ipc.instanceDelete, schemas.instanceDelete, ({ id, keepOutputs }) =>

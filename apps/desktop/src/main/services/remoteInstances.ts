@@ -8,7 +8,7 @@ import type {
 } from '@shared/types'
 import { writeRemoteRuntime } from './runtimes'
 import { getTrainingHost } from './trainingHosts'
-import { DEFAULT_SOURCE } from './git'
+import { DEFAULT_SOURCE, mirrorDirectoryName } from '../lib/mirror-source'
 import { posixQuote, remoteAbsolute, remotePathExists, sshExec, sshStream } from './ssh'
 
 export interface RemoteInstanceRoots {
@@ -38,21 +38,29 @@ export function remoteInstancePath(roots: RemoteInstanceRoots, id: string): stri
   return `${roots.instanceRoot.replace(/\/$/, '')}/${id}`
 }
 
-export function remoteMirrorPath(roots: RemoteInstanceRoots): string {
-  return `${roots.instanceRoot.replace(/\/$/, '')}/git/moss-image.git`
+export function remoteMirrorPath(roots: RemoteInstanceRoots, source = DEFAULT_SOURCE): string {
+  return `${roots.instanceRoot.replace(/\/$/, '')}/git/${mirrorDirectoryName(source)}`
 }
 
 export async function ensureRemoteMirror(
   roots: RemoteInstanceRoots,
   source = DEFAULT_SOURCE,
 ): Promise<void> {
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
   const command = [
     `mkdir -p ${posixQuote(`${roots.instanceRoot.replace(/\/$/, '')}/git`)}`,
-    `if [ ! -f ${posixQuote(`${mirror}/HEAD`)} ]; then`,
-    `  git clone --bare --progress ${posixQuote(source)} ${posixQuote(mirror)}`,
+    'mirror_healthy() {',
+    `  refs=$(git -C ${posixQuote(mirror)} for-each-ref --format='%(refname)' refs/heads) || return 1`,
+    '  for ref in $refs; do',
+    `    git -C ${posixQuote(mirror)} rev-parse --verify "$ref^{commit}" >/dev/null 2>&1 && return 0`,
+    '  done',
+    '  return 1',
+    '}',
+    'if mirror_healthy; then',
+    `  git -C ${posixQuote(mirror)} fetch --prune origin '+refs/heads/*:refs/heads/*' || echo '拉取最新分支失败，使用本地缓存' >&2`,
     'else',
-    `  git -C ${posixQuote(mirror)} fetch --prune origin '+refs/heads/*:refs/heads/*'`,
+    `  rm -rf ${posixQuote(mirror)} && git clone --bare --progress ${posixQuote(source)} ${posixQuote(mirror)} || exit 1`,
+    '  mirror_healthy || { echo "克隆后的仓库没有可用分支" >&2; exit 1; }',
     'fi',
   ].join('\n')
   const result = await sshExec(roots.host, command, 300_000)
@@ -61,12 +69,12 @@ export async function ensureRemoteMirror(
   }
 }
 
-export async function remoteBranches(roots: RemoteInstanceRoots): Promise<BranchInfo[]> {
-  const mirror = remoteMirrorPath(roots)
+export async function remoteBranches(roots: RemoteInstanceRoots, source = DEFAULT_SOURCE): Promise<BranchInfo[]> {
+  const mirror = remoteMirrorPath(roots, source)
   const result = await sshExec(
     roots.host,
     [
-      `git -C ${posixQuote(mirror)} for-each-ref --format='%(refname:short)|%(objectname)' refs/heads`,
+      `git -C ${posixQuote(mirror)} for-each-ref --format='%(refname:short)|%(objectname)' refs/heads || exit $?`,
       `git -C ${posixQuote(mirror)} rev-parse --verify 'refs/heads/main' 2>/dev/null || true`,
     ].join('\n'),
     30_000,
@@ -92,8 +100,9 @@ export async function remoteCommits(
   roots: RemoteInstanceRoots,
   branch: string,
   limit = 80,
+  source = DEFAULT_SOURCE,
 ): Promise<CommitInfo[]> {
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
   const safe = branch.replace(/[^A-Za-z0-9._/-]/g, '')
   const result = await sshExec(
     roots.host,
@@ -120,15 +129,16 @@ export async function createRemoteWorktree(
   roots: RemoteInstanceRoots,
   id: string,
   commit: string,
+  source = DEFAULT_SOURCE,
 ): Promise<string> {
   const target = remoteInstancePath(roots, id)
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
   const result = await sshExec(
     roots.host,
     [
       `mkdir -p ${posixQuote(roots.instanceRoot)}`,
       `if [ -e ${posixQuote(target)} ]; then echo "TARGET_EXISTS"; exit 4; fi`,
-      `git -C ${posixQuote(mirror)} worktree add --detach ${posixQuote(target)} ${posixQuote(commit)}`,
+      `git -C ${posixQuote(mirror)} worktree add --detach ${posixQuote(target)} ${posixQuote(commit)} || exit $?`,
       `printf '%s\\n' ${posixQuote(target)}`,
     ].join('\n'),
     180_000,

@@ -88,7 +88,7 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
   const localDir = paths.instance(record.id)
   const dir = placement.kind === 'local' ? localDir : placement.root
   const runtime = await readRuntime(record.runtimeId)
-  const mainSha = await branchStableSha()
+  const mainSha = await branchStableSha(record.source)
   const exists =
     placement.kind === 'local' ? existsSync(localDir) && existsSync(join(localDir, 'pyproject.toml')) : true
   const dirty = placement.kind === 'local' && exists ? await isDirty(localDir) : false
@@ -152,9 +152,10 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
   if (input.hostId) return createRemoteInstance(input, settings)
   const source = input.source ?? DEFAULT_SOURCE
   await ensureMirror(settings, source)
-  if (!(await commitExists(input.commit))) throw new Error('该提交不在本地镜像中，请先刷新分支')
+  if (!(await commitExists(input.commit, source))) throw new Error('该提交不在本地镜像中，请先刷新分支')
 
-  const commits = await listCommits(input.branch, 100)
+  // 提交已验证存在；日志仅用于元数据，读取失败不阻断创建。
+  const commits = await listCommits(input.branch, 100, source).catch(() => [])
   const commit = commits.find((item) => item.sha === input.commit || item.sha.startsWith(input.commit))
   const sha = commit?.sha ?? input.commit
   const short = sha.slice(0, 7)
@@ -169,7 +170,7 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
 
   const destination = paths.instance(id)
   await mkdir(paths.instances(), { recursive: true })
-  await createWorktree(sha, destination)
+  await createWorktree(sha, destination, source)
 
   const runtime = await ensureRuntime({
     instanceId: id,
@@ -189,7 +190,7 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
     commitDate: commit?.date ?? new Date().toISOString(),
     subject: commit?.subject ?? '',
     author: commit?.author ?? '',
-    channel: channelFor(input.branch, sha, await branchStableSha()),
+    channel: channelFor(input.branch, sha, await branchStableSha(source)),
     runtimeId: runtime.id,
     runtimeMode: input.runtimeMode,
     placement: { kind: 'local' },
@@ -206,8 +207,9 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
 async function createRemoteInstance(input: CreateInstanceInput, settings: Settings): Promise<InstanceInfo> {
   if (!input.hostId) throw new Error('缺少远端 host')
   const roots = await remoteRoots(settings, input.hostId)
-  await ensureRemoteMirror(roots, input.source ?? DEFAULT_SOURCE)
-  const commits = await remoteCommits(roots, input.branch, 200)
+  const source = input.source ?? DEFAULT_SOURCE
+  await ensureRemoteMirror(roots, source)
+  const commits = await remoteCommits(roots, input.branch, 200, source).catch(() => [])
   const commit = commits.find((item) => item.sha === input.commit || item.sha.startsWith(input.commit))
   const sha = commit?.sha ?? input.commit
   const short = sha.slice(0, 7)
@@ -219,20 +221,20 @@ async function createRemoteInstance(input: CreateInstanceInput, settings: Settin
     id = `${slugify(name)}-${suffix}`
   }
   const remotePath = remoteInstancePath(roots, id)
-  await createRemoteWorktree(roots, id, sha)
+  await createRemoteWorktree(roots, id, sha, source)
   const runtime = await createRemoteRuntime(roots, id, sha)
   const record: InstanceRecord = {
     schemaVersion: 1,
     id,
     name,
-    source: input.source ?? DEFAULT_SOURCE,
+    source,
     branch: input.branch,
     commit: sha,
     shortCommit: short,
     commitDate: commit?.date ?? new Date().toISOString(),
     subject: commit?.subject ?? '',
     author: commit?.author ?? '',
-    channel: channelFor(input.branch, sha, await branchStableSha()),
+    channel: channelFor(input.branch, sha, await branchStableSha(source)),
     runtimeId: runtime.id,
     runtimeMode: 'isolated',
     placement: {
@@ -257,7 +259,7 @@ export async function deleteInstance(id: string, keepOutputs: boolean, settings?
     if (!settings) throw new Error('缺少设置，无法清理远端实例')
     const placement = record.placement
     const roots = await remoteRoots(settings, placement.hostId)
-    const mirror = remoteMirrorPath(roots)
+    const mirror = remoteMirrorPath(roots, record.source)
     const backup = `${roots.instanceRoot.replace(/\/$/, '')}/outputs-kept/${id}`
     const command = [
       keepOutputs
@@ -280,7 +282,7 @@ export async function deleteInstance(id: string, keepOutputs: boolean, settings?
     await mkdir(backup, { recursive: true })
     await cp(join(dir, 'outputs'), backup, { recursive: true, force: true })
   }
-  await removeWorktree(dir)
+  await removeWorktree(dir, record?.source)
   if (record) {
     const runtime = await readRuntime(record.runtimeId)
     if (runtime) {
@@ -307,14 +309,14 @@ export async function updateInstance(
   if (record.placement?.kind === 'ssh') {
     if (!settings) throw new Error('缺少设置，无法切换远端实例版本')
     const roots = await remoteRoots(settings, record.placement.hostId)
-    const commits = await remoteCommits(roots, record.branch, 200)
+    const commits = await remoteCommits(roots, record.branch, 200, record.source).catch(() => [])
     info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
     const sha = info?.sha ?? commit
     await remoteCheckout(roots, id, sha)
     record.commit = sha
   } else {
     await checkout(paths.instance(id), commit)
-    const commits = await listCommits(record.branch, 100)
+    const commits = await listCommits(record.branch, 100, record.source).catch(() => [])
     info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
     record.commit = info?.sha ?? commit
   }
@@ -322,7 +324,7 @@ export async function updateInstance(
   record.commitDate = info?.date ?? new Date().toISOString()
   record.subject = info?.subject ?? ''
   record.author = info?.author ?? ''
-  record.channel = channelFor(record.branch, record.commit, await branchStableSha())
+  record.channel = channelFor(record.branch, record.commit, await branchStableSha(record.source))
   await writeRecord(record)
   emit(Events.instancesChanged, { id })
   return toInfo(record)

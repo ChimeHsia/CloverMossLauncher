@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { mirrorDirectoryName } from './mirror-source'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -15,7 +16,7 @@ export const paths = {
   settings: () => join(root(), 'settings.json'),
   announcements: () => join(root(), 'announcements.json'),
   git: () => join(root(), 'git'),
-  mirror: () => join(root(), 'git', 'moss-image.git'),
+  mirror: (source?: string) => join(root(), 'git', mirrorDirectoryName(source)),
   instances: () => join(root(), 'instances'),
   instance: (id: string) => join(root(), 'instances', id),
   runtimes: () => join(root(), 'runtimes'),

@@ -56,10 +56,11 @@ export function InstanceDetailPage(): React.JSX.Element {
       placement.kind === 'ssh'
         ? call<CommitInfo[]>(Ipc.instanceRemoteCommits, {
             hostId: placement.hostId,
+            source: instance.source,
             branch: instance.branch,
             limit: 80,
           })
-        : call<CommitInfo[]>(Ipc.gitCommits, { branch: instance.branch, limit: 80 })
+        : call<CommitInfo[]>(Ipc.gitCommits, { branch: instance.branch, limit: 80, source: instance.source })
     void request
       .then((rows) => {
         setCommits(rows)

@@ -65,6 +65,8 @@ export function TrainingPage(): React.JSX.Element {
   }, [])
 
   const loadCommits = useCallback(async (name: string) => {
+    setCommits([])
+    setCommit('')
     const rows = await call<CommitInfo[]>(Ipc.trainerCommits, { branch: name, limit: 80 })
     setCommits(rows)
     setCommit((current) => current || rows[0]?.sha || '')
@@ -97,11 +99,11 @@ export function TrainingPage(): React.JSX.Element {
         const defaultBranch = next.find((item) => item.isDefault)?.name ?? next[0]?.name ?? 'main'
         setBranch(defaultBranch)
         await loadCommits(defaultBranch)
-      } catch {
-        // keep page usable without a mirror
+      } catch (error) {
+        toast.push(error instanceof Error ? error.message : String(error), 'error')
       }
     })()
-  }, [mirror?.ready, branches.length, loadCommits])
+  }, [mirror?.ready, branches.length, loadCommits, toast])
 
   async function deployOrUpdate(): Promise<void> {
     setBusy('mirror')
@@ -307,7 +309,9 @@ export function TrainingPage(): React.JSX.Element {
                 value={branch}
                 onChange={(event) => {
                   setBranch(event.target.value)
-                  void loadCommits(event.target.value)
+                  void loadCommits(event.target.value).catch((error) => {
+                    toast.push(error instanceof Error ? error.message : String(error), 'error')
+                  })
                 }}
               >
                 {(branches.length ? branches : [{ name: 'main', sha: '', isDefault: true, isStable: false }]).map((item) => (

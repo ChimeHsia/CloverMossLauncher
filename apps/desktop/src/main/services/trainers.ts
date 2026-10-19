@@ -126,7 +126,8 @@ export interface CreateTrainerVersionInput {
 export async function createTrainerVersion(settings: Settings, input: CreateTrainerVersionInput): Promise<TrainerVersion> {
   await ensureTrainerMirror(settings)
   if (!(await trainerCommitExists(settings, input.commit))) throw new Error('训练器提交不存在，请先拉取仓库')
-  const commits = await listTrainerCommits(settings, input.branch, 200)
+  // 提交已验证存在；日志仅用于元数据，读取失败不阻断创建。
+  const commits = await listTrainerCommits(settings, input.branch, 200).catch(() => [])
   const commit = commits.find((item) => item.sha === input.commit)
   const id = `kohaku-${input.commit.slice(0, 7)}`
   const existing = await readVersion(settings, id)
