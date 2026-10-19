@@ -66,12 +66,13 @@ export function TerminalPage(): React.JSX.Element {
       convertEol: true,
       cursorBlink: true,
       cursorStyle: 'bar',
+      allowTransparency: true,
       fontFamily: '"Cascadia Code", "SF Mono", ui-monospace, Menlo, monospace',
       fontSize: 11.5,
       lineHeight: 1.45,
       scrollback: 5000,
       theme: {
-        background: '#141619',
+        background: 'rgba(16,18,22,0.52)',
         foreground: '#c7d0de',
         cursor: '#8ab6ff',
         selectionBackground: 'rgba(138,182,255,0.24)',
@@ -167,7 +168,7 @@ export function TerminalPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-full min-h-0 bg-[#141619]/80">
+    <div className="flex h-full min-h-0 bg-transparent">
       <aside className="glass-thin flex w-[260px] shrink-0 flex-col border-r border-[var(--color-border-subtle)]">
         <header className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-3 py-2.5">
           <div className="flex items-center gap-1.5 text-[11px] font-medium">
@@ -195,7 +196,7 @@ export function TerminalPage(): React.JSX.Element {
                 className={cn(
                   'mb-1 flex w-full items-start gap-2 rounded-[6px] px-2.5 py-2 text-left transition',
                   job.id === active?.id
-                    ? 'bg-white/[0.07] shadow-[inset_2px_0_0_0_var(--accent)]'
+                    ? 'bg-white/[0.07]'
                     : 'hover:bg-white/[0.04]',
                 )}
               >

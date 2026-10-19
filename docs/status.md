@@ -50,14 +50,14 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 模块 | 实现 |
 | --- | --- |
 | 窗口 | `windows.ts`：启动器 / 创作 / 终端；标题栏居中 `CloverMoss` + `dev/release` + 版本；画廊进启动器侧栏 |
-| 视觉 | 中性深灰亚克力、冷调浅蓝白文字；无绿色、无侧栏蓝色提示条；4–6 px 小圆角 |
+| 视觉 | 中性深灰亚克力、冷调浅蓝白文字；侧栏/标题栏恢复薄透明度；无绿色/蓝色提示条；4–6 px 小圆角 |
 | 控件 | Fluent 2 紧凑按钮/分段/输入；按钮宽度随文字；去 Logo / 去侧栏品牌块 |
 | 首页 | 欢迎语 + 底部启动条 + 运行栈；启动条固定宽度居中；16:9 背景图（设置可换） |
 | 启动条 | Case、后端（官方 Gradio / Clover 占位）、实例、设备、档位、高级、启动 |
 | 运行栈 | 新启动条置顶；运行中 Case 可折叠/按名称/启动时间排序；同设备默认 1 个任务，其余排队 |
 | 设备 | 自动枚举 Apple MPS / NVIDIA CUDA / CPU；暂不做维护页 |
 | Case | `cases.json` 保存实例+后端+设备+档位+端口/参数；启动器下拉选择 |
-| 背景 | `assets/home-background.webp` 16:9 占位；设置可 pick 任意图并预览 |
+| 背景 | `assets/home-background.webp` 16:9 占位；设置可 pick 任意图并预览；全幅铺到所有页面与终端 |
 | 官方 Gradio | `gradio_app.py` + 端口/额外参数；URL readiness；打开界面/终端/停止 |
 | 终端 | 独立窗口；左 Case 列表 + 右 xterm.js；stdout/stderr/stdin；停止/重启 |
 | OOBE | 启动器内全屏遮罩；实例/运行时/模型三行；可关闭；每次启动检查 |

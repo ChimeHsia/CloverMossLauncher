@@ -23,6 +23,18 @@ import { TerminalPage } from './pages/Terminal'
 import { useApp } from './store'
 import { cloverUrl } from './lib/clover'
 
+function useAppBackground(): React.CSSProperties {
+  const settings = useApp((state) => state.settings)
+  const custom = Boolean(settings?.homeBackground)
+  const source = custom ? cloverUrl(settings!.homeBackground!) : defaultHomeBackground
+  return {
+    backgroundImage: `linear-gradient(rgba(18,20,24,${custom ? 0.78 : 0.55}), rgba(18,20,24,${custom ? 0.90 : 0.70})), url("${source}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundColor: '#191b1f',
+  }
+}
+
 function LauncherShell(): React.JSX.Element {
   const location = useLocation()
   const toast = useToast()
@@ -33,9 +45,7 @@ function LauncherShell(): React.JSX.Element {
   const setNotificationsOpen = useApp((state) => state.setNotificationsOpen)
   const onboarding = useApp((state) => state.onboarding)
   const [oobeDismissed, setOobeDismissed] = useState(false)
-  const isHome = location.pathname === '/'
-  const customBackground = Boolean(settings?.homeBackground)
-  const homeBackground = customBackground ? cloverUrl(settings!.homeBackground!) : defaultHomeBackground
+  const backgroundStyle = useAppBackground()
 
   useEffect(() => {
     if (location.pathname !== '/') setNotificationsOpen(false)
@@ -65,16 +75,7 @@ function LauncherShell(): React.JSX.Element {
         <Sidebar />
         <main
           className="content-surface min-w-0 flex-1 overflow-y-auto"
-          style={
-            isHome
-              ? {
-                  backgroundImage: `linear-gradient(rgba(18,20,24,${customBackground ? 0.78 : 0.55}), rgba(18,20,24,${customBackground ? 0.90 : 0.70})), url("${homeBackground}")`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundColor: '#191b1f',
-                }
-              : undefined
-          }
+          style={backgroundStyle}
         >
           <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1100px] flex-col px-6 py-5">
             <ErrorBoundary>
@@ -105,12 +106,13 @@ function LauncherShell(): React.JSX.Element {
 }
 
 function CreatorShell(): React.JSX.Element {
+  const backgroundStyle = useAppBackground()
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
       <AppTitlebar kind="creator" />
       <div className="flex min-h-0 flex-1">
         <CreatorSidebar />
-        <main className="content-surface min-w-0 flex-1 overflow-y-auto">
+        <main className="content-surface min-w-0 flex-1 overflow-y-auto" style={backgroundStyle}>
           <div className="mx-auto w-full max-w-[1180px] px-6 py-5">
             <ErrorBoundary>
               <Routes>
@@ -127,10 +129,11 @@ function CreatorShell(): React.JSX.Element {
 }
 
 function TerminalShell(): React.JSX.Element {
+  const backgroundStyle = useAppBackground()
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
       <AppTitlebar kind="terminal" />
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1" style={backgroundStyle}>
         <ErrorBoundary>
           <TerminalPage />
         </ErrorBoundary>
