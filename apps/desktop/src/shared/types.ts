@@ -556,6 +556,8 @@ export interface GalleryDetail extends GalleryItem {
   parameters?: string
 }
 
+import type { BackendInfo } from './backend'
+
 export interface AppInfo {
   name: string
   version: string
@@ -567,6 +569,7 @@ export interface AppInfo {
   dataPath: string
   modelsPath: string
   acrylic: boolean
+  backend?: BackendInfo
 }
 
 export interface IpcError {
@@ -575,3 +578,44 @@ export interface IpcError {
 }
 
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: IpcError }
+
+export type ProjectLayerKind = 'object' | 'character' | 'text'
+
+export interface ProjectLayer {
+  id: string
+  kind: ProjectLayerKind
+  caption: string
+  text?: string
+  bbox: [number, number, number, number]
+  visible: boolean
+  locked: boolean
+  opacity: number
+}
+
+export interface ProjectDocument {
+  schemaVersion: 1
+  id: string
+  name: string
+  width: number
+  height: number
+  summary: { caption: string; meta: string[]; canvas: 'single' | 'multi_panel' | 'collage' }
+  layers: ProjectLayer[]
+  prompt: string
+  negative: string
+  seed: number
+  steps: number
+  cfg: number
+  instanceId?: string
+  backgroundPath?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectSummary {
+  id: string
+  name: string
+  width: number
+  height: number
+  layerCount: number
+  updatedAt: string
+}

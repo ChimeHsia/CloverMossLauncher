@@ -3,8 +3,8 @@
 - 更新：2026-10-19
 - 应用版本：`0.1.0`（开发版）
 - 基线：[status.md](status.md)
-- 当前判断：训练器本机基座代码已完成（真实 CUDA 未验收）；下一步不是继续堆训练 UI，而是打通
-  **SSH 远端执行** 与 **真实 CUDA 验收**，同时把 Clover 常驻后端/Project 拉回主线。
+- 当前判断：训练器/SSH 远端代码基座、Clover HTTP/WS 基座、Project JSON/基础图层已完成；
+  下一步是 **真实 host/CUDA 验收**、**Clover 真实生成/Project UI 收尾**，再进 WebUI/打包。
 
 > 这里只列**尚未完成**的工作和验收条件。已完成能力见 [status.md](status.md)。
 > 不使用虚构日期；按 P0/P1/P2 和依赖关系排。
@@ -18,13 +18,15 @@
 - Supervisor + runner + 终端；推理/训练共用 Job 表；
 - Trainer 仓库/版本/环境/训练窗口/本机训练 Job；
 - SSH host 探测、远端 mirror/worktree/venv/train/export 代码路径（fake ssh）；
-- 队列落盘、实例 pin 切换、适配器绑定、设备启用/禁用。
+- 队列落盘、实例 pin 切换、适配器绑定、设备启用/禁用；
+- 独立 HTTP/WS Clover 后端（health/WS/RPC/simulate）；
+- Project JSON+assets、自动保存、基础图层。
 
 未具备：
 
 - 真实 SSH host / CUDA 验收；
 - 真实训练导出/采样；
-- Clover 常驻后端、Project/图层；
+- Clover 真实生成验收、Project 完整 UI；
 - WebUI、更新安装、打包。
 
 ## 1. P0 · SSH 远端训练
@@ -73,7 +75,10 @@
 - 导出产物可被下游读取；
 - 失败（OOM/依赖/数据格式）有诊断卡片与原始日志。
 
-## 3. P1 · Clover 常驻后端
+## 3. P1 · Clover 常驻后端（代码基座完成）
+
+**当前进度**：utilityProcess HTTP/WS + token + RPC 已接；Creator 已通过 `/api/jobs`
+提交 Supervisor；health/WS/simulate Job 验证。真实权重生成未验收。
 
 **目标**：创作窗口不再只是表单，能真正生成并进入 Job/画廊。
 
@@ -92,7 +97,10 @@
 - 终端可看服务与生成日志；
 - 服务异常退出有诊断和重启策略。
 
-## 4. P1 · Project 持久化与图层
+## 4. P1 · Project 持久化与图层（基座完成）
+
+**当前进度**：`projects/<id>/project.json` + assets、自动保存、visible/lock/opacity
+已接；Project 保存/读取场景通过。完整 UI 回放/资产重链未验收。
 
 **目标**：Project 与 Case 解耦；创作可保存/重开。
 

@@ -40,6 +40,8 @@ import {
   startTrainerRun,
 } from './services/trainers'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
+import { getBackendInfo } from './services/backend'
+import { deleteProject, getProject, listProjects, saveProject } from './services/projects'
 import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
 import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost } from './services/trainingHosts'
 import {
@@ -92,7 +94,10 @@ export function registerIpc(): void {
     dataPath: paths.root(),
     modelsPath: paths.models(getSettings().modelsRoot),
     acrylic: process.platform === 'darwin' || process.platform === 'win32',
+    backend: getBackendInfo(),
   }))
+
+  handle(Ipc.backendInfo, null, () => getBackendInfo())
 
   handle(Ipc.windowOpen, schemas.windowOpen, ({ kind, route }) => {
     openWindow(kind, route)
@@ -107,6 +112,15 @@ export function registerIpc(): void {
 
   handle(Ipc.casesRemove, schemas.caseRemove, ({ id }) => {
     removeCase(id)
+    return true
+  })
+
+  handle(Ipc.launchQueueList, null, () => listLaunchRows())
+
+  handle(Ipc.launchQueueUpsert, schemas.launchRow, (row) => upsertLaunchRow(row))
+
+  handle(Ipc.launchQueueRemove, schemas.launchRowId, ({ id }) => {
+    removeLaunchRow(id)
     return true
   })
 

@@ -107,7 +107,7 @@ export function HomePage(): React.JSX.Element {
   }, [instanceId, instances])
 
   useEffect(() => {
-    if (!deviceId && devices[0]) setDeviceId(devices[0].id)
+    if (!devices.some((item) => item.id === deviceId)) setDeviceId(devices[0]?.id ?? '')
   }, [deviceId, devices])
 
   const selectedCase = cases.find((item) => item.id === caseId)

@@ -1,5 +1,6 @@
 export const Ipc = {
   appInfo: 'app:info',
+  backendInfo: 'backend:info',
   windowOpen: 'window:open',
   devicesList: 'devices:list',
   casesList: 'cases:list',
@@ -8,6 +9,10 @@ export const Ipc = {
   launchQueueList: 'launch-queue:list',
   launchQueueUpsert: 'launch-queue:upsert',
   launchQueueRemove: 'launch-queue:remove',
+  projectsList: 'projects:list',
+  projectGet: 'projects:get',
+  projectSave: 'projects:save',
+  projectDelete: 'projects:delete',
   onboardingStatus: 'onboarding:status',
   trainerMirror: 'trainer:mirror',
   trainerBranches: 'trainer:branches',

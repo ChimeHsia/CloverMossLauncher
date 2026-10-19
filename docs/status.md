@@ -54,8 +54,9 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | runner | ✅ | NDJSON + `--simulate`；真实权重未验收 |
 | 解析/诊断 | ✅ | tqdm/ANSI/下载条/规则/去重/toast 预算 |
 | 创作台 | ✅ | Studio、画布、layout 编译、插入 Prompt |
-| 创作生成 | ⬜ | 等 Clover 常驻后端；按钮只提示 |
-| Project/图层 | ⬜ | 草稿只在内存；没有 Project 持久化 |
+| Clover 后端 | 🟡 | 独立 utilityProcess HTTP/WS、token、RPC；health/WS/job simulate 验证；真实生成未 |
+| 创作生成 | 🟡 | 已通过 backend `/api/jobs` 提交 Supervisor；缺权重/运行时预检仍拦截 |
+| Project/图层 | 🟡 | `projects/<id>/project.json` + assets、自动保存、图层 visible/lock/opacity；未做完整 UI 验收 |
 | 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景 |
 | Kohaku Trainer 仓库 | ✅ | runtime clone、bare mirror、commit/worktree |
 | Trainer 环境管理 | 🟡 | 本机/远端 venv、lock hash、install、doctor 代码路径；fake uv 验证，真实 CUDA 未 |
@@ -122,8 +123,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 4. **SSH 只有 fake ssh 验证**：真实 host 的 host key/连接/远端 mirror/worktree/
    venv/Job 没有验收；当前代码路径已接。
 5. **导出/采样真实 CUDA 未验收**：代码已接，fake 导出/登记通过；真实 `kogine` 未跑。
-6. **Clover 常驻后端未实现**：没有本地 HTTP/WS；创作窗口“开始生成”不接任务。
-7. **Project/图层未实现**：Studio 草稿只在内存；Project 与 Case 解耦只是设计。
+6. **Clover 后端/生成只验证 simulate**：独立 HTTP/WS 与 RPC 已通；真实 runner 生成缺权重/运行时。
+7. **Project/图层仅基础**：JSON+assets、自动保存、visible/lock/opacity 已接；未做完整 UI 回放/资产重链。
 8. **队列落盘未完整验收**：`launch-queue.json` 已接，queued 保留、starting/running
    重启标 failed；渲染层重启与自动重排还需要真实验收。
 9. **官方 Gradio 未真实启动**：没有权重，未验证端口/readiness/浏览器显示。
@@ -141,7 +142,6 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - 设备维护完整验收/强制并发/显存配额；
 - DMD 8 步采样器（当前 profile 只透传，仍走官方 pipeline）；
 - 真实 SSH host / 真实 CUDA 验收；
-- Clover 常驻后端 / Project / 图层；
 - 打包、公证、Windows 安装器；
 - 自研推理引擎（V2）。
 
@@ -151,6 +151,6 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 1. 真实 SSH host 验收（host key/权限 → 远端 mirror/worktree/venv → 远端 Job/日志/取消）；
 2. 真实 CUDA 训练验收 + 数据缓存/导出/采样；
-3. Clover 常驻后端与 Project/图层；
+3. Clover 生成真实权重验收、Project/图层 UI 收尾；
 4. 队列完整重启验收、Gradio/27 GB、设备维护；
 5. WebUI/更新、打包。

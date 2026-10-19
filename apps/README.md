@@ -11,6 +11,7 @@ WebUI / 浏览器模式尚未实现；M5 才考虑把服务层与 renderer 抽�
 ```
 apps/desktop/
   electron.vite.config.ts
+  src/backend/index.ts      独立 Node HTTP/WS（utilityProcess）
   src/main/
     index.ts                生命周期、smoke / screenshot / scenario
     windows.ts              启动器 / 创作 / 终端 / Kohaku Trainer
@@ -20,7 +21,7 @@ apps/desktop/
                             updates / settings / gallery / supervisor / parsers /
                             diagnostics / devices / cases / onboarding /
                             trainerGit / trainers / trainingHosts / remoteTrainer / ssh /
-                            launchQueue / trainerArtifacts
+                            launchQueue / trainerArtifacts / projects / backend
   src/preload/index.ts      contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx             按 windowKind 分流 Launcher / Creator / Terminal / Trainer
@@ -85,6 +86,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | `--scenario=trainer-remote-job` | fake ssh 下远端训练 |
 | `--scenario=trainer-remote-artifact` | fake ssh 下导出/产物登记 |
 | `--scenario=queue-persist` | 队列落盘 |
+| `--scenario=backend-http` | HTTP health/auth/WS |
+| `--scenario=backend-job` | 经 backend 提交 simulate Job |
+| `--scenario=backend-renderer` | 渲染进程访问 backend（CSP/CORS/POST） |
+| `--scenario=project-save` | Project JSON 保存/读取 |
 
 验证结论以 [../docs/status.md](../docs/status.md) 为准，不要把 scenario 模拟
 当成真实权重/CUDA 验收。

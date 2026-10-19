@@ -41,6 +41,9 @@ Electron Main (Node)
     └── trainer    /trainer     1280×840
          ↕ preload（contextBridge）
     React 19 renderer（同一 bundle；按 windowKind 分流）
+
+UtilityProcess
+└── backend.js    独立 Node HTTP/WS（127.0.0.1、token、RPC 到 main）
 ```
 
 - 四个窗口共用同一个 renderer bundle；`--clover-window=<kind>` 在 preload
@@ -59,6 +62,7 @@ Electron Main (Node)
 ```
 apps/desktop/
   electron.vite.config.ts
+  src/backend/index.ts   独立 Node HTTP/WS 后端（utilityProcess）
   src/main/
     index.ts             生命周期、smoke、scenario、screenshot
     windows.ts           四窗口
@@ -67,7 +71,8 @@ apps/desktop/
     services/            env / network / git / runtimes / instances / models /
                          updates / gallery / supervisor / parsers / diagnostics /
                          devices / cases / onboarding / trainerGit / trainers /
-                         trainingHosts / remoteTrainer / ssh / launchQueue / trainerArtifacts
+                         trainingHosts / remoteTrainer / ssh / launchQueue / trainerArtifacts /
+                         projects / backend
   src/preload/index.ts   contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
     src/App.tsx          按 windowKind 分流 shell
@@ -108,6 +113,8 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `remoteTrainer.ts` | 远端 mirror/worktree/venv/doctor/版本（fake ssh 验证） |
 | `launchQueue.ts` | `launch-queue.json` 队列持久化/中断标记 |
 | `trainerArtifacts.ts` | 训练产物收集与本地适配器登记 |
+| `projects.ts` | Project JSON + assets 持久化 |
+| `backend.ts` | utilityProcess 生命周期、token、main RPC、事件转发 |
 
 ## 5. IPC 与安全
 
@@ -137,6 +144,8 @@ docs/                    产品、架构、状态、路线图、layout 规范、
   launch-queue.json             运行/排队行（重启语义）
   diagnostics.json              诊断历史
   training-hosts.json           local + SSH host
+  projects/<id>/project.json    Project 文档
+  projects/<id>/assets/         Project 资产
   announcements.json            公告缓存（如使用）
   git/
     moss-image.git/             MOSS bare mirror
@@ -184,6 +193,7 @@ docs/                    产品、架构、状态、路线图、layout 规范、
 | `JobRecord` | id/instanceId/kind/mode/state/stage/progress/metrics/hostId/trainerVersionId/trainerRunName/error/logPath |
 | `TrainerVersion` | commit/branch/path/runtimeId/runtimeState/channel/dirty/status |
 | `TrainingHost` | id/kind/host/user/port/identityFile/trainerRoot/status/remote/versions |
+| `ProjectDocument` | id/name/width/height/summary/layers/prompt/negative/seed/steps/cfg/backgroundPath |
 | `Diagnostic` | ruleId/severity/title/explain/solutions/raw/signature |
 
 `JobRecord.kind` 当前为 `inference | training`；训练 Job 额外有
@@ -282,6 +292,17 @@ queued → starting → running → succeeded | failed | canceled
   可追加 extraArgs；匹配 `Running on local URL` 后显示 URL；真实权重未验收；
 - Clover 后端：没有常驻进程/HTTP/WS，仅 UI 占位。
 
+## 12.1 Clover 后端与 Project
+
+- `src/backend/index.ts` 作为 Electron `utilityProcess` 启动，监听 127.0.0.1 随机端口；
+- HTTP：`/health`、`/api/jobs`（list/start/get/cancel），Bearer token；
+- WS：`/ws?token=...`，广播 `event`（job/jobLog），用于未来 WebUI；
+- 后端 **不直接跑 Python**：通过 parentPort RPC 调 main 的 Supervisor，保证终端/诊断/画廊同源；
+- `backendInfo` 暴露 url/token/ready；Creator 的“开始生成”走 HTTP `/api/jobs`；
+- Project 保存到 `projects/<id>/project.json`，背景图复制到 `assets/`；
+- 基础图层字段：kind/caption/text/bbox/visible/locked/opacity。
+- HTTP/WS 与 Project 字段详见 [backend-and-project.md](backend-and-project.md)。
+
 ## 13. 训练器架构
 
 ### 13.1 版本
@@ -369,6 +390,10 @@ env -u ELECTRON_RUN_AS_NODE \
 | `--scenario=trainer-remote-job` | fake ssh 下远端训练 step/loss |
 | `--scenario=trainer-remote-artifact` | fake ssh 下导出并登记适配器 |
 | `--scenario=queue-persist` | queued 行落盘/读取/删除 |
+| `--scenario=backend-http` | HTTP health/auth/WS hello |
+| `--scenario=backend-job` | 经 backend 提交 simulate Job |
+| `--scenario=backend-renderer` | 渲染进程访问 backend（CSP/CORS/POST） |
+| `--scenario=project-save` | Project JSON 保存/读取/列表/删除 |
 
 测试现状：**没有** vitest/playwright 套件；验证以 typecheck/build、smoke、
 scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
@@ -379,13 +404,13 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 
 | 计划 | 说明 |
 | --- | --- |
-| WebUI | Fastify/SSE、token、局域网；复用服务层；未实现 |
+| WebUI | 复用 backend HTTP/WS、浏览器 UI、局域网；未实现 |
 | 托管 Python | python-build-standalone 下载/校验未接 |
 | 更新安装 | 只检查 manifest/公告，不下载/验签/安装 |
 | SSH 远端训练验证 | 真实 host 的 host key/权限/网络、远端 venv/Job 验收 |
-| 导出/采样执行 | 只有命令预览 |
-| Project / 图层 | 画布/草稿只存在内存 |
-| Clover 常驻后端 | 没有 HTTP/WS 服务；创作生成未接 |
+| 导出/采样真实验收 | 代码已接，fake 验证；真实 CUDA 未 |
+| Project / 图层完整 UI | 已有 JSON+assets/基础图层，待完整回放/资产重链 |
+| Clover 真实生成 | HTTP/WS/creator 已接；真实权重/运行时未验收 |
 | 队列完整重启验收 | 已有 `launch-queue.json`，但自动重排/重启行为未验收 |
 | 设备维护完整验收/并发配额 | 已有设置过滤与本地训练互斥，未做完整验收 |
 | 打包/公证 | 未做 |
@@ -404,4 +429,5 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | UI v0.4 | 四窗口、全局背景、训练页/训练窗口 | ✅ |
 | Trainer v0.4 | 外部 trainer 部署/版本/环境/训练 Job/远端代码 | ✅ 基础；真实 CUDA/环境安装/真实 host 未验收 |
 | M5 | WebUI、更新安装 | ⬜ |
+| B v0.5 | utilityProcess HTTP/WS、Creator 生成、Project JSON+assets/基础图层 | 🟡；真实生成/完整 UI 验收未 |
 | M6 | 打包、公证、Windows | ⬜ |

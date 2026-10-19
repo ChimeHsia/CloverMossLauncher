@@ -10,6 +10,14 @@ export default defineConfig({
     resolve: {
       alias: { '@shared': r('src/shared'), '@main': r('src/main') },
     },
+    build: {
+      rollupOptions: {
+        input: {
+          index: r('src/main/index.ts'),
+          backend: r('src/backend/index.ts'),
+        },
+      },
+    },
     plugins: [externalizeDepsPlugin()],
   },
   preload: {

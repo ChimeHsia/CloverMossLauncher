@@ -2,12 +2,16 @@ import { app, dialog, nativeTheme, protocol } from 'electron'
 import { chmodSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureDirs } from './lib/paths'
+import { getBackendInfo, startBackend, stopBackend } from './services/backend'
+import type { JobRecord } from '@shared/types'
+import WebSocket from 'ws'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, listInstances } from './services/instances'
 import { installDeps } from './services/runtimes'
 import { cancelJob, getJob, getJobLogs, onJobCompleted, startJob, startTrainingJob } from './services/supervisor'
 import { createTrainerVersion, listTrainerVersions, startTrainerRun } from './services/trainers'
 import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
+import { deleteProject, getProject, listProjects, saveProject } from './services/projects'
 import { listTrainerBranches, listTrainerCommits } from './services/trainerGit'
 import { listTrainingHosts, removeTrainingHost, saveTrainingHost, testTrainingHost, updateTrainingHostVersions } from './services/trainingHosts'
 import {
@@ -103,6 +107,7 @@ app.whenReady().then(async () => {
   })
   registerGalleryProtocol()
   registerIpc()
+  await startBackend()
 
   if (smoke) {
     await runSmoke().catch((error) => {
@@ -369,6 +374,106 @@ exit 0
       console.error(error)
       app.exit(1)
     }
+    return
+  }
+
+  if (scenario === 'backend-renderer') {
+    const backend = getBackendInfo()
+    if (!backend.ready || !backend.url || !backend.token) {
+      app.exit(1)
+      return
+    }
+    const win = createAppWindow('launcher', false)
+    await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
+    const result = await win.webContents.executeJavaScript(`fetch(${JSON.stringify(`${backend.url}/api/jobs`)}, { headers: { authorization: 'Bearer ${backend.token}' } }).then(async (res) => ({ status: res.status, count: (await res.json()).length })).catch((error) => ({ error: String(error) }))`)
+    const [instance] = await listInstances()
+    let jobState: string | null = null
+    if (instance && result?.status === 200) {
+      const created = await win.webContents.executeJavaScript(`fetch(${JSON.stringify(`${backend.url}/api/jobs`)}, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ${backend.token}' }, body: ${JSON.stringify(JSON.stringify({ instanceId: instance.id, prompt: 'renderer backend test', negativePrompt: '', width: 512, height: 512, steps: 2, cfg: 1, seed: 42, profile: 'base', mode: 'simulate' }))} }).then((res) => res.json()).catch((error) => ({ error: String(error) }))`)
+      if (created?.id) {
+        const deadline = Date.now() + 20_000
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 200))
+          const current = await getJob(created.id)
+          jobState = current?.state ?? null
+          if (jobState && jobState !== 'running' && jobState !== 'starting') break
+        }
+      }
+    }
+    console.log(JSON.stringify({ scenario: 'backend-renderer', result, jobState }, null, 2))
+    app.exit(result?.status === 200 && (!instance || jobState === 'succeeded') ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'backend-job') {
+    const backend = getBackendInfo()
+    const [instance] = await listInstances()
+    if (!backend.ready || !backend.token || !instance) {
+      console.error({ backend, instance: instance?.id })
+      app.exit(1)
+      return
+    }
+    const response = await fetch(`${backend.url}/api/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${backend.token}` },
+      body: JSON.stringify({
+        instanceId: instance.id, prompt: 'backend simulate', negativePrompt: '', width: 512, height: 512,
+        steps: 2, cfg: 1, seed: 42, profile: 'base', mode: 'simulate',
+      }),
+    })
+    const job = (await response.json()) as JobRecord
+    let current = job
+    const deadline = Date.now() + 20_000
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      const info = await fetch(`${backend.url}/api/jobs/${job.id}`, { headers: { authorization: `Bearer ${backend.token}` } }).then((r) => r.json() as Promise<JobRecord>)
+      current = info
+      if (info.state !== 'running' && info.state !== 'starting') break
+    }
+    console.log(JSON.stringify({ scenario: 'backend-job', state: current.state, id: current.id, error: current.error }, null, 2))
+    app.exit(current.state === 'succeeded' ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'backend-http') {
+    const backend = getBackendInfo()
+    if (!backend.ready || !backend.url || !backend.token) {
+      console.error(backend)
+      app.exit(1)
+      return
+    }
+    const health = await fetch(`${backend.url}/health`).then((res) => res.json())
+    const unauthorized = await fetch(`${backend.url}/api/jobs`).then((res) => res.status)
+    const jobs = await fetch(`${backend.url}/api/jobs`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())
+    const hello = await new Promise<unknown>((resolve, reject) => {
+      const ws = new WebSocket(`${backend.url!.replace('http', 'ws')}/ws?token=${backend.token}`)
+      const timer = setTimeout(() => { ws.close(); reject(new Error('ws timeout')) }, 5000)
+      ws.once('message', (data) => { clearTimeout(timer); ws.close(); resolve(JSON.parse(String(data))) })
+      ws.once('error', reject)
+    })
+    console.log(JSON.stringify({ scenario: 'backend-http', health, unauthorized, jobs: Array.isArray(jobs) ? jobs.length : null, hello }, null, 2))
+    app.exit(0)
+    return
+  }
+
+  if (scenario === 'project-save') {
+    const saved = saveProject({
+      name: 'Scenario Project',
+      width: 1024,
+      height: 1024,
+      summary: { caption: 'test', meta: ['test'], canvas: 'single' },
+      layers: [{ id: 'layer-1', kind: 'object', caption: 'test region', bbox: [10, 20, 300, 400], visible: true, locked: false, opacity: 1 }],
+      prompt: 'test prompt',
+      negative: '',
+      seed: 42,
+      steps: 8,
+      cfg: 1,
+    })
+    const loaded = getProject(saved.id)
+    const count = listProjects().filter((item) => item.id === saved.id).length
+    deleteProject(saved.id)
+    console.log(JSON.stringify({ scenario: 'project-save', id: saved.id, loaded: loaded?.name, layers: loaded?.layers.length, listed: count }, null, 2))
+    app.exit(loaded && count === 1 ? 0 : 1)
     return
   }
 
@@ -755,4 +860,8 @@ exit 0
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  stopBackend()
 })

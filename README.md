@@ -24,12 +24,13 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
 | 设备维护 | 🟡 | 设置内启用/禁用/重命名；启动条过滤；未完整验收 |
 | 官方 Gradio | 🟡 | 代码路径已接；缺 27 GB 权重，未做真机验收 |
 | xterm 终端 | ✅ | 推理/训练 Case 共用；stdout/stderr/stdin、停止/重启 |
-| 创作台/布局标注 | ✅ | 画布、区域、官方 layout JSON 编译；生成入口未接 |
+| 创作台/布局标注 | ✅ | 画布、区域、官方 layout JSON 编译 |
+| Clover 后端 | 🟡 | 独立 HTTP/WS、token、RPC；health/WS/simulate Job 验证 |
+| 创作生成 | 🟡 | 经 backend `/api/jobs` 提交 Supervisor；缺权重/运行时预检拦截 |
+| Project/图层 | 🟡 | JSON+assets、自动保存、visible/lock/opacity；未完整 UI 验收 |
 | 诊断 | ✅ | 规则匹配、去重、toast 预算、解决动作 |
 | Kohaku Trainer | 🟡 | 仓库/版本/环境/表单/命令预览/本机 CUDA 训练路径；真实训练未验收 |
 | SSH 训练主机 | 🟡 | host CRUD/测试、远端 mirror/worktree/venv/train 代码；仅 fake ssh 验证 |
-| Clover 常驻后端 | ⬜ | 未实现；创作窗口“开始生成”暂不接任务 |
-| Project/图层 | ⬜ | 创作文档仍只在内存；Project 与 Case 解耦的设计未落地 |
 | WebUI/应用内更新 | ⬜ | 未实现 |
 
 > 完整、可核对的完成度与证据见 [docs/status.md](docs/status.md)。README 只做总览，
@@ -62,14 +63,14 @@ M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境�
 - 同设备默认只跑 1 个真实任务，其余排队。**Case 配置写入 `cases.json`；
   队列行写入 `launch-queue.json`：queued 保留、running 重启标 failed**；
 - 设备自动枚举 Apple MPS / NVIDIA CUDA / CPU；设备启用/禁用/重命名在设置内；
-- `official` 后端启动实例里的 `gradio_app.py`；`Clover` 常驻后端未实现。
+- `official` 后端启动实例里的 `gradio_app.py`；启动条的 `Clover` 仍是占位，创作窗口已接独立 Clover 后端。
 
 ![创作窗口](docs/assets/studio.webp)
 
 ## 创作、画廊、终端
 
 - **创作窗口**：Studio 支持 layout 画布、区域增删/移动/缩放、官方 layout JSON
-  编译与 Prompt 插入；当前“开始生成”不接 Clover 后端。
+  编译与 Prompt 插入；Project 自动保存；开始生成经独立 HTTP/WS 后端提交 Supervisor。
 - **画廊**：启动器侧栏的全局工具；读取 outputs、实例 outputs 与自定义目录；
   48 张/页 + IntersectionObserver + `content-visibility`；支持详情、元数据、
   “用作布局底图”跨窗口交接。
@@ -139,12 +140,14 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 ```text
 apps/desktop/
+  src/backend/          独立 Node HTTP/WS 后端（utilityProcess）
   src/main/
     windows.ts          启动器 / 创作 / 终端 / Kohaku Trainer 四窗口
     services/           env / network / git / runtimes / instances / models /
                         updates / gallery / supervisor / parsers / diagnostics /
                         devices / cases / onboarding / trainerGit / trainers / trainingHosts /
-                        remoteTrainer / ssh / launchQueue / trainerArtifacts
+                        remoteTrainer / ssh / launchQueue / trainerArtifacts /
+                        projects / backend
   src/preload/          contextBridge（windowKind / acrylic / channel）
   src/renderer/
     src/pages/          Home / Studio / Gallery / Terminal / Training / TrainerWindow /
@@ -171,6 +174,7 @@ docs/                   产品、架构、状态、路线图、layout 规范、A
 - [实现状态](docs/status.md)
 - [路线图](docs/roadmap.md)
 - [Layout JSON 规范](docs/layout-schema.md)
+- [Clover 后端与 Project](docs/backend-and-project.md)
 - [Runner](runner/README.md)
 - [决策记录](docs/decisions/0003-launcher-first.md)
 - [未来推理引擎（V2，未排期）](docs/future-inference-engine.md)
@@ -181,7 +185,7 @@ docs/                   产品、架构、状态、路线图、layout 规范、A
 - 真实 CUDA 训练未验收；`startTrainingJob` 用模拟输出/fake ssh 验证过 step/loss 链路；
   远端环境安装/doctor 用 fake uv 验证；
 - SSH 远端执行/导出采样只有 fake ssh 验证，真实 host/CUDA 未验收；
-  Clover 常驻后端、Project/图层、WebUI、应用内更新、打包/公证未实现；
+  Clover 真实生成、Project 完整 UI、WebUI、应用内更新、打包/公证未完成；
   设备维护/并发只做代码路径与基础验收。
 - DMD 8 步 profile 目前只透传，仍走官方 pipeline；真正 8 步采样器未实现；
 - Windows 未实机验证；

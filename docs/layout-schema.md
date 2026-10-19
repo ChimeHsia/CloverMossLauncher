@@ -115,7 +115,7 @@ x_max' = ceil(x2)  - width/2
 3. 在“区域”里填写 caption；文字区域再填 `text`；
 4. 填 `summary.caption`、`meta`、`canvas`；
 5. 点“编译布局 Prompt” → 预览编译后的 JSON → “插入到 Prompt”；
-6. 生成入口尚未接后端（Clover 常驻后端未实现）；当前只能完成编译与插入 Prompt。
+6. 生成入口已接独立 Clover 后端；缺权重/运行时仍会在提交前预检拦截。
 
 底部“布局总览”会显示 `abs · xyxy`，编译弹窗会显示 `abs_centralized · yxyx`，避免用户在两个坐标系之间猜。
 

@@ -11,9 +11,18 @@ import {
   Type,
   UserRound,
   X,
+  Save,
+  Eye,
+  EyeOff,
+  Lock,
+  Unlock,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import type { GalleryItem, InstanceInfo } from '@shared/types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { GalleryItem, InstanceInfo, JobRecord, ProjectDocument, ProjectSummary } from '@shared/types'
+import type { BackendInfo } from '@shared/backend'
+import { Ipc } from '@shared/channels'
+import { call } from '../lib/api'
+import { openWindow } from '../lib/windows'
 import { cloverUrl } from '../lib/clover'
 import {
   clampBox,
@@ -45,12 +54,46 @@ type DragState =
   | { kind: 'move' | 'resize'; id: string; startX: number; startY: number; origin: [number, number, number, number] }
   | null
 
+
+function draftFromProject(project: ProjectDocument): LayoutDraft {
+  return {
+    width: project.width,
+    height: project.height,
+    summary: project.summary,
+    items: project.layers.map((layer) => ({
+      id: layer.id,
+      label: layer.kind,
+      caption: layer.caption,
+      text: layer.text,
+      bbox: layer.bbox,
+      visible: layer.visible,
+      locked: layer.locked,
+      opacity: layer.opacity,
+    })),
+  }
+}
+
+function projectSnapshot(input: {
+  name: string
+  draft: LayoutDraft
+  prompt: string
+  negative: string
+  seed: number
+  steps: number
+  cfg: number
+  instanceId: string
+  backgroundPath?: string
+}): string {
+  return JSON.stringify(input)
+}
+
 export function StudioPage(): React.JSX.Element {
   const toast = useToast()
   const storedPrompt = useApp((state) => state.studioPrompt)
   const storedDraft = useApp((state) => state.studioDraft)
   const background = useApp((state) => state.studioBackground)
   const setStudioPrompt = useApp((state) => state.setStudioPrompt)
+  const setStudioDraft = useApp((state) => state.setStudioDraft)
   const setStudioBackground = useApp((state) => state.setStudioBackground)
 
   useEffect(() => {
@@ -82,6 +125,17 @@ export function StudioPage(): React.JSX.Element {
   const [cfg, setCfg] = useState(env?.recommendation.profile === 'dmd8' ? 1 : 3)
   const [seed, setSeed] = useState(42)
   const [instanceId, setInstanceId] = useState(instances[0]?.id ?? '')
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [projectName, setProjectName] = useState('未命名 Project')
+  const [projectSaving, setProjectSaving] = useState(false)
+  const [backend, setBackend] = useState<BackendInfo | null>(null)
+  const lastSaved = useRef('')
+  const skipAutosave = useRef(false)
+  const snapshot = useMemo(
+    () => projectSnapshot({ name: projectName, draft, prompt, negative, seed, steps, cfg, instanceId, backgroundPath: background?.path }),
+    [projectName, draft, prompt, negative, seed, steps, cfg, instanceId, background?.path],
+  )
   const canvasRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -91,6 +145,19 @@ export function StudioPage(): React.JSX.Element {
   useEffect(() => {
     if (storedDraft) setDraft(storedDraft)
   }, [storedDraft])
+
+  useEffect(() => {
+    void call<ProjectSummary[]>(Ipc.projectsList).then(setProjects).catch(() => undefined)
+    void call<BackendInfo>(Ipc.backendInfo).then(setBackend).catch(() => setBackend(null))
+  }, [])
+
+  useEffect(() => {
+    if (!projectId || snapshot === lastSaved.current || skipAutosave.current) return
+    const timer = setTimeout(() => {
+      void saveProjectNow(true)
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [projectId, snapshot])
 
   const selected = draft.items.find((item) => item.id === selectedId) ?? null
 
@@ -115,6 +182,7 @@ export function StudioPage(): React.JSX.Element {
       const item = draft.items.find((entry) => entry.id === resizeId)
       if (item) {
         setSelectedId(item.id)
+        if (item.locked) return
         setDrag({ kind: 'resize', id: item.id, startX: x, startY: y, origin: [...item.bbox] })
       }
       return
@@ -123,6 +191,7 @@ export function StudioPage(): React.JSX.Element {
       const item = draft.items.find((entry) => entry.id === boxId)
       if (item) {
         setSelectedId(item.id)
+        if (item.locked) return
         setDrag({ kind: 'move', id: item.id, startX: x, startY: y, origin: [...item.bbox] })
       }
       return
@@ -231,8 +300,142 @@ export function StudioPage(): React.JSX.Element {
     toast.push('布局 Prompt 已插入', 'success')
   }
 
-  function generate(): void {
-    toast.push('Clover 常驻后端下一轮接入；当前可以编译布局 JSON，或先在启动器启动官方 Gradio。', 'info')
+  async function saveProjectNow(auto = false): Promise<void> {
+    if (projectSaving) return
+    setProjectSaving(true)
+    try {
+      const saved = await call<ProjectDocument>(Ipc.projectSave, {
+        id: projectId ?? undefined,
+        name: projectName.trim() || '未命名 Project',
+        width: draft.width,
+        height: draft.height,
+        summary: draft.summary,
+        layers: draft.items.map((item) => ({
+          id: item.id,
+          kind: item.label,
+          caption: item.caption,
+          text: item.text,
+          bbox: item.bbox,
+          visible: item.visible !== false,
+          locked: item.locked === true,
+          opacity: item.opacity ?? 1,
+        })),
+        prompt,
+        negative,
+        seed,
+        steps,
+        cfg,
+        instanceId: instanceId || undefined,
+        backgroundPath: background?.path,
+      })
+      setProjectId(saved.id)
+      setProjectName(saved.name)
+      lastSaved.current = projectSnapshot({
+        name: saved.name, draft, prompt, negative, seed, steps, cfg, instanceId,
+        backgroundPath: background?.path,
+      })
+      setProjects(await call<ProjectSummary[]>(Ipc.projectsList))
+      if (!auto) toast.push('Project 已保存', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setProjectSaving(false)
+    }
+  }
+
+  async function openProject(id: string): Promise<void> {
+    try {
+      const project = await call<ProjectDocument | null>(Ipc.projectGet, { id })
+      if (!project) return
+      const nextDraft = draftFromProject(project)
+      skipAutosave.current = true
+      setProjectId(project.id)
+      setProjectName(project.name)
+      setPrompt(project.prompt)
+      setStudioPrompt(project.prompt)
+      setNegative(project.negative)
+      setDraft(nextDraft)
+      setStudioDraft(nextDraft)
+      setSeed(project.seed)
+      setSteps(project.steps)
+      setCfg(project.cfg)
+      setInstanceId(project.instanceId ?? instances[0]?.id ?? '')
+      if (project.backgroundPath) {
+        const path = project.backgroundPath
+        setStudioBackground({ id: `project-bg-${project.id}`, path, name: path.split('/').pop() ?? 'background', dir: path.slice(0, Math.max(0, path.lastIndexOf('/'))), root: '', size: 0, mtime: 0, ext: path.split('.').pop() ?? '' })
+      } else {
+        setStudioBackground(null)
+      }
+      lastSaved.current = projectSnapshot({
+        name: project.name, draft: nextDraft, prompt: project.prompt, negative: project.negative,
+        seed: project.seed, steps: project.steps, cfg: project.cfg, instanceId: project.instanceId ?? '',
+        backgroundPath: project.backgroundPath,
+      })
+      setTimeout(() => { skipAutosave.current = false }, 600)
+      toast.push('Project 已打开', 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    }
+  }
+
+  function newProject(): void {
+    setProjectId(null)
+    setProjectName('未命名 Project')
+    setPrompt('')
+    setStudioPrompt('')
+    const draft = createDraft(1024, 1024)
+    setDraft(draft)
+    setStudioDraft(draft)
+    setSelectedId(null)
+    lastSaved.current = ''
+  }
+
+  async function generate(): Promise<void> {
+    if (!instanceId) {
+      toast.push('先选择一个实例', 'error')
+      return
+    }
+    if (!prompt.trim()) {
+      toast.push('先写提示词或插入布局 Prompt', 'error')
+      return
+    }
+    let info = backend
+    if (!info?.ready) {
+      info = await call<BackendInfo>(Ipc.backendInfo).catch(() => null)
+      setBackend(info)
+    }
+    if (!info?.ready || !info.url || !info.token) {
+      toast.push(info?.error ?? 'Clover 后端尚未就绪；请稍后重试', 'error')
+      return
+    }
+    try {
+      const response = await fetch(`${info.url}/api/jobs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${info.token}` },
+        body: JSON.stringify({
+          instanceId,
+          prompt,
+          negativePrompt: negative,
+          width: draft.width,
+          height: draft.height,
+          steps,
+          cfg,
+          seed,
+          profile: steps <= 8 ? 'dmd8' : 'base',
+          mode: 'runner',
+        }),
+      })
+      const body = (await response.json()) as JobRecord | { error?: string }
+      if (!response.ok || 'error' in body) {
+        const raw = 'error' in body ? body.error : undefined
+        const message = typeof raw === 'string' ? raw : raw?.message ?? `后端返回 ${response.status}`
+        throw new Error(message)
+      }
+      toast.push('已提交到 Clover 后端，正在终端运行', 'success')
+      openWindow('terminal')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    }
   }
 
   return (
@@ -241,18 +444,42 @@ export function StudioPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">创作</h1>
           <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
-            写提示词、框选布局，再编译成 MOSS 的 layout JSON。Clover 常驻后端下一轮接入；当前先把布局 JSON 编译好。
+            写提示词、框选布局，再编译成 MOSS 的 layout JSON。独立 HTTP/WS 后端已接：开始生成会提交到共享 Supervisor/终端；Project 自动保存。
           </p>
         </div>
         <div className="flex items-center gap-2">
           {env ? <Pill tone="blue">{env.recommendation.width}² · {env.recommendation.steps} 步</Pill> : null}
-          <Button tone="primary" onClick={generate}>
+          <Pill tone={backend?.ready ? 'accent' : 'amber'}>{backend?.ready ? 'Clover 后端就绪' : '后端启动中'}</Pill>
+          <Button tone="primary" onClick={() => void generate()}>
             <span className="inline-flex items-center gap-1.5">
               开始生成 <ArrowRight className="size-3.5" />
             </span>
           </Button>
         </div>
       </header>
+
+      <Card className="flex flex-wrap items-center gap-2 p-2.5">
+        <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">Project</span>
+        <select
+          value={projectId ?? ''}
+          onChange={(event) => { if (event.target.value) void openProject(event.target.value) }}
+          className="h-7 min-w-[180px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+        >
+          <option value="">未打开</option>
+          {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+        <input
+          value={projectName}
+          onChange={(event) => setProjectName(event.target.value)}
+          placeholder="Project 名称"
+          className="h-7 min-w-[160px] flex-1 rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none"
+        />
+        <Button tone="ghost" onClick={newProject}>新建</Button>
+        <Button tone="secondary" onClick={() => void saveProjectNow()} disabled={projectSaving}>
+          <span className="inline-flex items-center gap-1.5">{projectSaving ? null : <Save className="size-3" />}保存</span>
+        </Button>
+        <span className="text-[9px] text-[var(--color-text-tertiary)]">{projectId ? '自动保存已开启' : '保存后开启自动保存'}</span>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
         <div className="space-y-4">
@@ -460,7 +687,7 @@ export function StudioPage(): React.JSX.Element {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-br from-accent-500/[0.03] to-transparent" />
 
-                {draft.items.map((item, index) => {
+                {draft.items.filter((item) => item.visible !== false).map((item, index) => {
                   const [x1, y1, x2, y2] = item.bbox
                   const isSelected = item.id === selectedId
                   const meta = LABEL_META[item.label]
@@ -479,6 +706,7 @@ export function StudioPage(): React.JSX.Element {
                         top: `${(y1 / draft.height) * 100}%`,
                         width: `${((x2 - x1) / draft.width) * 100}%`,
                         height: `${((y2 - y1) / draft.height) * 100}%`,
+                        opacity: item.opacity ?? 1,
                       }}
                     >
                       <span className="absolute -top-5 left-0 inline-flex max-w-full items-center gap-1 truncate rounded bg-accent-600 px-1.5 py-0.5 text-[9px] font-medium text-white">
@@ -552,6 +780,22 @@ export function StudioPage(): React.JSX.Element {
                         <option value="character">人物</option>
                         <option value="text">文字</option>
                       </select>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); setItem(item.id, { visible: item.visible === false }) }}
+                        className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+                        title={item.visible === false ? '显示图层' : '隐藏图层'}
+                      >
+                        {item.visible === false ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); setItem(item.id, { locked: !item.locked }) }}
+                        className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text)]"
+                        title={item.locked ? '解锁图层' : '锁定图层'}
+                      >
+                        {item.locked ? <Lock className="size-3" /> : <Unlock className="size-3" />}
+                      </button>
                       <span className="ml-auto font-mono text-[9.5px] text-[var(--color-text-tertiary)]">
                         {item.bbox.map((value) => Math.round(value)).join(', ')}
                       </span>
@@ -572,6 +816,19 @@ export function StudioPage(): React.JSX.Element {
                       placeholder="描述这个区域的外观、材质、动作…"
                       className="mt-1.5 w-full rounded-[4px] border border-[var(--color-border)] bg-white/45 px-2 py-1 text-[10.5px] outline-none focus:border-accent-500 dark:bg-white/[0.03]"
                     />
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[9px] text-[var(--color-text-tertiary)]">不透明度</span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        value={item.opacity ?? 1}
+                        onChange={(event) => setItem(item.id, { opacity: Number(event.target.value) })}
+                        className="h-1 flex-1 accent-[var(--color-accent)]"
+                      />
+                      <span className="w-8 text-right text-[9px] text-[var(--color-text-tertiary)]">{Math.round((item.opacity ?? 1) * 100)}%</span>
+                    </div>
                     {item.label === 'text' ? (
                       <input
                         value={item.text ?? ''}

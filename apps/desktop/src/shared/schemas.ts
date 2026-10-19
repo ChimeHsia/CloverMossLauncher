@@ -162,6 +162,48 @@ export const schemas = {
 
   launchRowId: z.object({ id: z.string().min(1).max(120) }),
 
+  projectId: z.object({ id: z.string().min(1).max(120) }),
+
+  projectLayer: z.object({
+    id: z.string().min(1).max(120),
+    kind: z.enum(['object', 'character', 'text']),
+    caption: z.string().max(4000),
+    text: z.string().max(4000).optional(),
+    bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+    visible: z.boolean(),
+    locked: z.boolean(),
+    opacity: z.number().min(0).max(1),
+  }),
+
+  projectSave: z.object({
+    id: z.string().max(120).optional(),
+    name: z.string().min(1).max(200),
+    width: z.number().int().min(64).max(4096),
+    height: z.number().int().min(64).max(4096),
+    summary: z.object({
+      caption: z.string().max(4000),
+      meta: z.array(z.string().max(200)).max(100),
+      canvas: z.enum(['single', 'multi_panel', 'collage']),
+    }),
+    layers: z.array(z.object({
+      id: z.string().min(1).max(120),
+      kind: z.enum(['object', 'character', 'text']),
+      caption: z.string().max(4000),
+      text: z.string().max(4000).optional(),
+      bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      visible: z.boolean(),
+      locked: z.boolean(),
+      opacity: z.number().min(0).max(1),
+    })).max(200),
+    prompt: z.string().max(20000),
+    negative: z.string().max(8000),
+    seed: z.number().int(),
+    steps: z.number().int().min(1).max(1000),
+    cfg: z.number().min(0).max(20),
+    instanceId: z.string().max(160).optional(),
+    backgroundPath: z.string().max(4096).optional(),
+  }),
+
   caseSave: z.object({
     id: z.string().max(80).optional(),
     name: z.string().max(120).optional(),

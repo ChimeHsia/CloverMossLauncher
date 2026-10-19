@@ -7,6 +7,9 @@ export interface LayoutItemDraft {
   caption: string
   text?: string
   bbox: [number, number, number, number]
+  visible?: boolean
+  locked?: boolean
+  opacity?: number
 }
 
 export interface LayoutDraft {
@@ -106,6 +109,7 @@ export function compileLayout(draft: LayoutDraft): CompileResult {
   if (!draft.summary.caption.trim()) errors.push('总览描述（summary.caption）不能为空')
   if (draft.items.length === 0) errors.push('至少需要一个布局区域')
   for (const [index, item] of draft.items.entries()) {
+    if (item.visible === false) continue
     if (!item.caption.trim()) errors.push(`区域 ${index + 1} 的描述不能为空`)
     if (item.label === 'text' && !item.text?.trim()) errors.push(`文字区域 ${index + 1} 需要填写文字内容`)
     const [x1, y1, x2, y2] = item.bbox
@@ -121,7 +125,7 @@ export function compileLayout(draft: LayoutDraft): CompileResult {
   }
   summary.canvas = draft.summary.canvas
 
-  const items = draft.items.map((item) => {
+  const items = draft.items.filter((item) => item.visible !== false).map((item) => {
     const compiled: Record<string, unknown> = {
       label: item.label,
       caption: item.caption.trim(),

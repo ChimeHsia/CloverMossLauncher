@@ -43,6 +43,7 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 | [status.md](status.md) | 完成度、证据、未做事项、下一轮入口 | **事实来源** |
 | [roadmap.md](roadmap.md) | 下一阶段工作流、优先级、验收条件 | 当前计划 |
 | [layout-schema.md](layout-schema.md) | 官方 layout JSON 与编辑器字段规范 | 稳定契约 |
+| [backend-and-project.md](backend-and-project.md) | Clover HTTP/WS、token、Project JSON/图层 | 当前 |
 | [model-notes.md](model-notes.md) | MOSS-Image 模型结构、预算、采样约定 | 参考资料 |
 | [research/upstream-survey.md](research/upstream-survey.md) | 上游项目调研 | 立项参考 |
 | [future-inference-engine.md](future-inference-engine.md) | V2 自研推理引擎设想 | **未排期** |

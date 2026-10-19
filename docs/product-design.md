@@ -46,7 +46,7 @@
 | --- | --- | --- |
 | **Instance 实例** | 绑定到某个 MOSS-Image git commit 的 worktree + 运行时引用 + 模型选择 | 不是一次生成任务 |
 | **Case** | 一次可复用的启动配置：实例 + 后端 + 设备 + 档位 + 端口/参数 | 不是 Project，也不是 Job |
-| **Project** | 未来的创作文档：画布、图层、资产、提示词（**未实现**） | 不是 Case |
+| **Project** | 创作文档：画布、图层、资产、提示词（JSON+assets 基础实现） | 不是 Case |
 | **Job** | 一次进程运行：推理或训练；有 state/progress/log | 不是 Case |
 | **Runtime** | Python 解释器 + 依赖集合；按 Python 版本 + 依赖锁 + 平台/加速器共享 | 不是模型 |
 | **TrainerVersion** | Kohaku trainer 的某个 commit 的 worktree + 独立运行时 | 不是推理 Instance |
@@ -115,7 +115,7 @@ Kohaku Trainer
 ```
 
 - **Case**：选择已保存的启动配置；保存时写入 `cases.json`；
-- **后端**：`官方 Gradio` / `Clover（占位）`；Clover 选择后会提示未实现；
+- **后端**：`官方 Gradio` / `Clover（启动条占位）`；创作窗口已走独立 Clover 后端；
 - **实例**：固定 commit 的 MOSS-Image worktree；
 - **设备**：自动枚举 Apple MPS / NVIDIA CUDA / CPU；
 - **档位**：`base` / `dmd8`；`dmd8` 当前只透传 profile，仍走官方 pipeline，真正 8 步采样器未实现；
@@ -155,8 +155,8 @@ Kohaku Trainer
 - 画布：框选/移动/缩放区域，支持人物、物体、文字区域；
 - 编译：按 [layout-schema.md](layout-schema.md) 转成官方
   `abs_centralized + yxyx`，插入 Prompt；
-- 生成入口：**当前不接任务**；等 Clover 常驻后端；
-- Project 持久化/图层：未实现；当前草稿只在内存；
+- 生成入口：已经由独立 HTTP/WS Clover 后端提交 Supervisor；真实权重/运行时缺失时仍预检拦截；
+- Project：JSON + assets，自动保存；图层 visible/lock/opacity 已接；完整回放/资产重链未验收；
 - 画廊：与启动器同一套数据源；支持“用作布局底图”，跨窗口交接。
 
 ## 7. 终端窗口
@@ -298,9 +298,9 @@ Kohaku Trainer
 - SSH host/远端代码只验证 fake ssh，没有真实连接；
 - 队列完整重启、设备维护完整流程未验收。
 
-**未实现：**
+**未实现/未验收：**
 
-- Clover 常驻后端、Project 持久化/图层；
+- Clover 真实生成验收、Project 完整 UI/资产重链；
 - 队列完整重启验收、设备维护完整验收、强制并发/显存配额；
 - 训练导出/采样真实 CUDA 验收；
 - SSH 远端真实 host 验收；
@@ -311,12 +311,12 @@ Kohaku Trainer
 
 ## 13. 后续设计（未实现）
 
-1. **Clover 常驻后端**：本地 HTTP/WS；创作窗口连接；终端看服务日志；
-2. **Project + 图层**：Project 独立于 Case；持久化画布/图层/资产；
+1. **Clover 真实生成**：真实权重/运行时验收、后端重连/局域网；
+2. **Project 收尾**：资产重链、完整图层 UI/回放、导入导出；
 3. **SSH 真实 host 验收**：host key/权限、远端 mirror/worktree/venv、远端 Job/日志；
 4. **训练收尾**：真实 CUDA 验收、导出/采样真实执行、loss 曲线；
 5. **启动器加固**：队列完整重启验收、设备维护验收、Gradio 真机、27 GB 权重；
-6. **M5 WebUI + 更新**：Fastify/SSE、token/局域网、更新下载/安装；
+6. **M5 WebUI + 更新**：复用 backend HTTP/WS、token/局域网、更新下载/安装；
 7. **M6 打包**：macOS 签名/公证、Windows NSIS、设备矩阵；
 8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期。
 

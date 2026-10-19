@@ -1,0 +1,143 @@
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { WebSocketServer, type WebSocket } from 'ws'
+
+interface ParentPort {
+  on(event: 'message', listener: (event: { data?: unknown }) => void): void
+  postMessage(message: unknown): void
+}
+
+const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
+const token = process.env['CLOVER_BACKEND_TOKEN'] ?? ''
+const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
+let nextId = 0
+
+function rpc<T>(method: string, params?: unknown): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (!parentPort) {
+      reject(new Error('backend is not running inside Electron'))
+      return
+    }
+    const id = `rpc-${++nextId}`
+    const timer = setTimeout(() => {
+      pending.delete(id)
+      reject(new Error(`backend rpc timeout: ${method}`))
+    }, 120_000)
+    pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer })
+    parentPort.postMessage({ type: 'rpc', id, method, params })
+  })
+}
+
+function authorized(req: IncomingMessage): boolean {
+  if (!token) return false
+  if (req.headers.authorization === `Bearer ${token}`) return true
+  const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+  return url.searchParams.get('token') === token
+}
+
+function send(res: ServerResponse, code: number, body: unknown): void {
+  const data = JSON.stringify(body)
+  res.writeHead(code, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(data),
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+  })
+  res.end(data)
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  let body = ''
+  for await (const chunk of req) {
+    body += String(chunk)
+    if (body.length > 2_000_000) throw new Error('request too large')
+  }
+  return body ? JSON.parse(body) : undefined
+}
+
+const server = createServer(async (req, res) => {
+  try {
+    if (req.method === 'OPTIONS') {
+      send(res, 204, {})
+      return
+    }
+    if (req.url === '/health') {
+      send(res, 200, { ok: true, service: 'clover-backend', version: 1 })
+      return
+    }
+    if (!authorized(req)) {
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (req.method === 'GET' && url.pathname === '/api/jobs') {
+      send(res, 200, await rpc('listJobs'))
+      return
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/api/jobs/')) {
+      send(res, 200, await rpc('getJob', { id: decodeURIComponent(url.pathname.slice('/api/jobs/'.length)) }))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/jobs') {
+      send(res, 200, await rpc('startJob', await readBody(req)))
+      return
+    }
+    if (req.method === 'POST' && url.pathname.endsWith('/cancel') && url.pathname.startsWith('/api/jobs/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/jobs/'.length, -'/cancel'.length))
+      send(res, 200, await rpc('cancelJob', { id }))
+      return
+    }
+    send(res, 404, { error: 'not found' })
+  } catch (error) {
+    send(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  }
+})
+
+const wss = new WebSocketServer({ noServer: true })
+const clients = new Set<WebSocket>()
+
+wss.on('connection', (socket) => {
+  clients.add(socket)
+  socket.send(JSON.stringify({ type: 'hello', service: 'clover-backend', version: 1 }))
+  socket.on('close', () => clients.delete(socket))
+})
+
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+  if (url.pathname !== '/ws' || !authorized(req)) {
+    socket.destroy()
+    return
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
+})
+
+function broadcast(message: unknown): void {
+  const data = JSON.stringify(message)
+  for (const client of clients) if (client.readyState === 1) client.send(data)
+}
+
+parentPort?.on('message', (event) => {
+  const message = event.data as Record<string, unknown> | undefined
+  if (!message) return
+  if (message['type'] === 'rpc-result') {
+    const entry = pending.get(String(message['id']))
+    if (!entry) return
+    pending.delete(String(message['id']))
+    clearTimeout(entry.timer)
+    if (message['error']) entry.reject(new Error(String(message['error'])))
+    else entry.resolve(message['result'])
+    return
+  }
+  if (message['type'] === 'event') {
+    broadcast({ type: 'event', channel: message['channel'], payload: message['payload'] })
+  }
+})
+
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : 0
+  parentPort?.postMessage({ type: 'ready', port })
+  console.log(`[clover-backend] listening on 127.0.0.1:${port}`)
+})
+
+process.on('disconnect', () => process.exit(0))
