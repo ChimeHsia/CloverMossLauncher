@@ -94,11 +94,12 @@ body {
   background: transparent;
 }
 
-/* Thin acrylic: titlebar / sidebar. Thick acrylic: content surface. */
+/* Electron uses the standard property. A trailing WebKit alias can make the
+   CSS optimizer discard it, leaving Chromium with no supported backdrop filter.
+   Thin acrylic: titlebar / sidebar. Thick acrylic: content surface. */
 .glass-thin {
   background: rgba(22, 24, 28, 0.42);
   backdrop-filter: blur(42px) saturate(118%);
-  -webkit-backdrop-filter: blur(42px) saturate(118%);
 }
 
 .glass {
@@ -106,7 +107,6 @@ body {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(26px) saturate(112%);
-  -webkit-backdrop-filter: blur(26px) saturate(112%);
 }
 
 .glass-strong {
@@ -114,13 +114,11 @@ body {
   background: rgba(28, 30, 35, 0.92);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(44px) saturate(120%);
-  -webkit-backdrop-filter: blur(44px) saturate(120%);
 }
 
 .content-surface {
   background: rgba(26, 28, 32, 0.52);
   backdrop-filter: blur(46px) saturate(112%);
-  -webkit-backdrop-filter: blur(46px) saturate(112%);
 }
 
 .app-dialog {

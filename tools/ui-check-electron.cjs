@@ -6,6 +6,7 @@ const desktopRequire = createRequire(join(__dirname, '../apps/desktop/package.js
 const { app, BrowserWindow } = desktopRequire('electron')
 const output = process.argv[2]
 const checkMotion = require('./ui-motion-checks.cjs')
+const checkMaterials = require('./ui-material-checks.cjs')
 
 app.setPath('userData', join(output, 'profile'))
 app.disableHardwareAcceleration()
@@ -53,6 +54,7 @@ app.whenReady().then(async () => {
     await win.loadFile(join(output, 'index.html'))
     win.webContents.setZoomFactor(scale)
     await waitFor('Boolean(document.querySelector("#open-modal"))')
+    await checkMaterials({ evaluate, webContents: win.webContents })
     assert.equal(await evaluate('getComputedStyle(document.querySelector("#typography")).fontSize'), '10.5px')
     assert.equal(await evaluate('getComputedStyle(document.querySelector("#button-typography")).fontSize'), '11px')
     assert.equal(await evaluate('getComputedStyle(document.querySelector("#button-typography")).fontWeight'), '500')
