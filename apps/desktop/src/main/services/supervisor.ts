@@ -770,9 +770,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       } else {
         const port = gradio?.port ?? (await freePort())
         command = python
-        args = bundlePath
-          ? [join(dirname(runnerScript()), 'gradio_launcher.py'), join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
-          : [join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
+        args = [join(dirname(runnerScript()), 'gradio_launcher.py'), join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
       }
     } else {
       command = python
