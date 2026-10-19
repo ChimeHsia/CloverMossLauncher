@@ -51,10 +51,10 @@ function NavRow({
       title={collapsed ? t(item.key) : undefined}
       className={({ isActive }) =>
         cn(
-          'group relative flex items-center rounded-[6px] text-[12px] transition-colors',
-          collapsed ? 'h-9 justify-center' : 'h-9 gap-2.5 px-2.5',
+          'group relative flex items-center rounded-[4px] text-[11.5px] transition-colors',
+          collapsed ? 'h-8 justify-center' : 'h-8 gap-2.5 px-2.5',
           isActive
-            ? 'bg-white/[0.065] font-medium text-[var(--color-text)] shadow-[inset_2px_0_0_0_var(--accent)]'
+            ? 'bg-white/[0.065] font-medium text-[var(--color-text)]'
             : 'text-[var(--color-text-secondary)] hover:bg-white/[0.04] hover:text-[var(--color-text)]',
         )
       }
@@ -62,7 +62,7 @@ function NavRow({
       {({ isActive }) => (
         <>
           <Icon
-            className={cn('size-[15px] shrink-0', isActive && 'text-accent-300')}
+            className={cn('size-[15px] shrink-0', isActive && 'text-[var(--color-text)]')}
             strokeWidth={1.8}
           />
           {!collapsed ? <span className="flex-1 truncate">{t(item.key)}</span> : null}

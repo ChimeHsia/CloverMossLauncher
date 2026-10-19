@@ -25,7 +25,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'glass rounded-lg border border-[var(--color-border-subtle)]',
+        'glass rounded-[6px] border border-[var(--color-border-subtle)]',
         className,
       )}
       {...rest}
@@ -68,7 +68,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[10.5px] font-medium leading-4',
+        'inline-flex items-center gap-1 rounded-[3px] border px-1.5 py-0.5 text-[10px] font-medium leading-4',
         pillTone[tone],
         className,
       )}
@@ -103,7 +103,7 @@ export function Button({
       size={size}
       className={cn(tint, className)}
       style={{
-        borderRadius: 6,
+        borderRadius: 4,
         fontSize: 12,
         lineHeight: '16px',
         minHeight: 30,
@@ -225,7 +225,7 @@ export function Modal({
     >
       <div
         className={cn(
-          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-[10px] border border-[var(--color-border-subtle)] shadow-2xl',
+          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] shadow-2xl',
           width,
         )}
         onMouseDown={(event) => event.stopPropagation()}
@@ -325,7 +325,7 @@ export function Segmented<T extends string>({
   className?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('inline-flex rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
+    <div className={cn('inline-flex rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -333,7 +333,7 @@ export function Segmented<T extends string>({
           title={option.hint}
           onClick={() => onChange(option.value)}
           className={cn(
-            'rounded-[4px] px-2.5 py-1 text-[11px] font-medium transition',
+            'rounded-[3px] px-2.5 py-1 text-[10.5px] font-medium transition',
             value === option.value
               ? 'bg-white/[0.09] text-[var(--color-text)] shadow-sm'
               : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)]',

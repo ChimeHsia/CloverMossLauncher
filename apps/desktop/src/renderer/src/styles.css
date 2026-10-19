@@ -94,6 +94,7 @@ body {
 }
 
 .glass {
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(26px) saturate(112%);
@@ -101,6 +102,7 @@ body {
 }
 
 .glass-strong {
+  border-radius: 6px;
   background: rgba(28, 30, 35, 0.92);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(44px) saturate(120%);

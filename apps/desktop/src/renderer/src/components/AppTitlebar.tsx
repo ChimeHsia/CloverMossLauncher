@@ -56,7 +56,7 @@ export function AppTitlebar({
         <span className="text-[12px] font-semibold tracking-[-0.01em] text-[var(--color-text)]">CloverMoss</span>
         <span
           className={cn(
-            'rounded-[3px] border px-1 py-px text-[8.5px] font-semibold uppercase leading-[11px] tracking-[0.08em]',
+            'rounded-[2px] border px-1 py-px text-[8px] font-semibold uppercase leading-[11px] tracking-[0.08em]',
             channel === 'release'
               ? 'border-white/10 text-[var(--color-text-tertiary)]'
               : 'border-accent-500/30 text-accent-300',

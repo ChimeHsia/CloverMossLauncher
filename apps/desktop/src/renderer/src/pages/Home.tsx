@@ -1,36 +1,27 @@
 import {
   ChevronDown,
-  CircleDot,
   ExternalLink,
   FolderCog,
-  Layers3,
+  ListChecks,
   Play,
   Settings2,
   Square,
   SquareTerminal,
-  Wand2,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Select as AppsSelect } from '@openai/apps-sdk-ui/components/Select'
 import { Ipc } from '@shared/channels'
-import type { LaunchCase, LaunchRow, LaunchStartInput } from '@shared/types'
+import type { LaunchRow, LaunchStartInput } from '@shared/types'
 import { call } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
+import { Button, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
 
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string
-  children: React.ReactNode
-  className?: string
-}): React.JSX.Element {
+function Field({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <label className={cn('flex min-w-0 flex-col gap-1', className)}>
-      <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
+    <label className="flex min-w-0 flex-col gap-0.5">
+      <span className="px-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">
         {label}
       </span>
       {children}
@@ -41,30 +32,27 @@ function Field({
 function Select({
   value,
   onChange,
-  children,
+  options,
   disabled,
   className,
 }: {
   value: string
   onChange: (value: string) => void
-  children: React.ReactNode
+  options: Array<{ value: string; label: string; disabled?: boolean }>
   disabled?: boolean
   className?: string
 }): React.JSX.Element {
   return (
-    <select
+    <AppsSelect
+      size="2xs"
+      block={false}
+      side="top"
       value={value}
+      options={options}
       disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className={cn(
-        'h-8 max-w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] text-[var(--color-text)] outline-none transition',
-        'hover:border-[var(--color-border)] focus:border-accent-500/60 focus:ring-1 focus:ring-accent-500/20',
-        'disabled:cursor-default disabled:opacity-55',
-        className,
-      )}
-    >
-      {children}
-    </select>
+      onChange={(option) => onChange(option.value)}
+      triggerClassName={cn('min-w-[92px] text-[10.5px]', className)}
+    />
   )
 }
 
@@ -76,7 +64,7 @@ const stateLabel: Record<LaunchRow['state'], string> = {
   failed: '失败',
 }
 
-const stateTone: Record<LaunchRow['state'], 'neutral' | 'accent' | 'amber' | 'red'> = {
+const stateTone: Record<LaunchRow['state'], 'neutral' | 'amber' | 'accent' | 'red'> = {
   queued: 'neutral',
   starting: 'amber',
   running: 'accent',
@@ -91,12 +79,12 @@ export function HomePage(): React.JSX.Element {
   const devices = useApp((state) => state.devices)
   const cases = useApp((state) => state.cases)
   const launchRows = useApp((state) => state.launchRows)
+  const jobs = useApp((state) => state.jobs)
   const env = useApp((state) => state.env)
   const startLaunch = useApp((state) => state.startLaunch)
   const stopLaunch = useApp((state) => state.stopLaunch)
   const setActiveJob = useApp((state) => state.setActiveJob)
   const refreshCases = useApp((state) => state.refreshCases)
-  const notificationsOpen = useApp((state) => state.notificationsOpen)
 
   const [caseId, setCaseId] = useState('new')
   const [backend, setBackend] = useState<'official' | 'clover'>('official')
@@ -123,7 +111,6 @@ export function HomePage(): React.JSX.Element {
 
   const selectedCase = cases.find((item) => item.id === caseId)
   const instance = instances.find((item) => item.id === instanceId)
-  const device = devices.find((item) => item.id === deviceId)
 
   useEffect(() => {
     if (!selectedCase) return
@@ -137,12 +124,17 @@ export function HomePage(): React.JSX.Element {
   }, [selectedCase])
 
   const activeRows = useMemo(() => {
-    const rows = launchRows.filter((row) => row.state === 'queued' || row.state === 'starting' || row.state === 'running')
+    const rows = launchRows.filter(
+      (row) => row.state === 'queued' || row.state === 'starting' || row.state === 'running',
+    )
     return rows.sort((a, b) => {
       if (sort === 'name') return a.caseName.localeCompare(b.caseName)
       return (b.startedAt ?? b.queuedAt).localeCompare(a.startedAt ?? a.queuedAt)
     })
   }, [launchRows, sort])
+
+  const runningCount = activeRows.filter((row) => row.state === 'running' || row.state === 'starting').length
+  const queuedCount = activeRows.filter((row) => row.state === 'queued').length
 
   async function launch(): Promise<void> {
     if (!instanceId) {
@@ -170,11 +162,7 @@ export function HomePage(): React.JSX.Element {
         extraArgs,
       }
       const row = await startLaunch(input)
-      if (row.state === 'queued') {
-        toast.push(`设备被占用，已排队：${row.caseName}`, 'info')
-      } else {
-        toast.push(`已启动 ${row.caseName}`, 'success')
-      }
+      toast.push(row.state === 'queued' ? '设备被占用，已排队' : '已启动', 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     } finally {
@@ -208,144 +196,148 @@ export function HomePage(): React.JSX.Element {
     openWindow('terminal')
   }
 
+  function deviceName(id: string): string {
+    return devices.find((item) => item.id === id)?.name ?? id
+  }
+
   return (
-    <div className={cn('pb-16 transition-[padding] duration-200', notificationsOpen && 'pr-[352px]')}>
+    <div className="flex flex-1 flex-col">
       <header className="pt-4">
-        <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
-          <CircleDot className="size-3 text-accent-300" />
+        <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
           Launcher
         </div>
-        <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-[-0.02em]">
+        <h1 className="mt-1.5 text-[25px] font-semibold leading-tight tracking-[-0.02em]">
           今天想启动哪个 Case？
         </h1>
-        <p className="mt-1.5 max-w-[560px] text-[12px] leading-5 text-[var(--color-text-secondary)]">
-          选择后端、实例与设备，启动官方 Gradio 或你自己的 Clover Case；运行中的任务会收在下面。
+        <p className="mt-1 max-w-[560px] text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
+          选好后端、实例与设备，在底部启动。运行中的 Case 会像任务表一样收在启动条上方。
         </p>
       </header>
 
-      <Card className="relative mt-6 p-4">
-        <div className="flex flex-wrap items-end gap-2.5">
-          <Field label="Case" className="min-w-[130px]">
-            <Select
-              value={caseId}
-              onChange={(value) => {
-                setCaseId(value)
-                if (value === 'new') setCaseName('')
-              }}
+      <div className="min-h-[18vh] flex-1" />
+
+      {activeRows.length > 0 ? (
+        <section className="overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.025]">
+          <button
+            type="button"
+            onClick={() => setCollapsed((value) => !value)}
+            className="flex h-10 w-full items-center gap-2 px-3 text-left hover:bg-white/[0.025]"
+          >
+            <ListChecks className="size-3.5 text-[var(--color-text-tertiary)]" />
+            <span className="text-[11px] font-medium">运行中的 Case</span>
+            <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
+              {runningCount} 进行中 · {queuedCount} 待处理
+            </span>
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as 'started' | 'name')}
+              onClick={(event) => event.stopPropagation()}
+              className="ml-auto h-6 rounded-[3px] border border-[var(--color-border-subtle)] bg-transparent px-1 text-[9px] text-[var(--color-text-tertiary)] outline-none"
             >
-              <option value="new">新建启动配置</option>
-              {cases.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+              <option value="started">启动时间</option>
+              <option value="name">名称</option>
+            </select>
+            <ChevronDown
+              className={cn('size-3.5 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
+            />
+          </button>
 
-          <Field label="后端" className="min-w-[105px]">
-            <Select
-              value={backend}
-              onChange={(value) => setBackend(value as 'official' | 'clover')}
-              disabled={Boolean(selectedCase)}
-            >
-              <option value="official">官方 Gradio</option>
-              <option value="clover">Clover Case（下一轮）</option>
-            </Select>
-          </Field>
+          {!collapsed ? (
+            <div className="border-t border-[var(--color-border-subtle)]">
+              {activeRows.map((row) => {
+                const running = row.state === 'running' || row.state === 'starting'
+                const queued = row.state === 'queued'
+                const job = jobs.find((item) => item.id === row.jobId)
+                return (
+                  <div
+                    key={row.id}
+                    className="flex h-11 items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 last:border-0"
+                  >
+                    <span
+                      className={cn(
+                        'size-1.5 shrink-0 rounded-full',
+                        queued ? 'bg-neutral-500' : running ? 'bg-accent-400' : 'bg-red-400',
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate text-[10.5px] font-medium">{row.caseName}</span>
+                        <span className="shrink-0 text-[9px] text-[var(--color-text-tertiary)]">
+                          {stateLabel[row.state]}
+                        </span>
+                      </div>
+                      <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
+                        {row.instanceName} · {deviceName(row.deviceId)}
+                        {job?.url ? ' · 已就绪' : ''}
+                      </div>
+                    </div>
+                    {row.state === 'running' && job?.progress.percent ? (
+                      <div className="hidden w-16 shrink-0 sm:block">
+                        <div className="h-px overflow-hidden rounded-full bg-white/[0.08]">
+                          <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      {job?.url ? (
+                        <IconButton
+                          label="打开界面"
+                          className="size-6"
+                          onClick={() => void call(Ipc.openExternal, { url: job.url! })}
+                        >
+                          <ExternalLink className="size-3" />
+                        </IconButton>
+                      ) : null}
+                      <IconButton
+                        label="终端"
+                        className="size-6"
+                        onClick={() => openTerminal(row)}
+                        disabled={!row.jobId}
+                      >
+                        <SquareTerminal className="size-3" />
+                      </IconButton>
+                      <IconButton
+                        label={queued ? '取消排队' : '停止'}
+                        className="size-6 text-red-300 hover:bg-red-500/10"
+                        onClick={() => void stopLaunch(row.id)}
+                      >
+                        <Square className="size-2.5" />
+                      </IconButton>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
-          <Field label="实例" className="min-w-[150px]">
-            <Select
-              value={instanceId}
-              onChange={setInstanceId}
-              disabled={Boolean(selectedCase) || instances.length === 0}
-            >
-              {instances.length === 0 ? <option value="">没有实例</option> : null}
-              {instances.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="设备" className="min-w-[130px]">
-            <Select value={deviceId} onChange={setDeviceId} disabled={Boolean(selectedCase)}>
-              {devices.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="档位" className="min-w-[100px]">
-            <Select
-              value={profile}
-              onChange={(value) => setProfile(value as 'base' | 'dmd8')}
-              disabled={Boolean(selectedCase)}
-            >
-              <option value="dmd8">8 步 DMD</option>
-              <option value="base">50 步质量</option>
-            </Select>
-          </Field>
-
-          <div className="ml-auto flex items-center gap-1">
-            <IconButton
-              label="打开实例设置"
-              className="size-8"
-              onClick={() => instanceId && navigate(`/instances/${instanceId}`)}
-              disabled={!instanceId}
-            >
-              <Settings2 className="size-3.5" />
-            </IconButton>
-            <IconButton
-              label="高级选项"
-              className={cn('size-8', advancedOpen && 'bg-white/[0.07] text-[var(--color-text)]')}
-              onClick={() => setAdvancedOpen((value) => !value)}
-            >
-              <FolderCog className="size-3.5" />
-            </IconButton>
-            <Button tone="primary" onClick={() => void launch()} disabled={launching || !instanceId || !deviceId}>
-              <span className="inline-flex items-center gap-1.5">
-                {launching ? <Spinner className="size-3.5" /> : <Play className="size-3.5" />}
-                {launching ? '启动中' : '启动'}
-              </span>
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9.5px] text-[var(--color-text-tertiary)]">
-          <span>{device ? `${device.name} · ${device.detail}` : '没有可用设备'}</span>
-          {instance ? <span>固定 {instance.shortCommit}</span> : null}
-          {env ? <span>推荐 {env.recommendation.width}² · {env.recommendation.steps} 步</span> : null}
-          <span className="ml-auto">新的启动条会永远置顶，运行中的 Case 收在下面。</span>
-        </div>
-
+      <div className="sticky bottom-0 z-20 mt-3">
         {advancedOpen ? (
-          <div className="mt-3 border-t border-[var(--color-border-subtle)] pt-3">
-            <div className="flex flex-wrap items-end gap-2.5">
-              <Field label="Case 名称" className="min-w-[180px] flex-1">
+          <div className="glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 rounded-[6px] border border-[var(--color-border)] p-3 shadow-2xl">
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="Case 名称">
                 <input
                   value={caseName}
                   onChange={(event) => setCaseName(event.target.value)}
                   placeholder="例如：日常 1024 / 官方 Gradio"
-                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] outline-none focus:border-accent-500/60"
+                  className="h-7 w-[220px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] outline-none focus:border-accent-500/60"
                 />
               </Field>
-              <Field label="Gradio 端口（可空）" className="w-[130px]">
+              <Field label="Gradio 端口">
                 <input
                   value={port}
                   onChange={(event) => setPort(event.target.value.replace(/[^0-9]/g, ''))}
                   placeholder="自动"
-                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 text-[11.5px] tabular-nums outline-none focus:border-accent-500/60"
+                  className="h-7 w-[90px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 text-[10.5px] tabular-nums outline-none focus:border-accent-500/60"
                 />
               </Field>
-              <Field label="额外参数" className="min-w-[180px] flex-[2]">
+              <Field label="额外参数">
                 <input
                   value={extraArgs}
                   onChange={(event) => setExtraArgs(event.target.value)}
                   placeholder="--flag value"
-                  className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.045] px-2 font-mono text-[10.5px] outline-none focus:border-accent-500/60"
+                  className="h-7 w-[220px] rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2 font-mono text-[9.5px] outline-none focus:border-accent-500/60"
                 />
               </Field>
               <Button tone="secondary" onClick={() => void saveCase()} disabled={!instanceId}>
@@ -354,118 +346,99 @@ export function HomePage(): React.JSX.Element {
             </div>
           </div>
         ) : null}
-      </Card>
 
-      <div className="mt-6 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-        >
-          <ChevronDown className={cn('size-3.5 transition-transform', collapsed && '-rotate-90')} />
-          运行中的 Case
-          <span className="text-[var(--color-text-tertiary)]">{activeRows.length}</span>
-        </button>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9.5px] text-[var(--color-text-tertiary)]">排序</span>
-          <Select value={sort} onChange={(value) => setSort(value as 'started' | 'name')} className="h-7 text-[10.5px]">
-            <option value="started">启动时间</option>
-            <option value="name">名称</option>
-          </Select>
+        <div className="glass-strong flex flex-wrap items-end gap-2 rounded-[6px] border border-[var(--color-border)] p-2">
+          <Field label="Case">
+            <Select
+              value={caseId}
+              onChange={(value) => {
+                setCaseId(value)
+                if (value === 'new') setCaseName('')
+              }}
+              options={[
+                { value: 'new', label: '新建配置' },
+                ...cases.map((item) => ({ value: item.id, label: item.name })),
+              ]}
+              className="min-w-[110px]"
+            />
+          </Field>
+          <Field label="后端">
+            <Select
+              value={backend}
+              onChange={(value) => setBackend(value as 'official' | 'clover')}
+              options={[
+                { value: 'official', label: '官方 Gradio' },
+                { value: 'clover', label: 'Clover（下一轮）' },
+              ]}
+              disabled={Boolean(selectedCase)}
+              className="min-w-[92px]"
+            />
+          </Field>
+          <Field label="实例">
+            <Select
+              value={instanceId}
+              onChange={setInstanceId}
+              options={
+                instances.length === 0
+                  ? [{ value: '', label: '没有实例', disabled: true }]
+                  : instances.map((item) => ({ value: item.id, label: item.name }))
+              }
+              disabled={Boolean(selectedCase) || instances.length === 0}
+              className="min-w-[140px]"
+            />
+          </Field>
+          <Field label="设备">
+            <Select
+              value={deviceId}
+              onChange={setDeviceId}
+              options={devices.map((item) => ({ value: item.id, label: item.name }))}
+              disabled={Boolean(selectedCase)}
+              className="min-w-[110px]"
+            />
+          </Field>
+          <Field label="档位">
+            <Select
+              value={profile}
+              onChange={(value) => setProfile(value as 'base' | 'dmd8')}
+              options={[
+                { value: 'dmd8', label: '8 步 DMD' },
+                { value: 'base', label: '50 步质量' },
+              ]}
+              disabled={Boolean(selectedCase)}
+              className="min-w-[88px]"
+            />
+          </Field>
+
+          <div className="ml-auto flex items-center gap-1">
+            <IconButton
+              label="打开实例设置"
+              className="size-7"
+              onClick={() => instanceId && navigate(`/instances/${instanceId}`)}
+              disabled={!instanceId}
+            >
+              <Settings2 className="size-3.5" />
+            </IconButton>
+            <IconButton
+              label="高级选项"
+              className={cn('size-7', advancedOpen && 'bg-white/[0.07] text-[var(--color-text)]')}
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              <FolderCog className="size-3.5" />
+            </IconButton>
+            <Button tone="primary" onClick={() => void launch()} disabled={launching || !instanceId || !deviceId}>
+              <span className="inline-flex items-center gap-1.5">
+                {launching ? <Spinner className="size-3" /> : <Play className="size-3" />}
+                {launching ? '启动中' : '启动'}
+              </span>
+            </Button>
+          </div>
         </div>
-      </div>
-
-      {!collapsed ? (
-        <div className="mt-2 space-y-1.5">
-          {activeRows.length === 0 ? (
-            <div className="rounded-[8px] border border-dashed border-[var(--color-border-subtle)] px-4 py-8 text-center text-[11px] text-[var(--color-text-tertiary)]">
-              还没有运行中的 Case。上面的启动条会一直留在这里。
-            </div>
-          ) : (
-            activeRows.map((row) => {
-              const running = row.state === 'running' || row.state === 'starting'
-              const queued = row.state === 'queued'
-              const job = useApp.getState().jobs.find((item) => item.id === row.jobId)
-              return (
-                <div
-                  key={row.id}
-                  className="glass flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[7px] px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-[11.5px] font-medium">{row.caseName}</span>
-                      <Pill tone={stateTone[row.state]}>{stateLabel[row.state]}</Pill>
-                      {row.state === 'queued' ? (
-                        <span className="text-[9px] text-[var(--color-text-tertiary)]">等待设备</span>
-                      ) : null}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9.5px] text-[var(--color-text-tertiary)]">
-                      <span>{row.instanceName}</span>
-                      <span>{row.backend === 'official' ? '官方 Gradio' : 'Clover Case'}</span>
-                      <span>{devices.find((item) => item.id === row.deviceId)?.name ?? row.deviceId}</span>
-                      <span>{row.profile === 'dmd8' ? '8 步 DMD' : '50 步质量'}</span>
-                      {row.error ? <span className="text-red-300">{row.error}</span> : null}
-                    </div>
-                  </div>
-
-                  {row.state === 'running' && job?.progress.percent ? (
-                    <div className="hidden w-28 shrink-0 sm:block">
-                      <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.08]">
-                        <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
-                      </div>
-                      <div className="mt-1 text-right text-[8.5px] tabular-nums text-[var(--color-text-tertiary)]">
-                        {Math.round(job.progress.percent)}%
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="ml-auto flex items-center gap-1">
-                    {job?.url ? (
-                      <Button
-                        tone="secondary"
-                        onClick={() => void call(Ipc.openExternal, { url: job.url! })}
-                      >
-                        <span className="inline-flex items-center gap-1.5">
-                          <ExternalLink className="size-3" /> 打开界面
-                        </span>
-                      </Button>
-                    ) : null}
-                    <Button tone="secondary" className={!row.jobId ? 'opacity-40' : undefined} onClick={() => openTerminal(row)} disabled={!row.jobId}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <SquareTerminal className="size-3" /> 终端
-                      </span>
-                    </Button>
-                    {running || queued ? (
-                      <Button tone="ghost" onClick={() => void stopLaunch(row.id)}>
-                        <span className="inline-flex items-center gap-1.5 text-red-300">
-                          <Square className="size-3" /> {queued ? '取消' : '停止'}
-                        </span>
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      ) : null}
-
-      <div className="mt-8 flex items-center gap-2 text-[9.5px] text-[var(--color-text-tertiary)]">
-        <Layers3 className="size-3" />
-        创作窗口负责 JSON、画布与图层；启动器只负责启动与监视。
-        <button
-          type="button"
-          onClick={() => openWindow('creator')}
-          className="ml-1 inline-flex items-center gap-1 text-accent-300 hover:underline"
-        >
-          <Wand2 className="size-3" /> 打开创作窗口
-        </button>
       </div>
 
       {instances.length === 0 ? (
-        <div className="mt-6 flex items-center justify-between rounded-[8px] border border-[var(--color-border-subtle)] px-4 py-3">
-          <p className="text-[11px] text-[var(--color-text-secondary)]">还没有实例。先创建一个版本实例，再回来启动。</p>
-          <Button tone="primary" onClick={() => navigate('/instances')}>
+        <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-tertiary)]">
+          <span>还没有实例。先创建一个版本实例。</span>
+          <Button tone="ghost" onClick={() => navigate('/instances')}>
             创建实例
           </Button>
         </div>

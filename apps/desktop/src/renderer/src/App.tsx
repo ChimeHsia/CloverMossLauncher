@@ -59,7 +59,7 @@ function LauncherShell(): React.JSX.Element {
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <main className="content-surface min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1100px] px-6 py-5">
+          <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1100px] flex-col px-6 py-5">
             <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<HomePage />} />

@@ -29,7 +29,7 @@ export function Oobe({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[2px]">
       <div
-        className="glass-strong flex w-full max-w-[560px] flex-col overflow-hidden rounded-[8px] border border-[var(--color-border)] shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+        className="glass-strong flex w-full max-w-[560px] flex-col overflow-hidden rounded-[6px] border border-[var(--color-border)] shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
         role="dialog"
         aria-modal="true"
         aria-label="初始设置"
