@@ -216,8 +216,7 @@ export function HomePage(): React.JSX.Element {
 
       <div className="min-h-[18vh] flex-1" />
 
-      {activeRows.length > 0 ? (
-        <section className="overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.025]">
+      <section className="overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] bg-white/[0.025]">
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
@@ -228,21 +227,22 @@ export function HomePage(): React.JSX.Element {
             <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
               {runningCount} 进行中 · {queuedCount} 待处理
             </span>
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as 'started' | 'name')}
-              onClick={(event) => event.stopPropagation()}
-              className="ml-auto h-6 rounded-[3px] border border-[var(--color-border-subtle)] bg-transparent px-1 text-[9px] text-[var(--color-text-tertiary)] outline-none"
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                setSort((value) => (value === 'started' ? 'name' : 'started'))
+              }}
+              className="ml-auto inline-flex items-center gap-1 text-[9px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
             >
-              <option value="started">启动时间</option>
-              <option value="name">名称</option>
-            </select>
+              {sort === 'started' ? '启动时间' : '名称'}
+            </button>
             <ChevronDown
-              className={cn('size-3.5 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
+              className={cn('ml-0.5 size-4 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
             />
           </button>
 
-          {!collapsed ? (
+          {!collapsed && activeRows.length > 0 ? (
             <div className="border-t border-[var(--color-border-subtle)]">
               {activeRows.map((row) => {
                 const running = row.state === 'running' || row.state === 'starting'
@@ -309,8 +309,7 @@ export function HomePage(): React.JSX.Element {
               })}
             </div>
           ) : null}
-        </section>
-      ) : null}
+      </section>
 
       <div className="sticky bottom-0 z-20 mt-3">
         {advancedOpen ? (
