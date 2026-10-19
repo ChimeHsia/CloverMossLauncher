@@ -82,7 +82,7 @@
 - SSH host 的执行仍通过系统 `ssh`，远端维护自己的 mirror/worktree/venv；
 - 许可：窗口明确标为 `Kohaku Trainer · External`，展示 KohakuMoss License 1.0 链接。
 
-### 4.2.1 原桥接设计
+### 4.2.1 原桥接设计（未实现，已被 4.2 取代）
 
 ```
 launcher ── 发现/体检 ──> 用户自备环境（uv/conda/venv）
@@ -102,10 +102,12 @@ launcher ── 发现/体检 ──> 用户自备环境（uv/conda/venv）
 
 ### 4.3 品牌与分发
 
-- UI 里该功能标注为 **"Kohaku trainer（外部）"**，并链接上游仓库；
-- 安装包**不捆绑** kohakumoss；首次使用引导用户自行安装；
-- 若未来要做"一键安装"，改为独立安装器并单独展示其许可，主产品名不变；
-  是否触发第 10 条由法务确认，必要时把该功能独立命名（含 "Kohaku"）。
+- UI 里该功能标注为 **"Kohaku Trainer · External"**，并链接上游仓库与许可；
+- 安装包**不捆绑** kohakumoss 源码或 Python 依赖；
+- 首次使用由启动器在用户配置的 `trainerRoot` 里 clone 上游源码并创建独立环境，
+  这是**运行时部署**，不是随安装包分发；
+- 若未来要随包分发或做独立安装器，需重新评估 KohakuMoss License 1.0 第 10 条，
+  必要时把该功能独立命名（含 "Kohaku"）。
 
 ## 5. 我们仍然复用什么
 

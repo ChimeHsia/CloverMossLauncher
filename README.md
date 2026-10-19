@@ -1,93 +1,118 @@
 # CloverMoss Launcher
 
-> 为 [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) 做的跨平台启动器：
-> 像 Minecraft Launcher 一样选版本、选设备、启动；创作和终端各有一个独立窗口。
+> MOSS-Image 的桌面启动器与工作台：像 Minecraft Launcher 一样选版本、选设备、启动；
+> 创作、终端和 Kohaku Trainer 各有独立窗口。
 
-**状态：v0.4 四窗口启动器。** 启动器 / 创作 / 终端 / Kohaku Trainer；OOBE、启动条、
-运行栈、官方 Gradio、xterm、Trainer 部署与版本/环境基座已落地。Clover 常驻后端、
-训练执行与 SSH host 在下一阶段。
+**当前状态：** 本地开发版 `0.1.0`；设计与文档修订号 **v0.4**（修订号不等于应用版本）。
+M1–M4 基础、四窗口 UI、画廊、诊断、训练器部署/版本/环境管理与训练窗口代码已落地；
+真实 27 GB 权重生成、真实 CUDA 训练、SSH 远端执行尚未验收。
 
 ![首次启动 OOBE](docs/assets/oobe.webp)
 
+## 现在能做什么
+
+| 能力 | 状态 | 说明 |
+| --- | --- | --- |
+| 环境报告 | ✅ | 系统/GPU/内存/磁盘/Python/git/网络/端口 + 推荐档位 |
+| 实例管理 | 🟡 | bare mirror/worktree/固定 SHA/删除；更新/回滚 UI 未做 |
+| 运行时 | ✅ | 共享/独立 venv、依赖锁哈希、uv/pip、安装日志 |
+| 模型/适配器 | 🟡 | 目录、下载、HF 兼容缓存；实例绑定/启用/强度 UI 未做 |
+| 画廊 | ✅ | 启动器全局入口；可配置目录；分页 + `content-visibility` |
+| 通知/OOBE | ✅ | 单矩形通知抽屉；OOBE 三行环境清单，可本次跳过 |
+| 启动条/运行栈 | ✅ | Case/后端/实例/设备/档位/高级；同设备默认排队 |
+| 官方 Gradio | 🟡 | 代码路径已接；缺 27 GB 权重，未做真机验收 |
+| xterm 终端 | ✅ | 推理/训练 Case 共用；stdout/stderr/stdin、停止/重启 |
+| 创作台/布局标注 | ✅ | 画布、区域、官方 layout JSON 编译；生成入口未接 |
+| 诊断 | ✅ | 规则匹配、去重、toast 预算、解决动作 |
+| Kohaku Trainer | 🟡 | 仓库/版本/环境/表单/命令预览/本机 CUDA 训练路径；真实训练未验收 |
+| SSH 训练主机 | 🟡 | host CRUD 与持久化；连接与远端执行未接 |
+| Clover 常驻后端 | ⬜ | 未实现；创作窗口“开始生成”暂不接任务 |
+| Project/图层 | ⬜ | 创作文档仍只在内存；Project 与 Case 解耦的设计未落地 |
+| WebUI/应用内更新 | ⬜ | 未实现 |
+
+> 完整、可核对的完成度与证据见 [docs/status.md](docs/status.md)。README 只做总览，
+> 不把“代码路径存在”写成“已验收”。
+
 ## 四窗口
 
-| 窗口 | 负责 |
-| --- | --- |
-| **启动器** | 首页启动条、运行栈、实例、模型、画廊、诊断、设置、OOBE |
-| **创作** | Studio、layout 画布、JSON 编译、画廊 |
-| **终端** | 左侧 Case 列表、右侧 xterm、stdout/stderr/stdin |
-| **Kohaku Trainer** | trainer 仓库部署、版本/worktree、环境、训练表单与 config 预览（外部） |
+| 窗口 | 尺寸 | 负责 |
+| --- | --- | --- |
+| **启动器** | 1180×760 | 首页启动条/运行栈、实例、模型、画廊、训练、诊断、设置、OOBE |
+| **创作** | 1320×860 | Studio、layout 画布、JSON 编译、画廊 |
+| **终端** | 1120×720 | Cases 列表 + xterm；推理与训练共用 |
+| **Kohaku Trainer** | 1280×840 | 外部训练器配置、命令预览、doctor、训练运行 |
 
-窗口共用同一套 React 前端和深灰亚克力 token；标题栏居中显示 `CloverMoss` +
-`dev`/`release` + 版本号，没有侧栏 Logo。
+四个窗口共用同一套 React 前端和深灰亚克力 token。标题栏居中显示应用名 +
+`dev/release` + 版本号；启动器窗口没有侧栏 Logo。
 
 ![启动器首页](docs/assets/home.webp)
 
-## 启动条与运行栈
+## 启动器：启动条与运行栈
 
 ```text
-[Case] [后端：官方 Gradio / Clover] [实例] [设备] [档位] [⚙] [启动]
+[Case] [后端：官方 Gradio / Clover（占位）] [实例] [设备] [档位] [高级] [启动]
 ```
 
-- 启动条固定在首页底部，低高度、宽幅；启动后这一条锁定为 `运行中 / 停止 / 终端 / 打开界面`；
-- 上方永远保留一条新的空白启动条；
-- 运行中的 Case 收在下方，可折叠、按名称或启动时间排序；
-- 同设备默认只跑 1 个真实任务，其余排队；可在高级里强制并发（后续）；
-- 设备列表自动枚举（Apple MPS / NVIDIA CUDA / CPU），暂不做维护页；
-- 官方 Gradio 由实例里的 `gradio_app.py` 启动；Clover 常驻后端下一轮接入。
-
-## 视觉
-
-- 中性深灰亚克力，不用深蓝底、不用蓝色渐变；
-- 文字为冷调浅蓝白，浅蓝只做激活/焦点/少量图标；
-- 标题栏/侧栏恢复薄亚克力透明度，内容区后亚克力，卡片更薄；
-- 背景图铺满整个右侧主区域，并同样进入实例/模型/画廊/设置/终端；
-- 启动条用 Apps SDK UI Select；按钮/分段控件按 Fluent 2 收紧到 30–32 px、4–6 px 圆角，宽度随文字伸展；
-- 首页主区域有 16:9 背景图占位，设置里可以更换；
-- 通知是右上角单独的大矩形，用标题/段落/发丝线分区；与底部启动条不在一个视觉层级；
-- 只保留深色主题，浅色主题已移除。
+- 启动条固定在首页底部、固定宽度（约 880 px）并在主区域居中；
+- 启动后这一条锁定为 `停止 / 终端 / 打开界面 / 运行中`；
+- 上方新增一条新的空白启动条；
+- 运行中的 Case 收在启动条上方的折叠任务表里，可按名称/启动时间排序；
+- 同设备默认只跑 1 个真实任务，其余排队。**Case 配置写入 `cases.json`；
+  排队只在当前启动器会话内，重启丢失**；
+- 设备自动枚举 Apple MPS / NVIDIA CUDA / CPU；设备维护页未做；
+- `official` 后端启动实例里的 `gradio_app.py`；`Clover` 常驻后端未实现。
 
 ![创作窗口](docs/assets/studio.webp)
 
+## 创作、画廊、终端
+
+- **创作窗口**：Studio 支持 layout 画布、区域增删/移动/缩放、官方 layout JSON
+  编译与 Prompt 插入；当前“开始生成”不接 Clover 后端。
+- **画廊**：启动器侧栏的全局工具；读取 outputs、实例 outputs 与自定义目录；
+  48 张/页 + IntersectionObserver + `content-visibility`；支持详情、元数据、
+  “用作布局底图”跨窗口交接。
+- **终端**：独立 xterm 窗口；左侧 Cases，右侧 stdout/stderr/stdin；
+  推理与训练任务都进入同一列表，行上标 `推理 / 训练`。
+
 ![终端窗口](docs/assets/terminal.webp)
+
+## Kohaku Trainer（外部）
+
+- 训练页把 `KohakuBlueleaf/KohakuMossTrainer` runtime clone 到用户配置的
+  `trainerRoot`；**不打包、不 submodule**；
+- bare mirror + per-commit worktree；环境按 lock hash 创建/复用；
+- Training 页支持仓库更新、commit 选择、创建版本、安装环境、`kohakumoss-doctor`；
+- Trainer 窗口支持版本/权重/数据集/算法/steps/LR/Dim/Alpha/microbatch/分辨率/
+  高级覆盖、命令预览；
+- CUDA 主机上走训练/检查数据/缓存文本/潜变量路径（代码已接，真实 CUDA 未验收）；
+  训练 job 进入共享终端，解析 step/loss；导出/采样目前是可复制的命令入口；
+- SSH host 可增删并持久化；计划使用系统 ssh + 密钥/agent，**连接与远端执行未接**；
+- 本机 M3 没有 CUDA：只能部署/管理/编辑，不能真实验收训练。
 
 ![训练页](docs/assets/training.webp)
 
 ![训练窗口](docs/assets/trainer.webp)
 
-### Kohaku Trainer（外部）
+## 视觉规范
 
-- trainer 仓库 runtime clone 到用户配置的 `trainerRoot`，**不打包、不 submodule**；
-- bare mirror + per-commit worktree；环境按 lock hash 创建/复用；
-- 训练窗口表单生成 `kohakumoss-config` / `kogine` 命令，可预览/复制；
-- 页面提供版本、环境安装与 `kohakumoss-doctor`；SSH host 可增删（连接/执行下一阶段）；
-- 训练 job 进入共享终端，解析 step/loss；数据检查/文本/潜变量缓存可启动，导出/采样提供命令入口；
-- CUDA 主机上可启动训练并解析 step/loss；macOS 无 CUDA，只能部署/管理/编辑；
-- 数据检查/文本缓存/潜变量缓存有入口；导出/采样与 SSH host 下一阶段；
-- 训练窗口标题明确为 `Kohaku Trainer · External`，展示 KohakuMoss License 1.0。
+- 中性深灰亚克力，不用深蓝底、不用蓝色渐变、无绿色；
+- 冷调浅蓝白文字，浅蓝只做激活/焦点/少量图标；
+- 标题栏/侧栏薄亚克力，内容区后亚克力，卡片更薄；背景图铺满右侧主区域
+  并进入所有页面与终端；
+- 首页 16:9 背景图可在设置里更换，默认占位图：
+  `apps/desktop/src/renderer/src/assets/home-background.webp`；
+- Fluent 2 取向：控件 4–6 px 圆角、约 30 px 高、宽度随文字；启动条使用
+  Apps SDK UI Select；
+- 通知固定在右上角、单个大矩形，用标题/段落/发丝线分区；
+- 只保留深色主题；浅色主题已移除（设置 schema 中的 `theme` 仅作迁移残留）。
 
 ## OOBE
 
-启动时检查：至少一个实例满足 `runtime ready + 模型可用`。
+启动时检查是否至少有一个实例满足 `runtime ready + 模型可用`：
 
-- 不满足 → 每次启动默认弹出单页三行清单：实例 / 运行时 / 模型；
-- 可关闭（本次跳过），下次启动仍不完整会再出现；
-- 每行直接给动作，不滥用圆角，不做多步向导。
-
-## 已有能力
-
-| 能力 | 状态 |
-| --- | --- |
-| 环境报告 / 网络镜像 / 公告更新 | ✅ |
-| git 实例（固定 commit、稳定版标记） | ✅ |
-| 共享/独立运行时 + 依赖安装 | ✅ |
-| 模型/适配器目录与 HF 缓存下载 | ✅ |
-| 创作台 + 官方 layout JSON 编译器 | ✅（生成下一轮） |
-| 画廊（分页 + content-visibility + clover 协议） | ✅ |
-| Supervisor + 薄 runner + tqdm/错误解析 + 诊断 | ✅（真实 27GB 权重待验收） |
-| 官方 Gradio 启动 | ✅ 代码路径，缺权重时预检拦截 |
-| xterm 终端 | ✅ |
-| Clover 常驻后端 / Project 持久化 / WebUI | ⏳ 下一轮 |
+- 不满足 → **每次启动**默认弹出单页三行清单：实例 / 运行时 / 模型；
+- 可关闭（本次跳过）；下次启动仍不完整会再出现；
+- 每行直接给动作，不做多步向导，不滥用圆角。
 
 ## 快速开始
 
@@ -105,46 +130,60 @@ pnpm typecheck
 env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smoke
 ```
 
-> 部分 CI / harness 会设置 `ELECTRON_RUN_AS_NODE=1`，需要像上面那样临时去掉。
-> 开发数据在 `.dev-data/`（已忽略）。
+> 部分 harness 会设置 `ELECTRON_RUN_AS_NODE=1`，需要临时去掉。
+> 开发数据写在 `.dev-data/`（已忽略），不会碰真实用户目录。
 
-## 结构
+## 仓库结构
 
 ```text
 apps/desktop/
   src/main/
     windows.ts          启动器 / 创作 / 终端 / Kohaku Trainer 四窗口
-    services/           env / git / runtimes / instances / models / gallery /
-                        supervisor / parsers / diagnostics / devices / cases / onboarding
-    ipc.ts              类型化 IPC + zod
+    services/           env / network / git / runtimes / instances / models /
+                        updates / gallery / supervisor / parsers / diagnostics /
+                        devices / cases / onboarding / trainerGit / trainers / trainingHosts
   src/preload/          contextBridge（windowKind / acrylic / channel）
   src/renderer/
-    src/pages/          Home / Studio / Gallery / Terminal / Training / TrainerWindow / Instances / Models / Diagnostics / Settings
+    src/pages/          Home / Studio / Gallery / Terminal / Training / TrainerWindow /
+                        Instances / InstanceDetail / Models / Diagnostics / Settings
     src/components/     AppTitlebar / layout / NotificationPanel / Oobe / ui
-    src/lib/            layout 编译器 / clover / windows / api
-runner/                 薄 Python runner（NDJSON + simulate）
+    src/lib/            layout 编译器 / clover / windows / api / format / i18n
+  src/shared/           types / channels / zod schemas
+runner/                 薄 Python runner（NDJSON + --simulate）
 release/                更新源、公告、模型目录、错误规则
-docs/                   产品、架构、状态、layout 规范、截图
+docs/                   产品、架构、状态、路线图、layout 规范、ADR、截图
 ```
 
 ## 文档
 
+**事实来源顺序：** [status.md](docs/status.md)（做了什么/验证了什么）→
+[architecture.md](docs/architecture.md)（怎么实现）→
+[product-design.md](docs/product-design.md)（为什么/产品形态）→
+[roadmap.md](docs/roadmap.md)（接下来做什么）。文档索引与维护规则见
+[docs/README.md](docs/README.md)。
+
+- [文档索引](docs/README.md)
 - [产品设计](docs/product-design.md)
 - [架构](docs/architecture.md)
 - [实现状态](docs/status.md)
+- [路线图](docs/roadmap.md)
 - [Layout JSON 规范](docs/layout-schema.md)
 - [Runner](runner/README.md)
-- [路线图](docs/roadmap.md)
+- [决策记录](docs/decisions/0003-launcher-first.md)
+- [未来推理引擎（V2，未排期）](docs/future-inference-engine.md)
 
-## 已知限制
+## 已知边界
 
-- 训练执行只在 CUDA 主机验证；SSH 远端连接/执行、导出/采样真实执行下一阶段；
-- Clover 常驻后端、Project 持久化、图层系统在后续；
-- 创作窗口的“开始生成”目前提示下一轮，不直接起任务；
-- Cases 与排队只在本次启动器会话内保存，重启丢失；
-- 官方 Gradio 真实启动需要 27 GB SFT 权重，本机未下载，未做真机验收；
-- Windows 未实机验证。
+- 真实 27 GB SFT 生成未验收；官方 Gradio 只验证了预检代码路径；
+- 真实 CUDA 训练未验收；`startTrainingJob` 用模拟输出验证过 step/loss 链路；
+- SSH 远端执行、导出/采样真实执行、Clover 常驻后端、Project/图层、队列落盘、
+  设备维护、WebUI、应用内更新、打包/公证均未实现；
+- DMD 8 步 profile 目前只透传，仍走官方 pipeline；真正 8 步采样器未实现；
+- Windows 未实机验证；
+- 开发渲染 CSP 仍允许 `unsafe-eval`，打包前需要收紧。
 
 ## 许可
 
-本仓库代码 MIT。MOSS-Image 权重与代码为 Apache-2.0；不包含 KohakuMossTrainer 代码。
+本仓库代码 MIT。MOSS-Image 权重与代码为 Apache-2.0。
+不包含 KohakuMossTrainer 代码；训练窗口明确标注为外部项目，并展示其
+KohakuMoss License 1.0。
