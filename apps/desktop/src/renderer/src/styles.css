@@ -115,14 +115,7 @@ body {
   -webkit-backdrop-filter: blur(46px) saturate(112%);
 }
 
-/* Fluent 2-ish primitives. */
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
+/* Tailwind's base-layer font reset leaves control typography utilities in charge. */
 button {
   cursor: pointer;
 }
