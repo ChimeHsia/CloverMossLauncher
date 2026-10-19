@@ -29,7 +29,7 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 ## 3. 版本与修订号
 
 - 应用包版本：`package.json` / `release/manifest.json` 的 `0.1.0`；
-- 设计与文档修订号：**v0.4**（2026-10-19）；UI v0.5 与 ADR-0005 是同日增量；
+- 设计与文档修订号：**v0.4**（2026-10-19）；UI v0.5、ADR-0005（发布/更新）与 ADR-0006（系统工具链）是同日增量；
 - UI v0.2 / v0.3 / v0.4 / v0.5、Trainer v0.4 是**设计与交付批次名**，不是应用 semver；
 - 公告里的“开发版 0.1.0”指应用包版本。
 
@@ -45,12 +45,14 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 | [layout-schema.md](layout-schema.md) | 官方 layout JSON 与编辑器字段规范 | 稳定契约 |
 | [backend-and-project.md](backend-and-project.md) | Clover HTTP/WS、token、Project JSON/图层 | 当前 |
 | [release-and-updates.md](release-and-updates.md) | GitHub Release 发布源、release.md 契约、更新下载 | 当前 |
+| [toolchain-and-onboarding.md](toolchain-and-onboarding.md) | 系统 Git/Python 扫描、安装引导、OOBE 工具链准备 | 设计已确认，未实现 |
 | [model-notes.md](model-notes.md) | MOSS-Image 模型结构、预算、采样约定 | 参考资料 |
 | [research/upstream-survey.md](research/upstream-survey.md) | 上游项目调研 | 立项参考 |
 | [future-inference-engine.md](future-inference-engine.md) | V2 自研推理引擎设想 | **未排期** |
 | [benchmarks/v2-mnn-spike.md](benchmarks/v2-mnn-spike.md) | V2 MNN spike | **未排期** |
-| [decisions/](decisions/) | ADR：为什么这样选；发布/更新见 ADR-0005 | 历史依据 |
+| [decisions/](decisions/) | ADR：为什么这样选；发布/更新 ADR-0005、工具链 ADR-0006 | 历史依据 |
 | [../apps/README.md](../apps/README.md) | 开发者手册：目录、窗口、自检命令 | 当前 |
+| [windows-validation-guide.md](windows-validation-guide.md) | Windows 开发环境、场景测试与人工验收记录 | 当前验收手册 |
 | [../runner/README.md](../runner/README.md) | 薄 runner 协议与模拟模式 | 当前 |
 | [../release/README.md](../release/README.md) | 面向用户的公告/发布说明；发布时生成 release.md | 当前公告 |
 

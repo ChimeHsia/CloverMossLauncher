@@ -268,6 +268,10 @@ function quote(value: string): string {
   return process.platform === 'win32' ? `"${value.replace(/"/g, '""')}"` : `'${value.replace(/'/g, `'\\''`)}'`
 }
 
+function powershellLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
 export async function startTrainerRun(settings: Settings, input: TrainerRunInput): Promise<JobRecord> {
   const version = await findTrainerVersion(settings, input.versionId)
   if (!version) throw new Error('训练版本不存在')
@@ -285,20 +289,61 @@ export async function startTrainerRun(settings: Settings, input: TrainerRunInput
     const runName = input.runName.replace(/[^A-Za-z0-9_-]/g, '-') || 'moss-lora'
     const exportPath = `exports/${runName}.safetensors`
     const sampleDir = `samples/${runName}`
+    if (process.platform === 'win32') {
+      const script = join(version.path, `.clover-${input.action}.ps1`)
+      const lines = [
+        "$ErrorActionPreference = 'Stop'",
+        `Set-Location -LiteralPath ${powershellLiteral(version.path)}`,
+        `$runName = ${powershellLiteral(runName)}`,
+        `$weights = ${powershellLiteral(input.weights)}`,
+        `$exportPath = ${powershellLiteral(exportPath)}`,
+        `$sampleDir = ${powershellLiteral(sampleDir)}`,
+        `$checkpointRoot = Join-Path (Join-Path 'runs/moss' $runName) 'checkpoints'`,
+        "$adapter = Get-ChildItem -LiteralPath $checkpointRoot -Filter 'trainable.safetensors' -File -Recurse -ErrorAction SilentlyContinue | Sort-Object { $match = [regex]::Match($_.FullName, '(?i)(?:step|checkpoint)[-_]?(\\d+)'); if ($match.Success) { [long]$match.Groups[1].Value } else { 0 } } | Select-Object -Last 1",
+        "if (-not $adapter) { throw '没有找到可导出的训练 checkpoint' }",
+        `$kogine = Join-Path ${powershellLiteral(join(runtime.path, 'Scripts'))} 'kogine.exe'`,
+        ...(input.action === 'export'
+          ? [
+              "New-Item -ItemType Directory -Force -Path (Split-Path -Parent $exportPath) | Out-Null",
+              "& $kogine run scripts/export/export.py --set \"WEIGHTS=$weights\" --set \"ADAPTER=$($adapter.FullName)\" --set \"OUT=$exportPath\"",
+            ]
+          : [
+              "$exportedAdapter = Join-Path (Get-Location) $exportPath",
+              "if (-not (Test-Path -LiteralPath $exportedAdapter)) { throw '请先导出 adapter，再执行采样' }",
+              "New-Item -ItemType Directory -Force -Path $sampleDir | Out-Null",
+              "& $kogine run scripts/sample/sample.py --set \"WEIGHTS=$weights\" --set \"ADAPTERS=${exportPath}:1.0\" --set \"PROMPT=a lighthouse on a rocky coast at sunset\" --set \"OUT=$sampleDir\"",
+            ]),
+        'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
+        'exit 0',
+      ]
+      await writeFile(script, `${lines.join('\r\n')}\r\n`, 'utf8')
+      return startTrainingJob({
+        versionId: version.id,
+        name: `Kohaku ${input.action === 'export' ? '导出' : '采样'}`,
+        cwd: version.path,
+        command: 'powershell.exe',
+        args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+        totalSteps: 0,
+        runName,
+        action: input.action,
+        weights: input.weights,
+        algo: input.algo,
+      })
+    }
     const find = `ADAPTER="$(find "runs/moss/${runName}/checkpoints" -name trainable.safetensors -print 2>/dev/null | sort -V | tail -1)"`
     const guard = 'test -n "$ADAPTER"'
     const exportCommand = [
       `mkdir -p exports`,
       find,
       guard,
-      `${quote(join(runtime.path, 'bin', process.platform === 'win32' ? 'kogine.exe' : 'kogine'))} run scripts/export/export.py --set WEIGHTS=${quote(input.weights)} --set ADAPTER="$ADAPTER" --set OUT=${quote(exportPath)}`,
+      `${quote(join(runtime.path, 'bin', 'kogine'))} run scripts/export/export.py --set WEIGHTS=${quote(input.weights)} --set ADAPTER="$ADAPTER" --set OUT=${quote(exportPath)}`,
     ].join('\n')
     const sampleCommand = [
       'mkdir -p samples',
       find,
       guard,
       `mkdir -p ${quote(sampleDir)}`,
-      `${quote(join(runtime.path, 'bin', process.platform === 'win32' ? 'kogine.exe' : 'kogine'))} run scripts/sample/sample.py --set WEIGHTS=${quote(input.weights)} --set ADAPTERS=${quote(`${exportPath}:1.0`)} --set PROMPT=${quote('a lighthouse on a rocky coast at sunset')} --set OUT=${quote(sampleDir)}`,
+      `${quote(join(runtime.path, 'bin', 'kogine'))} run scripts/sample/sample.py --set WEIGHTS=${quote(input.weights)} --set ADAPTERS=${quote(`${exportPath}:1.0`)} --set PROMPT=${quote('a lighthouse on a rocky coast at sunset')} --set OUT=${quote(sampleDir)}`,
     ].join('\n')
     const script = join(version.path, `.clover-${input.action}.sh`)
     await writeFile(script, `#!/usr/bin/env bash\nset -euo pipefail\n${input.action === 'export' ? exportCommand : sampleCommand}\n`, { encoding: 'utf8', mode: 0o755 })

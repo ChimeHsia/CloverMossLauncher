@@ -200,7 +200,7 @@ export function HomePage(): React.JSX.Element {
       return
     }
     if (workspace === 'clover') {
-      toast.push('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio', 'info')
+      toast.push('Clover 创作工作台暂未开放，请改用官方 Gradio。', 'info')
       return
     }
     setLaunching(true)
@@ -445,7 +445,7 @@ export function HomePage(): React.JSX.Element {
               onChange={(value) => setWorkspace(value as WorkspaceKind)}
               options={[
                 { value: 'official', label: '官方 Gradio' },
-                { value: 'clover', label: 'Clover（下一轮）' },
+                { value: 'clover', label: 'Clover（暂未开放）', disabled: true },
               ]}
               className="min-w-[112px]"
             />

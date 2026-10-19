@@ -32,6 +32,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | 训练与设备 | 外部 Trainer 版本/环境管理、训练窗口、本机与 SSH host 管理 | 代码已接，真实 CUDA/SSH 待验收 |
 | 远端实例与 Gradio | SSH mirror/worktree/venv、placement、设备过滤、SSH 端口转发与输出回传 | fake ssh 端到端，真实 host 待验收 |
 | 公告与更新 | Release 文档解析、更新提示、下载和 SHA-256 校验 | 代码已接，真实发布包/签名待验收 |
+| 工具链与首次运行 | 系统 Git/Python 扫描、官方安装引导、OOBE 运行环境、缺工具诊断（ADR-0006） | 设计已确认，未实现 |
 
 ### 已知边界
 
@@ -42,6 +43,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 - DMD 8 步档位当前只是参数透传，实际仍走官方 pipeline；真正的 DMD 采样器未实现。
 - 更新流程是“用户批准后下载、校验并打开安装包”，不是静默自动安装；签名、公证和 Windows 实机验证未完成。
 - Clover Creator 是 Electron-only，不提供浏览器 WebUI。未来引擎构想不代表当前实现。
+- 当前仍要求用户系统上有可用的 Git/Python；系统工具扫描、官方安装引导与 OOBE 运行环境尚未实现（ADR-0006）。
 
 逐项状态、测试场景及限制见[实现状态与验证证据](docs/status.md)。
 
@@ -137,6 +139,7 @@ tools/        仓库维护脚本
 | [Layout JSON 规范](docs/layout-schema.md) | 画布坐标、编译格式、校验规则与示例 |
 | [Clover 后端与 Project](docs/backend-and-project.md) | 本机 HTTP/WS API、Project 文件与边界 |
 | [发布与更新](docs/release-and-updates.md) | Release 文档格式、更新流程与发布检查清单 |
+| [工具链与首次运行](docs/toolchain-and-onboarding.md) | 系统 Git/Python 扫描、安装引导、OOBE 准备与缺工具诊断 |
 | [应用开发手册](apps/README.md) | 目录结构、开发命令、场景测试与设计系统 |
 | [Runner 协议](runner/README.md) | Python runner、NDJSON 事件、取消和模拟模式 |
 | [决策记录](docs/decisions/) | 关键架构与产品决策（ADR） |

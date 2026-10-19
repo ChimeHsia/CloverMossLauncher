@@ -18,6 +18,7 @@ interface RawModel {
   role: ModelEntry['role']
   precision: string
   size_bytes?: number
+  files?: string[]
   license: string
   tags?: string[]
   notes?: string
@@ -198,6 +199,46 @@ async function installedAdapters(settings: Settings): Promise<Map<string, number
   return map
 }
 
+function modelCacheDir(settings: Settings, repo: string): string {
+  return join(paths.hub(settings.modelsRoot), `models--${repo.replace('/', '--')}`)
+}
+
+function modelSentinel(settings: Settings, model: Pick<ModelEntry, 'id' | 'repo'>): string {
+  return join(modelCacheDir(settings, model.repo), `.clover-${model.id.replace(/[^A-Za-z0-9._-]/g, '-')}.json`)
+}
+
+function matchesModelFile(pattern: string, file: string): boolean {
+  const normalized = pattern.replace(/\\/g, '/')
+  const escaped = normalized
+    .split('*')
+    .map((part) => part.replace(/[.+^${}()|[\]\\]/g, '\\$&'))
+    .join('.*')
+  return new RegExp(`^${escaped}$`).test(file)
+}
+
+function selectModelFiles(files: HfFile[], patterns?: string[]): HfFile[] {
+  if (!patterns?.length) return files
+  return files.filter((file) => patterns.some((pattern) => matchesModelFile(pattern, file.path)))
+}
+
+async function partialInstalledBytes(settings: Settings, model: RawModel): Promise<number | null> {
+  if (!model.files?.length) return null
+  try {
+    const sentinel = JSON.parse(
+      await readFile(modelSentinel(settings, model), 'utf8'),
+    ) as { sha?: string; files?: string[] }
+    if (!sentinel.sha || !Array.isArray(sentinel.files) || sentinel.files.length === 0) return 0
+    let total = 0
+    for (const file of sentinel.files) {
+      const info = await stat(join(modelCacheDir(settings, model.repo), 'snapshots', sentinel.sha, file))
+      total += info.size
+    }
+    return total
+  } catch {
+    return 0
+  }
+}
+
 export async function getCatalog(settings: Settings, force = false): Promise<Catalog> {
   if (catalogCache && !force) return catalogCache
 
@@ -224,25 +265,29 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
   const modelsInstalled = await installedRepos(settings)
   const adaptersInstalled = await installedAdapters(settings)
 
-  const models: ModelEntry[] = raw.models.map((model) => {
-    const installedBytes = modelsInstalled.get(model.repo) ?? 0
-    return {
-      id: model.id,
-      name: model.name,
-      provider: model.provider,
-      repo: model.repo,
-      revision: model.revision ?? 'main',
-      role: model.role,
-      precision: model.precision,
-      sizeBytes: model.size_bytes ?? 0,
-      license: model.license,
-      tags: model.tags ?? [],
-      notes: model.notes,
-      preview: model.preview,
-      installed: installedBytes > 0,
-      installedBytes,
-    }
-  })
+  const models: ModelEntry[] = await Promise.all(
+    raw.models.map(async (model) => {
+      const partialBytes = await partialInstalledBytes(settings, model)
+      const installedBytes = partialBytes ?? modelsInstalled.get(model.repo) ?? 0
+      return {
+        id: model.id,
+        name: model.name,
+        provider: model.provider,
+        repo: model.repo,
+        revision: model.revision ?? 'main',
+        role: model.role,
+        precision: model.precision,
+        sizeBytes: model.size_bytes ?? 0,
+        files: model.files,
+        license: model.license,
+        tags: model.tags ?? [],
+        notes: model.notes,
+        preview: model.preview,
+        installed: installedBytes > 0,
+        installedBytes,
+      }
+    }),
+  )
 
   const localAdapters = await readLocalAdapters(settings)
   const adapters: AdapterEntry[] = (raw.adapters ?? []).map((adapter) => {
@@ -418,23 +463,25 @@ function hashFile(file: string): Promise<string> {
 
 async function runModelDownload(task: DownloadTask, entry: ModelEntry, settings: Settings): Promise<void> {
   const { sha, files } = await resolveRepo(entry.repo, entry.revision, settings)
+  const selected = selectModelFiles(files, entry.files)
+  if (!selected.length) throw new Error('模型文件不在仓库中')
   const cacheDir = join(paths.hub(settings.modelsRoot), `models--${entry.repo.replace('/', '--')}`)
   const blobs = join(cacheDir, 'blobs')
   const snapshots = join(cacheDir, 'snapshots', sha)
-  const total = files.reduce((sum, file) => sum + file.size, 0)
+  const total = selected.reduce((sum, file) => sum + file.size, 0)
 
   const free = await freeSpace(paths.models(settings.modelsRoot))
   if (free > 0 && free < total * 1.05 + 1024 ** 3) {
     throw new Error(`磁盘空间不足：需要约 ${(total / 1024 ** 3).toFixed(1)} GB，剩余 ${(free / 1024 ** 3).toFixed(1)} GB`)
   }
 
-  touch(task, { filesTotal: files.length, totalBytes: total, state: 'running' })
+  touch(task, { filesTotal: selected.length, totalBytes: total, state: 'running' })
 
   let doneBytes = 0
   let lastEmit = 0
   const base = endpoint(settings)
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index]!
+  for (let index = 0; index < selected.length; index += 1) {
+    const file = selected[index]!
     if (task.state === 'paused') return
     const blobName = file.oid ?? createHash('sha1').update(`${entry.repo}/${file.path}`).digest('hex')
     const blobPath = join(blobs, blobName)

@@ -69,17 +69,19 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 训练 Job | 🟡 | 本机/远端 `startTrainingJob` + step/loss + 终端；**fake ssh/模拟验证**，真实 CUDA 未跑 |
 | 训练数据入口 | 🟡 | 检查/文本/潜变量缓存命令已拼装；未真实运行 |
 | 训练导出/采样 | 🟡 | 本机/远端执行代码已接；fake 导出验证；真实 CUDA 未跑 |
+| Windows 本机导出/采样 | 🟡 | 本地脚本使用 PowerShell；类型检查通过，尚未在 Windows / CUDA 主机实测 |
 | 训练产物登记 | 🟡 | 自动收集 export 文件、登记本地适配器；fake 验证；大文件/真实产物未验收 |
 | SSH 主机探测 | ✅ | `trainer:host-test` 通过 fake ssh 验证 uname/git/uv/python/GPU/root |
 | 远端仓库/版本 | 🟡 | 远端 mirror/worktree 创建/删除通过 fake ssh 验证；真实 host 未接 |
 | 远端训练/导出 | 🟡 | 系统 ssh 训练/导出/取消代码已接；fake ssh 验证 step/loss/产物；真实 host 未接 |
 | SSH host | ✅ | CRUD/测试 + `hosts.json`（旧 `training-hosts.json` 自动迁移）；不存密码 |
 | SSH 远端执行 | 🟡 | 系统 ssh + 密钥、host probe、远端 mirror/worktree/venv/train/export 代码已接；只有 fake ssh 验证，无真实 host |
+| 系统工具链 | ⬜ | ADR-0006 设计已确认；当前仅扫描系统 Git/Python，未做安装引导/PATH 接管 |
 | Release 发布文档 | 🟡 | `release.md` 解析/生成/本地+远程+缓存回退；支持首页篇章名/标题/副标题；真实 GitHub Release 资产未验收 |
 | 更新提示与下载 | 🟡 | 更新弹窗/按版本稍后/sha256 下载/打开安装包；真实签名安装包未验收 |
 | 应用内更新安装 | ⬜ | 静默安装/electron-updater/打包签名未做 |
 | 打包/公证 | ⬜ | 未做 |
-| Windows 实机 | ⬜ | 未验证 |
+| Windows 实机 | ⬜ | 未验证；按 [Windows 开发与验收手册](windows-validation-guide.md) 执行 |
 
 > Clover Creator 浏览器版不做（[ADR-0004](decisions/0004-workspaces-remote-devices.md)），
 > 因此不作为完成度项；HTTP/WS 后端只作为 Job/API 层。
@@ -91,7 +93,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 验证 | 方式 | 结果 |
 | --- | --- | --- |
 | 构建/类型 | `pnpm build` / `pnpm typecheck` | 通过 |
-| 自检 | `--smoke` | 通过；M3 / 16 GB / 网络镜像 |
+| 自检 | `--smoke` | 退出码 0；M3 / 16 GB / 网络镜像；本次环境项报告 `disk:error`（空闲空间低于 30 GB） |
 | 窗口创建 | `--scenario=windows` 与 `--screenshot` | 创作/终端/训练/设备管理器窗口均可渲染 |
 | 训练器部署 | `--scenario=trainer-deploy` | clone trainer mirror、创建 `kohaku-3bcd751` worktree |
 | 训练 Job | `--scenario=trainer-job` | `succeeded`，step 5、loss 0.1、5 行日志 |
@@ -155,6 +157,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 12. **开发 CSP 仍允许 `unsafe-eval`**：打包前必须收紧。
 13. **浅色主题已移除**：设置 schema 里仍有 `theme`，UI 固定深色；属于迁移残留。
 14. **终端保留已完成任务**：便于回看日志，不是只显示运行中。
+15. **工具链仍依赖系统**：Git/Python/uv 只做扫描与报错；官方安装引导、PATH 接管、OOBE 运行环境行仍是 ADR-0006 待实现设计。
 15. **远端模型下载未实现**：远端 Instance 会检查默认 SFT 缓存，但不会自动下载/上传 27 GB；需预先准备或改用自定义模型。
 16. **远端结果回传只验证官方 Gradio 目录同步**：fake ssh 下 `find + scp` 到本地实例 outputs；远端 runner 结果回传、真实 host 大文件同步未验收。
 
@@ -162,6 +165,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 - Clover Creator 浏览器版（不做，ADR-0004；HTTP/WS 仅 Job/API）；
 - 静默自动安装/签名验收；
+- 系统 Git/Python 工具链检测、安装引导与 OOBE 运行环境（ADR-0006）；
 - 托管 Python；
 - 设备维护完整验收/强制并发/显存配额；
 - DMD 8 步采样器（当前 profile 只透传，仍走官方 pipeline）；

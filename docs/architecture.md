@@ -6,7 +6,7 @@
 - 产品形态与交互：[product-design.md](product-design.md)
 
 > 本文只描述**当前代码实际怎么工作**。最后一节单列“未实现/计划架构”，
-> 不把 Creator 浏览器版、签名、托管 Python 等未落地设计写成现状。
+> 不把 Creator 浏览器版、签名、受管 Python 等未落地设计写成现状。
 
 ---
 
@@ -238,7 +238,7 @@ MOSS-Image 没有 tag：稳定版 = `main` 分支 HEAD 或 manifest 的
 - lockHash = Python 版本 + 平台/架构 + 依赖集合；
 - 同 hash 复用 venv；实例可“独立”复制同 hash 的新 venv；
 - 安装优先 uv，其次 pip；状态写入 `runtime.json`；
-- 托管 Python（python-build-standalone）**未接**，当前用系统 Python。
+- 不做受管 Python 分发；使用系统 Python，缺失时引导安装（ADR-0006）。
 
 ## 9. 模型与下载
 
@@ -455,7 +455,8 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | 计划 | 说明 |
 | --- | --- |
 | Creator 浏览器版 | 不做；Clover Creator 保持 Electron-only（ADR-0004） |
-| 托管 Python | python-build-standalone 下载/校验未接 |
+| 系统 Git/Python 工具链 | ADR-0006 设计已确认；当前只扫描系统工具，未实现安装引导/PATH 接管 |
+| 受管 Python | 不做；系统 Python 扫描/安装引导见 ADR-0006 |
 | 更新安装（真实签名） | release.md/更新弹窗/下载/sha256/打开安装包已接；electron-updater、签名、公证未做 |
 | SSH 远端训练验证 | 真实 host 的 host key/权限/网络、远端 venv/Job 验收 |
 | 导出/采样真实验收 | 代码已接，fake 验证；真实 CUDA 未 |
@@ -471,7 +472,7 @@ scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 | 批次 | 内容 | 状态 |
 | --- | --- | --- |
 | M1 | Electron 壳、环境报告 | ✅ macOS 实测 |
-| M2 | git 镜像、实例、运行时 | ✅ 基础；版本切换 UI 已接；托管 Python 未 |
+| M2 | git 镜像、实例、运行时 | ✅ 基础；版本切换 UI 已接；受管 Python 不做（ADR-0006） |
 | M3 | 模型/适配器、下载 | ✅ 基础；绑定 UI/大文件未验收 |
 | M4 | Supervisor、runner、解析、诊断、画廊 | ✅ 基础；真实权重未验收 |
 | UI v0.2 | 亚克力、侧栏、通知、画廊、创作台 | ✅ |

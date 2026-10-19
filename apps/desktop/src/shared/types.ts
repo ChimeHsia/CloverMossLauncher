@@ -244,6 +244,8 @@ export interface ModelEntry {
   role: 'full' | 'dit' | 'text_encoder' | 'vae'
   precision: string
   sizeBytes: number
+  /** When set, only these repo paths are downloaded (e.g. sft/transformer/*). */
+  files?: string[]
   license: string
   tags: string[]
   notes?: string

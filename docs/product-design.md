@@ -124,7 +124,7 @@ Kohaku Trainer
 ```
 
 - **Case**：选择已保存的启动配置；保存时写入 `cases.json`；
-- **工作台**：`官方 Gradio` / `Clover（启动条占位）`；两者共享同一实例/设备，但不是可自由拼接的引擎与界面；
+- **工作台**：`官方 Gradio` 当前可启动；`Clover` 暂未开放，UI 保留禁用选项以说明产品方向并兼容旧 Case；两者共享同一实例/设备，但不是可自由拼接的引擎与界面；
 - **实例**：固定 commit 的 MOSS-Image worktree；
 - **设备**：自动枚举 Apple MPS / NVIDIA CUDA / CPU；
 - **Gradio 参数**：只在官方 Gradio 工作台出现；打开侧滑面板配置启动级参数，按钮上显示模型/档位/端口摘要与打开方式；
@@ -163,6 +163,9 @@ steps、CFG、尺寸、生成数量、显存模式和 SLG 仍由官方 Gradio �
 - 每行给一个直接动作，不打开多步向导；
 - 可“本次跳过”；下次仍不满足会再次出现；
 - 三行分别给“去实例/去模型”的动作；跳过不会修改磁盘状态。
+
+> 计划（ADR-0006，未实现）：增加“运行环境”行，检测系统 Git、Python、uv；
+> 提供系统工具扫描、官方安装引导与重新检查，不要求用户理解 PATH，也不修改系统 PATH。
 
 ### 5.5 通知与诊断
 
@@ -239,15 +242,16 @@ steps、CFG、尺寸、生成数量、显存模式和 SLG 仍由官方 Gradio �
 - 运行：CUDA 主机上启动 train / inspect_data / cache_text / cache_latents
   （代码路径；真实 CUDA 未验收）；
 - 状态：训练 Job 的 step/loss/进度；终端看完整日志；
-- 导出/采样：**当前只提供可复制的命令入口**，不执行；
+- 导出/采样：本机 Linux 使用 Bash、Windows 使用 PowerShell 执行脚本；代码路径已接，真实 CUDA 与 Windows 实机流程未验收；
 - macOS 无 CUDA：开始按钮禁用；只能部署、管理、编辑、预览。
 
-### 8.4 SSH（骨架）
+### 8.4 SSH 远端训练与验收边界
 
 - `TrainingHost` 数据模型已落地并持久化到 `hosts.json`（旧 `training-hosts.json` 自动迁移）；
 - UI 支持添加/删除/测试（设备管理器）；
 - 系统 OpenSSH + 密钥/agent、远端 mirror/worktree/venv/train/export 代码已接；
-- **真实 host 未验收**；远程路径不做自动上传；
+- 远端工作流以 Linux host 为目标，使用 Bash/POSIX shell；Windows 桌面端通过系统 OpenSSH 发起连接；
+- **真实 host 未验收**；远程路径不做自动上传；训练端 Windows PowerShell 本机路径不代表 SSH 远端已验收；
 
 ## 9. 画廊、背景、设置
 
@@ -373,7 +377,9 @@ steps、CFG、尺寸、生成数量、显存模式和 SLG 仍由官方 Gradio �
 6. **更新收尾**：真实 GitHub Release 资产、签名/公证安装包、electron-updater
    静默安装/重启；Clover Creator 保持 Electron-only，不做浏览器 WebUI（ADR-0004）；
 7. **M6 打包**：macOS 签名/公证、Windows NSIS、设备矩阵；
-8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期。
+8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期；
+9. **系统 Git/Python 工具链与 OOBE 运行环境**：见 [ADR-0006](decisions/0006-system-toolchain.md)
+   与 [工具链与首次运行准备](toolchain-and-onboarding.md)；未实现。
 
 ## 14. 目标用户
 

@@ -432,11 +432,6 @@ export function DevicesPage(): React.JSX.Element {
                     <GraduationCap className="size-3.5" /> 在训练中使用
                   </span>
                 </Button>
-                <Button tone="ghost" disabled title="终端 Sessions 接入后开放">
-                  <span className="inline-flex items-center gap-1.5">
-                    <SquareTerminal className="size-3.5" /> 打开终端（下一轮）
-                  </span>
-                </Button>
                 <Button tone="ghost" onClick={() => openWindow('launcher', '/instances')}>
                   <span className="inline-flex items-center gap-1.5">
                     <Boxes className="size-3.5" /> 部署实例
@@ -445,7 +440,7 @@ export function DevicesPage(): React.JSX.Element {
               </div>
               <p className="mt-2 text-[9.5px] leading-4 text-[var(--color-text-tertiary)]">
                 训练页的 host 选择已经来自这份库存；在启动器「实例 → 新建」里选择该 host 即可部署远端实例。
-                远端终端将在终端 Sessions 接入后开放。
+                远端终端会话暂未开放。
               </p>
             </Card>
           </div>

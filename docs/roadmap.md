@@ -5,7 +5,8 @@
 - 基线：[status.md](status.md)
 - 当前判断：训练器/SSH 远端代码基座、Clover HTTP/WS 基座、Project JSON/基础图层已完成；
   下一步是 **真实 host/CUDA 验收**、**Clover 真实生成/Project UI 收尾**；
-  发布源/更新弹窗/下载校验已接，真实签名安装与 electron-updater 排在 P2。
+  发布源/更新弹窗/下载校验已接，真实签名安装与 electron-updater 排在 P2；
+  系统 Git/Python 工具链检测与安装引导作为新的 P0 插到最前。
 
 > 这里只列**尚未完成**的工作和验收条件。已完成能力见 [status.md](status.md)。
 > 不使用虚构日期；按 P0/P1/P2 和依赖关系排。
@@ -29,9 +30,35 @@
 - 真实 SSH host / CUDA 验收；
 - 真实训练导出/采样；
 - Clover 真实生成验收、Project 完整 UI；
-- 真实 GitHub Release 资产、签名/公证安装包、electron-updater、打包。
+- 真实 GitHub Release 资产、签名/公证安装包、electron-updater、打包；
+- 系统 Git/Python 工具链检测、安装引导与 OOBE 运行环境（ADR-0006）。
 
 > Clover Creator 浏览器版不做（ADR-0004），不列为待办；这里只保留 Electron 创作窗口。
+
+## 0.5 P0 · 系统工具链与首次运行
+
+**目标**：用户机器没有 Git/Python，或 PATH 不可用时，启动器仍能检测、
+引导打开官方安装器/页面、重新扫描并接管；不修改系统 PATH，不要管理员权限。
+
+范围：
+
+1. `toolchain.ts`：系统 Git/Python 扫描、版本校验、安装入口、重新扫描；
+2. Git 接管：`git.ts` 统一走解析后的系统 Git 绝对路径；
+3. Python 接管：`pickPython` 使用扫描/显式路径，uv 可选；
+4. OOBE 增加“运行环境”行与官方安装引导面板；
+5. 设置增加工具链分组；诊断增加缺 Git/Python 预检卡片；
+6. Windows 代码路径同步，macOS 先实测。
+
+验收：
+
+- 干净 macOS（无 CLT/Git、无 Python）能按 OOBE 引导打开安装器，装完重新检查；
+- PATH 为空或被污染时能通过常见目录/显式路径发现并启动工具；
+- 安装器打开失败、权限不足、版本过低时错误可解释，可重新扫描/手动路径；
+- 不改系统 PATH、不要求管理员权限；
+- 真实 Windows 未验证前标 🟡/⬜。
+
+> 设计依据：[ADR-0006](decisions/0006-system-toolchain.md)、
+> [工具链与首次运行准备](toolchain-and-onboarding.md)。
 
 ## 1. P0 · SSH 远端训练
 
@@ -157,7 +184,7 @@
 4. 官方 Gradio 真机验收（27 GB 权重）；
 5. 实例更新/回滚 UI；
 6. 大文件下载中断/镜像切换压测；
-7. Windows 实机验证。
+7. Windows 实机验证：按 [Windows 开发与验收手册](windows-validation-guide.md) 记录环境、scenario 和真实硬件证据。
 
 验收：
 

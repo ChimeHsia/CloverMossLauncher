@@ -1,10 +1,10 @@
 # apps/
 
 当前只有 `apps/desktop` 一个应用包：Electron 主进程 + preload + React renderer
-一起用 `electron-vite` 构建。**四窗口共用同一套 renderer bundle**，按
+一起用 `electron-vite` 构建。**五窗口共用同一套 renderer bundle**，按
 `windowKind` 分流。
 
-WebUI / 浏览器模式尚未实现；M5 才考虑把服务层与 renderer 抽成独立包。
+Clover Creator 保持 Electron-only，不提供浏览器 WebUI / served UI；HTTP/WS utility process 仅作为 Job/API 层，详见 ADR-0004。
 
 ## 结构
 
@@ -14,7 +14,7 @@ apps/desktop/
   src/backend/index.ts      独立 Node HTTP/WS（utilityProcess）
   src/main/
     index.ts                生命周期、smoke / screenshot / scenario
-    windows.ts              启动器 / 创作 / 终端 / Kohaku Trainer
+    windows.ts              启动器 / 创作 / 终端 / Kohaku Trainer / 设备管理器
     ipc.ts                  ipcMain.handle + zod + 事件
     lib/                    paths / run / events
     services/               env / network / git / runtimes / instances / models /
@@ -24,8 +24,8 @@ apps/desktop/
                             launchQueue / trainerArtifacts / projects / backend
   src/preload/index.ts      contextBridge：invoke / on / windowKind / acrylic / channel
   src/renderer/
-    src/App.tsx             按 windowKind 分流 Launcher / Creator / Terminal / Trainer
-    src/pages/              Home / Studio / Gallery / Terminal / Training / TrainerWindow /
+    src/App.tsx             按 windowKind 分流 Launcher / Creator / Terminal / Trainer / Devices
+    src/pages/              Home / Studio / Gallery / Terminal / Training / TrainerWindow / Devices /
                             Diagnostics / Instances / InstanceDetail / Models / Settings
     src/components/         AppTitlebar / layout / NotificationPanel / Oobe / ui
     src/store.ts            Zustand：env / instances / jobs / downloads / notifications / UI
@@ -37,7 +37,7 @@ apps/desktop/
 > `pages/Run.tsx` 是早期运行页遗留文件，当前路由不使用；以 `App.tsx` 与
 > `windows.ts` 为准。
 
-## 四窗口
+## 五窗口
 
 | 窗口 | 路由 | 尺寸 | 内容 |
 | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ apps/desktop/
 | 创作 | `/studio` | 1320×860 | Studio、layout JSON、画廊 |
 | 终端 | `/terminal` | 1120×720 | Cases + xterm（推理/训练） |
 | Kohaku Trainer | `/trainer` | 1280×840 | 外部 trainer 配置、命令预览、doctor、训练状态 |
+| 设备管理器 | `/devices` | 1180×780 | 本机/SSH host、GPU 库存、连接测试、部署入口 |
 
 `windows.ts` 负责创建/单例/聚焦；preload 通过
 `--clover-window=<kind>` 提供 `windowKind`。`window:open` 支持 route。
@@ -66,12 +67,19 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 开发数据默认在 `.dev-data/`（已忽略）；不要把测试数据写进真实用户目录。
 
+Windows PowerShell 下运行时，用以下方式清除可能影响 Electron 的 harness 环境变量：
+
+```powershell
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+pnpm --filter @clover/desktop exec electron . --smoke
+```
+
 ## 开发自检
 
 | 命令 | 作用 |
 | --- | --- |
 | `--smoke` | 无窗口环境/公告/模型目录检查 |
-| `--screenshot` | 启动器各路由 + 创作 + 终端 + 训练窗口截图 |
+| `--screenshot` | 启动器各路由 + 创作 + 终端 + 训练 + 设备管理器窗口截图 |
 | `--scenario=create` / `second` / `install` | 实例、共享 runtime、依赖安装 |
 | `--scenario=job` / `job-cancel` | 模拟推理、取消 |
 | `--scenario=parser` | tqdm / OOM / 缺包解析 |
@@ -110,3 +118,4 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 - [架构](../docs/architecture.md)
 - [产品设计](../docs/product-design.md)
 - [路线图](../docs/roadmap.md)
+- [Windows 开发与验收手册](../docs/windows-validation-guide.md)

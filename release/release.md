@@ -48,8 +48,8 @@ _当前发布未附带安装包。_
 
 ## 现在可以用
 
-- **四窗口**：启动器负责启动与监视；创作窗口负责画布/layout；终端看
-  stdout/stderr；Kohaku Trainer 独立负责训练配置。
+- **五窗口**：启动器负责启动与监视；创作窗口负责画布/layout；终端看
+  stdout/stderr；Kohaku Trainer 管理外部训练配置；设备管理器管理本机与 SSH host。
 - **环境体检**：系统、Metal/CUDA、内存、磁盘、Python、git、uv 与网络一次看清，
   并按内存给推荐档位。
 - **实例管理**：按 `OpenMOSS/MOSS-Image` 的分支与 commit 建 worktree，
@@ -59,8 +59,8 @@ _当前发布未附带安装包。_
   复用；安装日志实时显示。
 - **模型/适配器**：官方权重、量化包、DMD、常用 LoRA 的统一目录；下载走
   HF 兼容缓存，支持 Range 续传、LFS sha256、暂停/继续与镜像。
-- **启动条**：固定在首页底部、固定宽度居中；Case、后端、实例、设备、档位、
-  高级、启动；运行后变为停止/终端/打开界面，并在上方插入新的启动条。
+- **启动条**：固定在首页底部、固定宽度居中；Case、工作台、实例、设备、Gradio 参数或档位、
+  Case 设置、启动；运行后进入运行栈。Clover 工作台当前暂未开放，不作为可启动能力。
 - **运行栈**：运行中 Case 收在下方，可折叠、按名称/启动时间排序；同设备默认排队。
   Case 配置写 `cases.json`；队列行写 `launch-queue.json`，queued 保留、running 重启标 failed。
 - **OOBE**：没有可启动实例时默认出现，检查实例/运行时/模型三行，可本次跳过。
@@ -74,7 +74,7 @@ _当前发布未附带安装包。_
   （环境安装代码已接，未在 CUDA 验证）；SSH host 可测试，远端 mirror/train 代码已接
   （仅 fake ssh 验证，真实 host 未验收）；
   独立 Kohaku Trainer 窗口负责表单/命令预览/doctor；CUDA 主机上走训练路径（代码已接，真实 CUDA 未验收），
-  并把 step/loss 送进共享终端；SSH host 可测试，远端执行代码路径已接，真实 host 下一阶段验收。
+  并把 step/loss 送进共享终端；导出/采样代码路径已接（Windows 使用 PowerShell），真实 CUDA/Windows 流程未验收；SSH host 可测试，远端执行代码路径已接，真实 host 下一阶段验收。
   macOS 无 CUDA，不能真实训练。
 - **设备维护**：设置内可启用/禁用/重命名设备；启动条过滤不可用设备。
 - **通知中心**：右上角单矩形抽屉，默认打开；公告 + 应用内通知。
@@ -89,7 +89,7 @@ _当前发布未附带安装包。_
 - 本机是 Apple M3 / 16 GB，macOS arm64；Windows 未实机验证；
 - 没有 27 GB SFT 权重，官方 Gradio 只验证了预检代码路径；
 - 没有 NVIDIA CUDA，真实 `kogine` 训练未跑；训练 Job/loss 用模拟输出验证；
-- Trainer 环境安装、数据缓存、导出/采样没有在真实 CUDA 环境执行（fake uv/ssh 只验证流程）；
+- Trainer 环境安装、数据缓存、导出/采样没有在真实 CUDA 环境执行（fake uv/ssh 只验证流程）；Windows PowerShell 导出/采样脚本也尚未在 Windows 主机执行；
 - SSH 的 host probe、远端 mirror/训练代码已接，但只有 fake ssh 验证，真实 host 未验收。
 
 ## 接下来
