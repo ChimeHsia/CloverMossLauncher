@@ -561,6 +561,7 @@ export function HomePage(): React.JSX.Element {
       <GradioSettingsSheet
         open={gradioOpen}
         value={gradio}
+        remote={instance?.placement.kind === 'ssh'}
         onClose={() => setGradioOpen(false)}
         onApply={(next) => {
           setGradio(next)

@@ -60,11 +60,13 @@ const inputClass =
 export function GradioSettingsSheet({
   open,
   value,
+  remote = false,
   onClose,
   onApply,
 }: {
   open: boolean
   value: GradioLaunchConfig
+  remote?: boolean
   onClose: () => void
   onApply: (config: GradioLaunchConfig) => void
 }): React.JSX.Element {
@@ -195,6 +197,11 @@ export function GradioSettingsSheet({
         </div>
         {portError ? (
           <p className="-mt-1 text-[9.5px] text-red-300">端口需在 1024–65535，留空则自动选择。</p>
+        ) : null}
+        {remote ? (
+          <p className="rounded-[4px] border border-sky-500/25 bg-sky-500/[0.06] px-2.5 py-2 text-[9.5px] leading-4 text-sky-200">
+            远端实例：这里的端口是远端 Gradio 端口；本地 SSH 隧道端口自动分配。监听范围作用在远端。
+          </p>
         ) : null}
         <Field label="输出目录 --output-dir">
           <input

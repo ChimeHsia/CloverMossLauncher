@@ -1,15 +1,12 @@
-# Clover Moss Launcher
-
-
-<img src="apps/desktop/src/renderer/src/assets/clovermoss-logo.svg" alt="Clover Moss Launcher 标志" width="440" />
-
-> MOSS-Image 的桌面启动器与工作台：像 Minecraft Launcher 一样选版本、选设备、启动；
-> 创作、终端、Kohaku Trainer 与设备管理器各有独立窗口。
 <div align="center">
+
+<h1>Clover Moss Launcher</h1>
+
+<img src="apps/desktop/src/renderer/src/assets/clovermoss-logo.svg" alt="Clover Moss Launcher 标志" width="580" />
 
 **面向 MOSS-Image 的桌面管理与创作工作台**
 
-实例、运行时、模型、任务、画廊与训练工具集中管理；Electron 多窗口，React + TypeScript 前端。
+MOSS-Image 的桌面启动器与工作台：管理实例、运行时、模型和任务，并为创作、终端、训练与设备提供独立窗口。
 
 **开发版 0.1.0** · 设计文档 v0.4 · 当前重点：功能持续实现，真实模型、CUDA 与发布环境验收进行中
 
