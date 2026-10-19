@@ -73,9 +73,8 @@ export async function ensureTrainerMirror(settings: Settings): Promise<void> {
       { timeoutMs: 180_000 },
     )
     if (result.code !== 0) {
-      progress(`拉取失败：${firstLine(result.stderr)}，正在重建镜像`)
-      await rm(mirror, { recursive: true, force: true })
-      await cloneMirror(settings)
+      // 同 git.ts：fetch 失败时保留可用镜像，只上报错误。
+      throw new Error(`拉取训练器分支失败：${firstLine(result.stderr) || firstLine(result.stdout)}`)
     }
   })().finally(() => ensuring.delete(key))
   ensuring.set(key, task)

@@ -83,3 +83,15 @@ test('只有 HEAD 文件、没有分支 判定为不健康', async () => {
   assert.equal(headExists, true)
   assert.equal(await mirrorHealthy(mirror, exec), false)
 })
+
+test('fetch 失败时不得删除仍可用的镜像（离线缓存保护）', async () => {
+  const mirror = mirrorPath('keep-on-fetch-fail')
+  await git(['clone', '-q', '--bare', source, mirror])
+  await git(['-C', mirror, 'remote', 'set-url', 'origin', 'https://127.0.0.1:1/nope.git'])
+
+  const fetchResult = await git(['-C', mirror, 'fetch', '--prune', 'origin', '+refs/heads/*:refs/heads/*'])
+  assert.notEqual(fetchResult.code, 0, '预期 fetch 失败')
+
+  // 镜像本身仍然健康，不应被重建逻辑删掉
+  assert.equal(await mirrorHealthy(mirror, exec), true)
+})
