@@ -19,6 +19,8 @@ uv.lock
 node_modules/
 .pnpm-store/
 apps/desktop/out/
+coverage/
+*.tsbuildinfo
 
 # local data (never commit weights)
 models/
@@ -31,8 +33,25 @@ runs/
 *.onnx
 *.gguf
 
+# env
+.env
+.env.*
+!.env.example
+
 # tooling
 .DS_Store
 .idea/
 .vscode/
 *.log
+
+# ------------------------------------------------------------------
+# docs/assets：只跟踪 README 里实际引用的截图
+# 其余测试截图 / 临时渲染图一律不入库（文件仍留在本地磁盘）
+# 新增正文引用时，在下面补一条 ! 例外
+# ------------------------------------------------------------------
+docs/assets/*
+!docs/assets/home.webp
+!docs/assets/notifications.webp
+!docs/assets/studio.webp
+!docs/assets/gallery.webp
+!docs/assets/sidebar-collapsed.webp
