@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import defaultHomeBackground from './assets/home-background.webp'
 import { Events } from '@shared/channels'
 import type { Diagnostic } from '@shared/types'
 import { onEvent } from './lib/api'
@@ -20,6 +21,7 @@ import { ModelsPage } from './pages/Models'
 import { SettingsPage } from './pages/Settings'
 import { TerminalPage } from './pages/Terminal'
 import { useApp } from './store'
+import { cloverUrl } from './lib/clover'
 
 function LauncherShell(): React.JSX.Element {
   const location = useLocation()
@@ -31,6 +33,9 @@ function LauncherShell(): React.JSX.Element {
   const setNotificationsOpen = useApp((state) => state.setNotificationsOpen)
   const onboarding = useApp((state) => state.onboarding)
   const [oobeDismissed, setOobeDismissed] = useState(false)
+  const isHome = location.pathname === '/'
+  const customBackground = Boolean(settings?.homeBackground)
+  const homeBackground = customBackground ? cloverUrl(settings!.homeBackground!) : defaultHomeBackground
 
   useEffect(() => {
     if (location.pathname !== '/') setNotificationsOpen(false)
@@ -58,7 +63,19 @@ function LauncherShell(): React.JSX.Element {
       />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="content-surface min-w-0 flex-1 overflow-y-auto">
+        <main
+          className="content-surface min-w-0 flex-1 overflow-y-auto"
+          style={
+            isHome
+              ? {
+                  backgroundImage: `linear-gradient(rgba(18,20,24,${customBackground ? 0.78 : 0.55}), rgba(18,20,24,${customBackground ? 0.90 : 0.70})), url("${homeBackground}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundColor: '#191b1f',
+                }
+              : undefined
+          }
+        >
           <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1100px] flex-col px-6 py-5">
             <ErrorBoundary>
               <Routes>
