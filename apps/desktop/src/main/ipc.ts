@@ -69,8 +69,8 @@ export function registerIpc(): void {
     acrylic: process.platform === 'darwin' || process.platform === 'win32',
   }))
 
-  handle(Ipc.windowOpen, schemas.windowOpen, ({ kind }) => {
-    openWindow(kind)
+  handle(Ipc.windowOpen, schemas.windowOpen, ({ kind, route }) => {
+    openWindow(kind, route)
     return true
   })
 

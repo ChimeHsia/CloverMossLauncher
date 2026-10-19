@@ -98,8 +98,16 @@ export function createAppWindow(kind: WindowKind, show = true): BrowserWindow {
   return win
 }
 
-export function openWindow(kind: WindowKind): BrowserWindow {
-  return createAppWindow(kind)
+export function openWindow(kind: WindowKind, route?: string): BrowserWindow {
+  const win = createAppWindow(kind)
+  if (route) {
+    const apply = (): void => {
+      void win.webContents.executeJavaScript(`location.hash = '#${route}'`)
+    }
+    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', apply)
+    else apply()
+  }
+  return win
 }
 
 export function getWindow(kind: WindowKind): BrowserWindow | undefined {

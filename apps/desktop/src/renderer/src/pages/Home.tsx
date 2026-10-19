@@ -13,7 +13,9 @@ import { useNavigate } from 'react-router-dom'
 import { Select as AppsSelect } from '@openai/apps-sdk-ui/components/Select'
 import { Ipc } from '@shared/channels'
 import type { LaunchRow, LaunchStartInput } from '@shared/types'
+import defaultHomeBackground from '../assets/home-background.webp'
 import { call } from '../lib/api'
+import { cloverUrl } from '../lib/clover'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
 import { Button, IconButton, Pill, Spinner, cn, useToast } from '../components/ui'
@@ -81,6 +83,7 @@ export function HomePage(): React.JSX.Element {
   const launchRows = useApp((state) => state.launchRows)
   const jobs = useApp((state) => state.jobs)
   const env = useApp((state) => state.env)
+  const settings = useApp((state) => state.settings)
   const startLaunch = useApp((state) => state.startLaunch)
   const stopLaunch = useApp((state) => state.stopLaunch)
   const setActiveJob = useApp((state) => state.setActiveJob)
@@ -132,6 +135,8 @@ export function HomePage(): React.JSX.Element {
       return (b.startedAt ?? b.queuedAt).localeCompare(a.startedAt ?? a.queuedAt)
     })
   }, [launchRows, sort])
+
+  const background = settings?.homeBackground ? cloverUrl(settings.homeBackground) : defaultHomeBackground
 
   const runningCount = activeRows.filter((row) => row.state === 'running' || row.state === 'starting').length
   const queuedCount = activeRows.filter((row) => row.state === 'queued').length
@@ -201,7 +206,19 @@ export function HomePage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
+      <img
+        src={background}
+        alt=""
+        draggable={false}
+        onError={(event) => {
+          if (settings?.homeBackground) event.currentTarget.src = defaultHomeBackground
+        }}
+        className="pointer-events-none absolute -inset-x-6 -inset-y-5 h-[calc(100%+40px)] w-[calc(100%+48px)] object-cover"
+      />
+      <div className="pointer-events-none absolute -inset-x-6 -inset-y-5 bg-[#15171b]/55" />
+
+      <div className="relative z-10 mx-auto flex w-full max-w-[880px] flex-1 flex-col">
       <header className="pt-4">
         <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--color-text-tertiary)]">
           Launcher
@@ -442,6 +459,7 @@ export function HomePage(): React.JSX.Element {
           </Button>
         </div>
       ) : null}
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { Ipc } from '@shared/channels'
 import type { GalleryDetail, GalleryItem, GalleryPage } from '@shared/types'
 import { call } from '../lib/api'
 import { cloverUrl } from '../lib/clover'
+import { openWindow } from '../lib/windows'
 import { bytes, dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
 import { Button, Card, EmptyState, Modal, Pill, Spinner, useToast } from '../components/ui'
@@ -15,6 +16,7 @@ export function GalleryPage(): React.JSX.Element {
   const navigate = useNavigate()
   const toast = useToast()
   const setStudioBackground = useApp((state) => state.setStudioBackground)
+  const creatorWindow = window.clover.windowKind === 'creator'
   const [items, setItems] = useState<GalleryItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
@@ -110,10 +112,13 @@ export function GalleryPage(): React.JSX.Element {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索文件名或路径…"
-            className="w-full rounded-full border border-[var(--color-border)] bg-white/55 py-1.5 pl-8 pr-3 text-[12px] outline-none backdrop-blur-md transition focus:border-accent-500 dark:bg-white/[0.05]"
+            className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] pl-8 pr-3 text-[11px] outline-none backdrop-blur-md transition focus:border-accent-500/60"
           />
         </div>
-        <Button tone="ghost" onClick={() => navigate('/settings')}>
+        <Button
+          tone="ghost"
+          onClick={() => (creatorWindow ? openWindow('launcher', '/settings') : navigate('/settings'))}
+        >
           配置路径
         </Button>
       </div>
@@ -124,7 +129,10 @@ export function GalleryPage(): React.JSX.Element {
           title="还没有作品"
           description="生成图片后会自动出现在输出目录；也可以在设置里添加任意本地文件夹。"
           action={
-            <Button tone="primary" onClick={() => navigate('/settings')}>
+            <Button
+              tone="primary"
+              onClick={() => (creatorWindow ? openWindow('launcher', '/settings') : navigate('/settings'))}
+            >
               打开画廊设置
             </Button>
           }
@@ -193,7 +201,13 @@ export function GalleryPage(): React.JSX.Element {
                 tone="secondary"
                 onClick={() => {
                   setStudioBackground(detail)
-                  navigate('/studio')
+                  try {
+                    localStorage.setItem('clover.studioBackground', JSON.stringify(detail))
+                  } catch {
+                    // storage may be unavailable
+                  }
+                  if (creatorWindow) navigate('/studio')
+                  else openWindow('creator', '/studio')
                 }}
               >
                 <span className="inline-flex items-center gap-1.5">
@@ -210,39 +224,39 @@ export function GalleryPage(): React.JSX.Element {
           </div>
         ) : detail ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.4fr_1fr]">
-            <div className="flex max-h-[52vh] items-center justify-center overflow-hidden rounded-xl bg-[var(--color-surface-secondary)]">
+            <div className="flex max-h-[52vh] items-center justify-center overflow-hidden rounded-[6px] bg-[var(--color-surface-secondary)]">
               <img src={cloverUrl(detail.path)} alt={detail.name} className="max-h-[52vh] w-full object-contain" />
             </div>
             <div className="space-y-3 text-[11.5px]">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-white/45 px-2.5 py-2 dark:bg-white/[0.04]">
+                <div className="rounded-[4px] bg-white/[0.04] px-2.5 py-2 ">
                   <div className="text-[10px] text-[var(--color-text-tertiary)]">尺寸</div>
                   <div className="mt-0.5 font-medium">
                     {detail.width && detail.height ? `${detail.width} × ${detail.height}` : '未知'}
                   </div>
                 </div>
-                <div className="rounded-lg bg-white/45 px-2.5 py-2 dark:bg-white/[0.04]">
+                <div className="rounded-[4px] bg-white/[0.04] px-2.5 py-2 ">
                   <div className="text-[10px] text-[var(--color-text-tertiary)]">文件</div>
                   <div className="mt-0.5 font-medium">{bytes(detail.size)}</div>
                 </div>
-                <div className="rounded-lg bg-white/45 px-2.5 py-2 dark:bg-white/[0.04]">
+                <div className="rounded-[4px] bg-white/[0.04] px-2.5 py-2 ">
                   <div className="text-[10px] text-[var(--color-text-tertiary)]">修改时间</div>
                   <div className="mt-0.5 font-medium">{dateTime(new Date(detail.mtime).toISOString())}</div>
                 </div>
-                <div className="rounded-lg bg-white/45 px-2.5 py-2 dark:bg-white/[0.04]">
+                <div className="rounded-[4px] bg-white/[0.04] px-2.5 py-2 ">
                   <div className="text-[10px] text-[var(--color-text-tertiary)]">Seed</div>
                   <div className="mt-0.5 font-mono font-medium">{detail.seed ?? '—'}</div>
                 </div>
               </div>
               <div>
                 <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">Prompt / 元数据</div>
-                <div className="max-h-40 overflow-y-auto rounded-lg bg-white/45 px-2.5 py-2 text-[10.5px] leading-5 text-[var(--color-text-secondary)] dark:bg-white/[0.04]">
+                <div className="max-h-40 overflow-y-auto rounded-[4px] bg-white/[0.04] px-2.5 py-2 text-[10.5px] leading-5 text-[var(--color-text-secondary)] ">
                   {detail.prompt ?? '这张图没有可读的 prompt 元数据。'}
                 </div>
               </div>
               <div>
                 <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">所在目录</div>
-                <div className="break-all rounded-lg bg-white/45 px-2.5 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] dark:bg-white/[0.04]">
+                <div className="break-all rounded-[4px] bg-white/[0.04] px-2.5 py-2 font-mono text-[10px] text-[var(--color-text-secondary)] ">
                   {detail.dir}
                 </div>
               </div>

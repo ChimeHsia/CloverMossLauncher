@@ -66,6 +66,7 @@ function LauncherShell(): React.JSX.Element {
                 <Route path="/instances" element={<InstancesPage />} />
                 <Route path="/instances/:id" element={<InstanceDetailPage />} />
                 <Route path="/models" element={<ModelsPage />} />
+                <Route path="/gallery" element={<GalleryPage />} />
                 <Route path="/diagnostics" element={<DiagnosticsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

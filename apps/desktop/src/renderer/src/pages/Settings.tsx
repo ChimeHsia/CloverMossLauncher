@@ -14,7 +14,9 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { Ipc } from '@shared/channels'
 import type { AppInfo, Settings } from '@shared/types'
+import defaultHomeBackground from '../assets/home-background.webp'
 import { call } from '../lib/api'
+import { cloverUrl } from '../lib/clover'
 import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
 import { useApp } from '../store'
@@ -314,7 +316,7 @@ export function SettingsPage(): React.JSX.Element {
             <div className="min-w-0">
               <div className="text-[12px] font-medium">首页背景图</div>
               <div className="mt-0.5 truncate text-[10px] text-[var(--color-text-tertiary)]">
-                {draft.homeBackground ?? '默认渐变'}
+                {draft.homeBackground ?? '默认深灰占位图（16:9）'}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -330,6 +332,16 @@ export function SettingsPage(): React.JSX.Element {
               </Button>
             </div>
           </div>
+          <div className="mt-2.5 overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)]">
+            <img
+              src={draft.homeBackground ? cloverUrl(draft.homeBackground) : defaultHomeBackground}
+              alt="首页背景预览"
+              className="aspect-video w-full object-cover"
+            />
+          </div>
+          <p className="mt-1.5 text-[9.5px] text-[var(--color-text-tertiary)]">
+            建议 16:9，2560×1440；默认使用内置深灰占位图。
+          </p>
         </Card>
 
         <Card className="px-5 py-4">

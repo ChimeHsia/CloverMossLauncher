@@ -279,6 +279,7 @@ size/preview/tags`。用户也可“从 HF 仓库 / 链接 / 本地文件”添�
 
 ### 8.5 画廊与本地图片协议
 
+- **入口**：启动器侧栏的全局画廊，创作窗口也保留入口；
 - **来源**：`<appData>/outputs`、每个实例的 `outputs/`、`settings.galleryRoots`（任意本地目录）；
 - **扫描**：递归深度 ≤ 5，跳过隐藏目录与 `node_modules/.git`；结果按 mtime 倒序，
   5 s 内存缓存；
@@ -289,7 +290,10 @@ size/preview/tags`。用户也可“从 HF 仓库 / 链接 / 本地文件”添�
 - **本地图片**：注册 `clover://` 自定义协议，`clover://local?path=…` 只允许画廊根目录与
   `homeBackground`，主进程读文件后按 MIME 返回；CSP 只放行 `clover:`；
 - **元数据**：PNG `tEXt/iTXt` + 同名 sidecar `.json`，读取 prompt / negative / seed / 尺寸；
-- **交接**：详情里的“用作布局底图”把 `GalleryItem` 写入 `studioBackground` 并跳转 `/studio`。
+- **交接**：详情里的“用作布局底图”写入 `studioBackground`，在启动器里通过 `window:open` 打开/聚焦创作窗口并跳到 `/studio`；
+  跨窗口用 `localStorage` 短暂传递底图，创作窗口读取后清掉。
+- **首页背景**：内置 `src/renderer/src/assets/home-background.webp`（16:9 深灰占位）；
+  `settings.homeBackground` 可替换；`clover://` 协议允许精确匹配该路径。
 
 ## 9. 进程监督与适配器
 

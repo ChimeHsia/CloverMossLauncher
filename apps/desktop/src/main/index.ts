@@ -351,6 +351,7 @@ app.whenReady().then(async () => {
       ['/instances', 'instances'],
       ['/instances/moss-main-9d799c1', 'instance-detail'],
       ['/diagnostics', 'diagnostics'],
+      ['/gallery', 'gallery-launcher'],
       ['/models', 'models'],
       ['/settings', 'settings'],
     ]

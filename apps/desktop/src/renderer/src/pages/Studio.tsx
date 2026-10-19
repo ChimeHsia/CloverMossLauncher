@@ -52,6 +52,19 @@ export function StudioPage(): React.JSX.Element {
   const background = useApp((state) => state.studioBackground)
   const setStudioPrompt = useApp((state) => state.setStudioPrompt)
   const setStudioBackground = useApp((state) => state.setStudioBackground)
+
+  useEffect(() => {
+    if (background) return
+    try {
+      const raw = localStorage.getItem('clover.studioBackground')
+      if (!raw) return
+      const item = JSON.parse(raw) as GalleryItem
+      setStudioBackground(item)
+      localStorage.removeItem('clover.studioBackground')
+    } catch {
+      // ignore
+    }
+  }, [background, setStudioBackground])
   const instances = useApp((state) => state.instances)
   const env = useApp((state) => state.env)
 

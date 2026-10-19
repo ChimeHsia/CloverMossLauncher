@@ -64,7 +64,10 @@ export const schemas = {
 
   announcementsDismiss: z.object({ id: z.string().min(1).max(120) }),
 
-  windowOpen: z.object({ kind: z.enum(['launcher', 'creator', 'terminal']) }),
+  windowOpen: z.object({
+    kind: z.enum(['launcher', 'creator', 'terminal']),
+    route: z.string().regex(/^\/[a-z0-9/_-]*$/i).max(120).optional(),
+  }),
 
   caseSave: z.object({
     id: z.string().max(80).optional(),

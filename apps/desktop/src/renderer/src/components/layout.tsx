@@ -26,6 +26,7 @@ const launcherNav: NavItem[] = [
   { to: '/', key: 'nav.home', icon: Home, end: true },
   { to: '/instances', key: 'nav.instances', icon: Boxes },
   { to: '/models', key: 'nav.models', icon: Package },
+  { to: '/gallery', key: 'nav.gallery', icon: Images },
   { to: '/diagnostics', key: 'nav.diagnostics', icon: Stethoscope },
 ]
 
