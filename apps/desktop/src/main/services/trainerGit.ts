@@ -1,10 +1,10 @@
-import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BranchInfo, CommitInfo, Settings } from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
+import { mirrorHealthy } from '../lib/mirror-health'
 import { firstLine, run, tail } from '../lib/run'
 import { applyGitMirror, getLastNetwork } from './network'
 
@@ -61,7 +61,8 @@ export async function ensureTrainerMirror(settings: Settings): Promise<void> {
   if (pending) return pending
   const task = (async () => {
     const mirror = trainerMirror(settings)
-    if (!existsSync(join(mirror, 'HEAD'))) {
+    if (!(await mirrorHealthy(mirror, run))) {
+      await rm(mirror, { recursive: true, force: true })
       await cloneMirror(settings)
       return
     }
@@ -71,7 +72,11 @@ export async function ensureTrainerMirror(settings: Settings): Promise<void> {
       ['-C', mirror, 'fetch', '--prune', '--tags', 'origin', '+refs/heads/*:refs/heads/*'],
       { timeoutMs: 180_000 },
     )
-    if (result.code !== 0) progress(`拉取失败：${firstLine(result.stderr)}`)
+    if (result.code !== 0) {
+      progress(`拉取失败：${firstLine(result.stderr)}，正在重建镜像`)
+      await rm(mirror, { recursive: true, force: true })
+      await cloneMirror(settings)
+    }
   })().finally(() => ensuring.delete(key))
   ensuring.set(key, task)
   return task

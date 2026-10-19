@@ -11,6 +11,7 @@
     "test:settings-draft": "node tools/test-settings-draft.mjs",
     "test:ui": "node tools/test-ui.mjs --scaled",
     "release:md": "node tools/release-md.mjs",
-    "release:md:check": "node tools/release-md.mjs --check"
+    "release:md:check": "node tools/release-md.mjs --check",
+    "test": "pnpm --filter @clover/desktop test"
   }
 }

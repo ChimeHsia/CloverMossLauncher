@@ -1,9 +1,9 @@
-import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BranchInfo, CommitInfo, Settings } from '@shared/types'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
+import { mirrorHealthy } from '../lib/mirror-health'
 import { firstLine, run, tail } from '../lib/run'
 import { Events } from '@shared/channels'
 import { applyGitMirror, getLastNetwork } from './network'
@@ -11,7 +11,7 @@ import { getRecommendedCommit } from './updates'
 
 export const DEFAULT_SOURCE = 'https://github.com/OpenMOSS/MOSS-Image'
 
-let ensuring: Promise<void> | null = null
+const ensuring = new Map<string, Promise<void>>()
 
 function progress(phase: string, message: string): void {
   emit(Events.gitProgress, { phase, message, at: new Date().toISOString() })
@@ -38,25 +38,40 @@ async function cloneMirror(source: string, settings: Settings): Promise<void> {
 }
 
 export async function ensureMirror(settings: Settings, source = DEFAULT_SOURCE): Promise<void> {
-  if (ensuring) return ensuring
-  ensuring = (async () => {
-    if (!existsSync(join(paths.mirror(), 'HEAD'))) {
+  // 以镜像路径为键：paths.mirror() 目前与 source 无关，同一目录只能有一个克隆在跑。
+  // 若将来支持按 source 分目录，这里自然按目录分锁；不能按 source 分锁，否则
+  // 两个不同 source 会并发写同一个目录，后完成者静默覆盖前者。
+  const key = paths.mirror()
+  const pending = ensuring.get(key)
+  if (pending) return pending
+
+  const task = (async () => {
+    const mirror = paths.mirror()
+
+    // 镜像不健康（克隆中断、远端为空、HEAD 指向非法引用等）时直接重建，
+    // 否则仅凭 HEAD 文件存在就去 fetch，会永远停在坏状态。
+    if (!(await mirrorHealthy(mirror, run))) {
+      await rm(mirror, { recursive: true, force: true })
       await cloneMirror(source, settings)
       return
     }
+
     progress('fetch', '正在拉取最新分支与提交')
     const result = await run(
       'git',
-      ['-C', paths.mirror(), 'fetch', '--prune', 'origin', '+refs/heads/*:refs/heads/*'],
+      ['-C', mirror, 'fetch', '--prune', 'origin', '+refs/heads/*:refs/heads/*'],
       { timeoutMs: 180_000 },
     )
     if (result.code !== 0) {
-      progress('fetch', `拉取失败：${firstLine(result.stderr)}`)
+      // 先尝试重建一次，仍失败则把错误抛给调用方，避免 UI 无限转圈
+      progress('fetch', `拉取失败：${firstLine(result.stderr)}，正在重建镜像`)
+      await rm(mirror, { recursive: true, force: true })
+      await cloneMirror(source, settings)
     }
-  })().finally(() => {
-    ensuring = null
-  })
-  return ensuring
+  })().finally(() => ensuring.delete(key))
+
+  ensuring.set(key, task)
+  return task
 }
 
 export async function listBranches(): Promise<BranchInfo[]> {
@@ -65,7 +80,9 @@ export async function listBranches(): Promise<BranchInfo[]> {
     ['-C', paths.mirror(), 'for-each-ref', '--format=%(refname:short)|%(objectname)|%(HEAD)', 'refs/heads'],
     { timeoutMs: 10_000 },
   )
-  if (result.code !== 0) return []
+  if (result.code !== 0) {
+    throw new Error(`读取分支失败：${firstLine(result.stderr) || firstLine(result.stdout)}`)
+  }
   const main = firstLine(
     (
       await run('git', ['-C', paths.mirror(), 'rev-parse', '--verify', 'refs/heads/main'], { timeoutMs: 5000 })

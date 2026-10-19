@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { JobRecord, Settings, TrainerRunInput, TrainerRuntimeInfo, TrainerRuntimeState, TrainerVersion } from '@shared/types'
+import { mirrorHealthy } from '../lib/mirror-health'
 import { paths } from '../lib/paths'
 import { run } from '../lib/run'
 import { startTrainingJob } from './supervisor'
@@ -254,7 +255,8 @@ export async function trainerDoctor(settings: Settings, versionId: string): Prom
 }
 
 export async function trainerMirrorInfo(settings: Settings): Promise<{ ready: boolean; path: string }> {
-  return { ready: existsSync(join(trainerMirror(settings), 'HEAD')), path: trainerMirror(settings) }
+  const mirror = trainerMirror(settings)
+  return { ready: await mirrorHealthy(mirror, run), path: mirror }
 }
 
 export async function trainerRuntimeSummary(settings: Settings, versionId: string): Promise<TrainerRuntimeInfo | null> {
