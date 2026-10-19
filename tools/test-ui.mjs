@@ -11,6 +11,7 @@ const { default: react } = await import(pathToFileURL(require.resolve('@vitejs/p
 const { default: tailwindcss } = await import(pathToFileURL(require.resolve('@tailwindcss/vite')).href)
 const root = fileURLToPath(new URL('../', import.meta.url))
 const output = mkdtempSync(join(tmpdir(), 'clover-ui-'))
+const screenshots = process.argv.find((arg) => arg.startsWith('--screenshots='))?.slice('--screenshots='.length)
 
 try {
   await build({
@@ -30,14 +31,23 @@ try {
   })
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
-  const result = spawnSync(require('electron'), [resolve(root, 'tools/ui-check-electron.cjs'), output], {
-    env,
-    stdio: 'inherit',
-    timeout: 60000,
-    windowsHide: true,
-  })
-  if (result.error) throw result.error
-  process.exitCode = result.status ?? 1
+  for (const scale of process.argv.includes('--scaled') ? [1, 1.5, 2] : [1]) {
+    const result = spawnSync(require('electron'), [resolve(root, 'tools/ui-check-electron.cjs'), output], {
+      env: {
+        ...env,
+        CLOVER_UI_SCALE: String(scale),
+        ...(screenshots ? { CLOVER_UI_SCREENSHOTS: resolve(screenshots) } : {}),
+      },
+      stdio: 'inherit',
+      timeout: 60000,
+      windowsHide: true,
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) {
+      process.exitCode = result.status ?? 1
+      break
+    }
+  }
 } finally {
   rmSync(output, { recursive: true, force: true })
 }

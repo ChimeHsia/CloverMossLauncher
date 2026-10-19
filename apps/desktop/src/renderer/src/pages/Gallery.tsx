@@ -144,7 +144,7 @@ export function GalleryPage(): React.JSX.Element {
               key={item.id}
               type="button"
               onClick={() => void openDetail(item)}
-              className="group relative overflow-hidden rounded-xl border border-[var(--color-border-subtle)] bg-white/40 text-left shadow-[0_2px_10px_rgba(15,35,70,0.04)] transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-[0_8px_24px_rgba(37,99,235,0.12)] dark:bg-white/[0.03]"
+              className="group relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-white/[0.03] text-left shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
               style={{ contentVisibility: 'auto', containIntrinsicSize: '240px' }}
             >
               <div className="aspect-square w-full overflow-hidden bg-[var(--color-surface-tertiary)]">
@@ -153,7 +153,7 @@ export function GalleryPage(): React.JSX.Element {
                   alt={item.name}
                   loading="lazy"
                   decoding="async"
-                  className="size-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                  className="size-full object-cover transition duration-200 group-hover:scale-[1.03]"
                 />
               </div>
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-2.5 pb-2 pt-7">

@@ -30,7 +30,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'glass rounded-[6px] border border-[var(--color-border-subtle)]',
+        'glass border border-[var(--color-border-subtle)]',
         className,
       )}
       {...rest}
@@ -108,7 +108,7 @@ export function Button({
       size={size}
       className={cn(tint, className)}
       style={{
-        borderRadius: 4,
+        borderRadius: 'var(--radius-control)',
         fontSize: 12,
         lineHeight: '16px',
         minHeight: 30,
@@ -159,7 +159,7 @@ export function ProgressBar({
     <div className={cn('h-[3px] w-full overflow-hidden rounded-full bg-white/[0.08]', className)}>
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-300 ease-out',
+          'h-full rounded-full transition-[width] duration-200 ease-out',
           tone === 'accent' ? 'bg-accent-500' : 'bg-[var(--color-text-tertiary)]',
         )}
         style={{ width: `${width}%` }}
@@ -184,7 +184,7 @@ export function EmptyState({
   action?: ReactNode
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] px-6 py-12 text-center">
       {icon ? <div className="text-[var(--color-text-tertiary)]">{icon}</div> : null}
       <p className="text-sm font-medium">{title}</p>
       {description ? (
@@ -258,7 +258,7 @@ function Dialog({
     >
       <div
         className={cn(
-          'glass-strong flex w-full flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-2xl',
+          'app-dialog-panel glass-strong flex w-full flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-2xl',
           sheet ? 'h-full border-l' : 'max-h-[82vh]',
           width ?? (sheet ? 'max-w-[520px]' : 'max-w-2xl'),
         )}

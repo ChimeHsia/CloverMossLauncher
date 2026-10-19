@@ -4,6 +4,7 @@ import { paths } from '../lib/paths'
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
+  uiAnimation: 'system',
   language: 'zh-CN',
   networkMode: 'auto',
   gitMirror: null,

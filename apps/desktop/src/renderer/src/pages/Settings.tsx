@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Ipc } from '@shared/channels'
 import type { AppInfo, Settings } from '@shared/types'
 import defaultHomeBackground from '../assets/home-background.png'
@@ -22,7 +23,7 @@ import { bytes } from '../lib/format'
 import { t } from '../lib/i18n'
 import { clearSavedSettings, pendingSettings } from '../lib/settingsDraft'
 import { useApp } from '../store'
-import { Button, Card, IconButton, Input, Pill, Segmented, Select, StatusDot, Switch, cn, useToast } from '../components/ui'
+import { Button, Card, IconButton, Input, Pill, Segmented, Select, StatusDot, Switch, useToast } from '../components/ui'
 
 export function SettingsPage(): React.JSX.Element {
   const toast = useToast()
@@ -141,7 +142,7 @@ export function SettingsPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">{t('settings.title')}</h1>
           <p className="mt-1 text-[12.5px] text-[var(--color-text-secondary)]">
-            网络、存储、设备与运行时修改后保存；目录选择和背景操作立即生效。
+            动效、网络、存储、设备与运行时修改后保存；目录选择和背景操作立即生效。
           </p>
         </div>
         <Button tone="primary" onClick={() => void save()} disabled={!dirty || saving}>
@@ -163,6 +164,25 @@ export function SettingsPage(): React.JSX.Element {
                 </div>
               </div>
               <Pill tone="neutral">Fixed</Pill>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-3">
+              <div>
+                <label htmlFor="ui-animation" className="text-[12px] font-medium">界面动效</label>
+                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  跟随系统时尊重减少动态效果的偏好
+                </div>
+              </div>
+              <Select
+                id="ui-animation"
+                value={draft.uiAnimation}
+                onChange={(event) => patch({ uiAnimation: event.target.value as Settings['uiAnimation'] })}
+                className="w-[110px] shrink-0"
+                options={[
+                  { value: 'system', label: '跟随系统' },
+                  { value: 'on', label: '开启' },
+                  { value: 'off', label: '关闭' },
+                ]}
+              />
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-3">
               <div>
@@ -572,17 +592,15 @@ export function SettingsPage(): React.JSX.Element {
         </Card>
       </div>
 
-      <div
-        className={cn(
-          'fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface-elevated)] px-3 py-1.5 shadow-lg transition',
-          dirty ? 'opacity-100' : 'pointer-events-none opacity-0',
-        )}
-      >
-        <span className="text-[11px] text-[var(--color-text-secondary)]">有未保存的更改</span>
-        <Button tone="primary" size="sm" onClick={() => void save()} disabled={saving}>
-          保存
-        </Button>
-      </div>
+      {dirty ? createPortal(
+        <div role="status" className="glass-strong fixed bottom-4 left-1/2 z-30 flex max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 px-3 py-2 shadow-lg">
+          <span className="text-[11px] text-[var(--color-text-secondary)]">有未保存的更改</span>
+          <Button tone="primary" size="sm" onClick={() => void save()} disabled={saving}>
+            {saving ? '保存中…' : '保存'}
+          </Button>
+        </div>,
+        document.body,
+      ) : null}
     </div>
   )
 }

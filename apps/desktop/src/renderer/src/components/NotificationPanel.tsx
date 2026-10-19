@@ -34,7 +34,7 @@ export function NotificationPanel(): React.JSX.Element | null {
   const announcements = (updates?.announcements ?? []).slice(0, 4)
 
   return (
-    <div className="glass-strong fixed right-3 top-[52px] z-40 flex max-h-[calc(100vh-64px)] w-[340px] flex-col overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+    <div className="app-popover glass-strong fixed right-3 top-[52px] z-40 flex max-h-[calc(100vh-64px)] w-[340px] flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
       <header className="flex shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-2.5">
         <div className="flex items-baseline gap-2">
           <span className="text-[12.5px] font-semibold">通知</span>

@@ -33,6 +33,7 @@ export const schemas = {
   settingsUpdate: z
     .object({
       theme: z.enum(['system', 'light', 'dark']),
+      uiAnimation: z.enum(['system', 'on', 'off']),
       language: z.enum(['zh-CN', 'en']),
       networkMode: z.enum(['auto', 'direct', 'mirror']),
       gitMirror: z.string().max(2048).nullable(),

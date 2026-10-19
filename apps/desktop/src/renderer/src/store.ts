@@ -23,10 +23,11 @@ import type { LayoutDraft } from './lib/layout'
 import type { UpdateDownloadState } from '@shared/release'
 import { call, onEvent } from './lib/api'
 
-function applyTheme(_theme?: Settings['theme']): void {
+function applyAppearance(settings: Settings): void {
   // UI v0.3 is dark-gray only. The setting stays in the schema for migration,
   // but the shell always renders the Fluent dark acrylic surface.
   document.documentElement.dataset.theme = 'dark'
+  document.documentElement.dataset.uiAnimation = settings.uiAnimation ?? 'system'
 }
 
 interface RuntimeLogEvent {
@@ -238,7 +239,7 @@ export const useApp = create<AppStore>((set, get) => {
     })
 
     onEvent<Settings>(Events.settingsChanged, (settings) => {
-      applyTheme(settings.theme)
+      applyAppearance(settings)
       set({ settings })
     })
     onEvent<UpdateDownloadState>(Events.updateDownload, (state) => {
@@ -278,7 +279,7 @@ export const useApp = create<AppStore>((set, get) => {
 
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       const settings = get().settings
-      if (settings) applyTheme(settings.theme)
+      if (settings) applyAppearance(settings)
     })
   }
 
@@ -318,7 +319,7 @@ export const useApp = create<AppStore>((set, get) => {
       try {
         document.documentElement.dataset.acrylic = String(window.clover.acrylic)
         const settings = await call<Settings>(Ipc.settingsGet)
-        applyTheme(settings.theme)
+        applyAppearance(settings)
         set({ settings })
         subscribe()
 
@@ -455,7 +456,7 @@ export const useApp = create<AppStore>((set, get) => {
 
     async saveSettings(patch) {
       const settings = await call<Settings>(Ipc.settingsUpdate, patch)
-      applyTheme(settings.theme)
+      applyAppearance(settings)
       set({ settings })
     },
 

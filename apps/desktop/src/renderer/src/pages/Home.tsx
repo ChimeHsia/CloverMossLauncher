@@ -365,7 +365,7 @@ export function HomePage(): React.JSX.Element {
 
       <div className="sticky bottom-0 z-20 mt-3">
         {advancedOpen ? (
-          <div className="glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 rounded-[6px] border border-[var(--color-border)] p-3 shadow-2xl">
+          <div className="app-popover glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 border border-[var(--color-border)] p-3 shadow-2xl">
             <div className="flex flex-wrap items-end gap-2">
               <Field label="Case 名称">
                 <Input
