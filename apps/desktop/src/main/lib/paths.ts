@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { createHash } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -16,6 +17,8 @@ export const paths = {
   announcements: () => join(root(), 'announcements.json'),
   git: () => join(root(), 'git'),
   mirror: () => join(root(), 'git', 'moss-image.git'),
+  mirrorForSource: (source: string) =>
+    join(root(), 'git', `moss-image-${createHash('sha1').update(source).digest('hex').slice(0, 12)}.git`),
   instances: () => join(root(), 'instances'),
   instance: (id: string) => join(root(), 'instances', id),
   runtimes: () => join(root(), 'runtimes'),

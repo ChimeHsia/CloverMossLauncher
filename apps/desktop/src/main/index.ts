@@ -10,6 +10,7 @@ import { buildGradioArgs, gradioCommandPreview, gradioSummary, normalizeGradioCo
 import { compareSemver, findInstaller, parseReleaseMarkdown } from '@shared/release'
 import { downloadUpdate } from './services/updateDownload'
 import { localNotificationsSupported, pushTestNotification } from './services/desktopNotifications'
+import { checkBareMirror } from './services/gitHealth'
 import WebSocket from 'ws'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, deleteInstance, listInstances, updateInstance } from './services/instances'
@@ -173,6 +174,76 @@ app.whenReady().then(async () => {
     )
     win.destroy()
     app.exit(loadedUrl.endsWith('/health') ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'mirror-health') {
+    const base = join(app.getPath('temp'), `clover-mirror-health-${process.pid}`)
+    try {
+      mkdirSync(base, { recursive: true })
+      const src = join(base, 'src')
+      const good = join(base, 'good.git')
+      const empty = join(base, 'empty.git')
+      mkdirSync(src, { recursive: true })
+      writeFileSync(join(src, 'a.txt'), 'a')
+      await run('git', ['init', src])
+      await run('git', ['-C', src, 'config', 'user.email', 'test@example.com'])
+      await run('git', ['-C', src, 'config', 'user.name', 'Test'])
+      await run('git', ['-C', src, 'add', 'a.txt'])
+      await run('git', ['-C', src, 'commit', '-m', 'init'])
+      await run('git', ['clone', '--bare', src, good])
+      await run('git', ['init', '--bare', empty])
+
+      const emptyHealth = await checkBareMirror(empty)
+      const goodHealth = await checkBareMirror(good)
+      writeFileSync(join(good, 'HEAD'), 'ref: refs/heads/.invalid\n')
+      const invalidHeadButBranchHealth = await checkBareMirror(good)
+      rmSync(join(good, 'refs', 'heads'), { recursive: true, force: true })
+      rmSync(join(good, 'packed-refs'), { force: true })
+      const brokenHealth = await checkBareMirror(good)
+
+      const source = `file://${src}`
+      await ensureMirror(getSettings(), source)
+      const branches = await listBranches(source)
+      let missingSourceError = ''
+      try {
+        await listBranches(`https://example.invalid/nonexistent-${process.pid}.git`)
+      } catch (error) {
+        missingSourceError = error instanceof Error ? error.message : String(error)
+      }
+
+      const sourceMirror = paths.mirrorForSource(source)
+      const result = {
+        scenario: 'mirror-health',
+        emptyHealthy: emptyHealth.healthy,
+        goodHealthy: goodHealth.healthy,
+        invalidHeadButBranchHealthy: invalidHeadButBranchHealth.healthy,
+        brokenHealthy: brokenHealth.healthy,
+        customSourceBranches: branches.map((branch) => branch.name),
+        customMirrorDistinct: sourceMirror !== paths.mirror(),
+        customMirrorExists: existsSync(sourceMirror),
+        missingSourceError: missingSourceError.slice(0, 120),
+      }
+      console.log(JSON.stringify(result, null, 2))
+      app.exit(
+        !emptyHealth.healthy &&
+          goodHealth.healthy &&
+          invalidHeadButBranchHealth.healthy &&
+          !brokenHealth.healthy &&
+          branches.some((branch) => branch.name === 'main') &&
+          sourceMirror !== paths.mirror() &&
+          existsSync(sourceMirror) &&
+          Boolean(missingSourceError)
+          ? 0
+          : 1,
+      )
+    } catch (error) {
+      console.error(error)
+      app.exit(1)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+      rmSync(paths.mirrorForSource(`file://${join(base, 'src')}`), { recursive: true, force: true })
+    }
     return
   }
 

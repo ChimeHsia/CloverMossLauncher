@@ -260,13 +260,15 @@ export function registerIpc(): void {
     return true
   })
 
-  handle(Ipc.gitBranches, null, async () => {
+  handle(Ipc.gitBranches, schemas.gitBranches, async (input) => {
     const settings = getSettings()
-    await ensureMirror(settings)
-    return listBranches()
+    await ensureMirror(settings, input?.source)
+    return listBranches(input?.source)
   })
 
-  handle(Ipc.gitCommits, schemas.gitCommits, ({ branch, limit }) => listCommits(branch, limit))
+  handle(Ipc.gitCommits, schemas.gitCommits, ({ branch, limit, source }) =>
+    listCommits(branch, limit, source),
+  )
 
   handle(Ipc.instancesList, null, () => listInstances())
 

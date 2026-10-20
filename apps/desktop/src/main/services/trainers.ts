@@ -8,6 +8,7 @@ import { run } from '../lib/run'
 import { startTrainingJob } from './supervisor'
 import { allRemoteVersions, remoteSetup } from './remoteTrainer'
 import { getTrainingHost } from './trainingHosts'
+import { checkBareMirror } from './gitHealth'
 import { posixQuote, sshArgs, sshCommand, sshExec } from './ssh'
 import { hasUv, parseDepsFromPyproject, pickPython, venvPython } from './runtimes'
 import {
@@ -254,7 +255,9 @@ export async function trainerDoctor(settings: Settings, versionId: string): Prom
 }
 
 export async function trainerMirrorInfo(settings: Settings): Promise<{ ready: boolean; path: string }> {
-  return { ready: existsSync(join(trainerMirror(settings), 'HEAD')), path: trainerMirror(settings) }
+  const mirror = trainerMirror(settings)
+  const health = await checkBareMirror(mirror)
+  return { ready: health.healthy, path: mirror }
 }
 
 export async function trainerRuntimeSummary(settings: Settings, versionId: string): Promise<TrainerRuntimeInfo | null> {

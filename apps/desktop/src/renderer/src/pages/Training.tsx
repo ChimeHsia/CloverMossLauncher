@@ -97,8 +97,8 @@ export function TrainingPage(): React.JSX.Element {
         const defaultBranch = next.find((item) => item.isDefault)?.name ?? next[0]?.name ?? 'main'
         setBranch(defaultBranch)
         await loadCommits(defaultBranch)
-      } catch {
-        // keep page usable without a mirror
+      } catch (error) {
+        toast.push(error instanceof Error ? error.message : String(error), 'error')
       }
     })()
   }, [mirror?.ready, branches.length, loadCommits])

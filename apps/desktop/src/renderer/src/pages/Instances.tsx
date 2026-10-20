@@ -2,6 +2,7 @@ import { AlertTriangle, Boxes, ChevronRight, FolderOpen, Plus, RefreshCw, Trash2
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
+import { DEFAULT_SOURCE } from '@shared/git'
 import type { BranchInfo, CommitInfo, InstanceInfo, ManagedHost } from '@shared/types'
 import { call } from '../lib/api'
 import { dateTime, relative } from '../lib/format'
@@ -45,6 +46,8 @@ export function InstancesPage(): React.JSX.Element {
   const [branches, setBranches] = useState<BranchInfo[]>([])
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [branch, setBranch] = useState('main')
+  const [source, setSource] = useState(DEFAULT_SOURCE)
+  const [branchError, setBranchError] = useState<string | null>(null)
   const [commit, setCommit] = useState('')
   const [name, setName] = useState('')
   const [runtimeMode, setRuntimeMode] = useState<'shared' | 'isolated'>('shared')
@@ -62,9 +65,11 @@ export function InstancesPage(): React.JSX.Element {
     setCreateOpen(true)
     setLoadingBranches(true)
     setHostId('')
+    setSource(DEFAULT_SOURCE)
+    setBranchError(null)
     try {
       const [list, hostList] = await Promise.all([
-        call<BranchInfo[]>(Ipc.gitBranches),
+        call<BranchInfo[]>(Ipc.gitBranches, { source: DEFAULT_SOURCE }),
         call<ManagedHost[]>(Ipc.hostsList),
       ])
       setHosts(hostList.filter((item) => item.kind === 'ssh'))
@@ -75,7 +80,9 @@ export function InstancesPage(): React.JSX.Element {
         await loadCommits(preferred.name, '')
       }
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : String(error), 'error')
+      const message = error instanceof Error ? error.message : String(error)
+      setBranchError(message)
+      toast.push(message, 'error')
     } finally {
       setLoadingBranches(false)
     }
@@ -86,12 +93,13 @@ export function InstancesPage(): React.JSX.Element {
     setBranches([])
     setCommits([])
     setCommit('')
+    setBranchError(null)
     setLoadingBranches(true)
     try {
       const list =
         nextHostId
           ? await call<BranchInfo[]>(Ipc.instanceRemoteBranches, { hostId: nextHostId })
-          : await call<BranchInfo[]>(Ipc.gitBranches)
+          : await call<BranchInfo[]>(Ipc.gitBranches, { source })
       setBranches(list)
       const preferred = list.find((item) => item.isStable) ?? list.find((item) => item.isDefault) ?? list[0]
       if (preferred) {
@@ -99,13 +107,19 @@ export function InstancesPage(): React.JSX.Element {
         await loadCommits(preferred.name, nextHostId)
       }
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : String(error), 'error')
+      const message = error instanceof Error ? error.message : String(error)
+      setBranchError(message)
+      toast.push(message, 'error')
     } finally {
       setLoadingBranches(false)
     }
   }
 
-  async function loadCommits(branchName: string, targetHostId = hostId): Promise<void> {
+  async function loadCommits(
+    branchName: string,
+    targetHostId = hostId,
+    targetSource = source,
+  ): Promise<void> {
     setLoadingCommits(true)
     try {
       const list = targetHostId
@@ -114,11 +128,13 @@ export function InstancesPage(): React.JSX.Element {
             branch: branchName,
             limit: 60,
           })
-        : await call<CommitInfo[]>(Ipc.gitCommits, { branch: branchName, limit: 60 })
+        : await call<CommitInfo[]>(Ipc.gitCommits, { branch: branchName, limit: 60, source: targetSource })
       setCommits(list)
       setCommit(list[0]?.sha ?? '')
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : String(error), 'error')
+      const message = error instanceof Error ? error.message : String(error)
+      setBranchError(message)
+      toast.push(message, 'error')
     } finally {
       setLoadingCommits(false)
     }
@@ -136,6 +152,7 @@ export function InstancesPage(): React.JSX.Element {
         commit,
         name: name.trim() || undefined,
         runtimeMode,
+        source,
         hostId: hostId || undefined,
       })
       toast.push(`实例 ${instance.name} 已创建${hostId ? '（远端）' : ''}`, 'success')
@@ -341,6 +358,52 @@ export function InstancesPage(): React.JSX.Element {
                     : '本机：使用本地 mirror/worktree/venv。'}
               </span>
             </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-[11.5px] font-medium text-[var(--color-text-secondary)]">源码来源</span>
+              <div className="flex gap-2">
+                <input
+                  value={source}
+                  onChange={(event) => {
+                    setSource(event.target.value)
+                    setBranches([])
+                    setCommits([])
+                    setCommit('')
+                    setBranchError(null)
+                  }}
+                  disabled={Boolean(hostId)}
+                  placeholder={DEFAULT_SOURCE}
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 font-mono text-[11.5px] outline-none focus:border-accent-500 disabled:opacity-50"
+                />
+                <Button
+                  tone="secondary"
+                  onClick={() => void selectHost(hostId)}
+                  disabled={loadingBranches || Boolean(hostId)}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <RefreshCw className="size-3.5" /> 刷新分支
+                  </span>
+                </Button>
+              </div>
+              <span className="block text-[10px] leading-4 text-[var(--color-text-tertiary)]">
+                {hostId
+                  ? '远端实例当前固定使用官方 MOSS-Image 源；本机镜像可按来源独立缓存。'
+                  : '默认官方仓库；自定义来源会使用独立镜像目录，不会覆盖官方镜像。'}
+              </span>
+            </label>
+
+            {branchError ? (
+              <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2.5 text-[11.5px] leading-5 text-red-300">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">读取分支失败</div>
+                  <div className="break-words text-red-300/80">{branchError}</div>
+                </div>
+                <Button tone="ghost" onClick={() => void selectHost(hostId)}>
+                  重试
+                </Button>
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-1.5">

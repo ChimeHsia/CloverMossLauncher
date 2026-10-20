@@ -77,8 +77,13 @@ async function writeRecord(record: InstanceRecord): Promise<void> {
   await writeFile(recordFile(record.id), JSON.stringify(record, null, 2), 'utf8')
 }
 
-function channelFor(branch: string, commit: string, mainSha: string | null): InstanceInfo['channel'] {
-  const recommended = getRecommendedCommit()
+function channelFor(
+  branch: string,
+  commit: string,
+  mainSha: string | null,
+  source = DEFAULT_SOURCE,
+): InstanceInfo['channel'] {
+  const recommended = source === DEFAULT_SOURCE ? getRecommendedCommit() : null
   if (branch === 'main' && (commit === mainSha || (!!recommended && commit.startsWith(recommended)))) return 'stable'
   return branch === 'main' ? 'experimental' : 'custom'
 }
@@ -88,7 +93,7 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
   const localDir = paths.instance(record.id)
   const dir = placement.kind === 'local' ? localDir : placement.root
   const runtime = await readRuntime(record.runtimeId)
-  const mainSha = await branchStableSha()
+  const mainSha = await branchStableSha(record.source)
   const exists =
     placement.kind === 'local' ? existsSync(localDir) && existsSync(join(localDir, 'pyproject.toml')) : true
   const dirty = placement.kind === 'local' && exists ? await isDirty(localDir) : false
@@ -102,7 +107,7 @@ async function toInfo(record: InstanceRecord): Promise<InstanceInfo> {
     commitDate: record.commitDate,
     subject: record.subject,
     author: record.author,
-    channel: channelFor(record.branch, record.commit, mainSha),
+    channel: channelFor(record.branch, record.commit, mainSha, record.source),
     runtimeId: record.runtimeId,
     runtimeMode: record.runtimeMode,
     runtimeState: runtime?.state ?? 'missing',
@@ -152,9 +157,9 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
   if (input.hostId) return createRemoteInstance(input, settings)
   const source = input.source ?? DEFAULT_SOURCE
   await ensureMirror(settings, source)
-  if (!(await commitExists(input.commit))) throw new Error('该提交不在本地镜像中，请先刷新分支')
+  if (!(await commitExists(input.commit, source))) throw new Error('该提交不在本地镜像中，请先刷新分支')
 
-  const commits = await listCommits(input.branch, 100)
+  const commits = await listCommits(input.branch, 100, source)
   const commit = commits.find((item) => item.sha === input.commit || item.sha.startsWith(input.commit))
   const sha = commit?.sha ?? input.commit
   const short = sha.slice(0, 7)
@@ -169,7 +174,7 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
 
   const destination = paths.instance(id)
   await mkdir(paths.instances(), { recursive: true })
-  await createWorktree(sha, destination)
+  await createWorktree(sha, destination, source)
 
   const runtime = await ensureRuntime({
     instanceId: id,
@@ -189,7 +194,7 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
     commitDate: commit?.date ?? new Date().toISOString(),
     subject: commit?.subject ?? '',
     author: commit?.author ?? '',
-    channel: channelFor(input.branch, sha, await branchStableSha()),
+    channel: channelFor(input.branch, sha, await branchStableSha(source), source),
     runtimeId: runtime.id,
     runtimeMode: input.runtimeMode,
     placement: { kind: 'local' },
@@ -232,7 +237,7 @@ async function createRemoteInstance(input: CreateInstanceInput, settings: Settin
     commitDate: commit?.date ?? new Date().toISOString(),
     subject: commit?.subject ?? '',
     author: commit?.author ?? '',
-    channel: channelFor(input.branch, sha, await branchStableSha()),
+    channel: channelFor(input.branch, sha, await branchStableSha(input.source), input.source),
     runtimeId: runtime.id,
     runtimeMode: 'isolated',
     placement: {
@@ -280,7 +285,7 @@ export async function deleteInstance(id: string, keepOutputs: boolean, settings?
     await mkdir(backup, { recursive: true })
     await cp(join(dir, 'outputs'), backup, { recursive: true, force: true })
   }
-  await removeWorktree(dir)
+  await removeWorktree(dir, record?.source)
   if (record) {
     const runtime = await readRuntime(record.runtimeId)
     if (runtime) {
@@ -314,7 +319,7 @@ export async function updateInstance(
     record.commit = sha
   } else {
     await checkout(paths.instance(id), commit)
-    const commits = await listCommits(record.branch, 100)
+    const commits = await listCommits(record.branch, 100, record.source)
     info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
     record.commit = info?.sha ?? commit
   }
@@ -322,7 +327,7 @@ export async function updateInstance(
   record.commitDate = info?.date ?? new Date().toISOString()
   record.subject = info?.subject ?? ''
   record.author = info?.author ?? ''
-  record.channel = channelFor(record.branch, record.commit, await branchStableSha())
+  record.channel = channelFor(record.branch, record.commit, await branchStableSha(record.source), record.source)
   await writeRecord(record)
   emit(Events.instancesChanged, { id })
   return toInfo(record)

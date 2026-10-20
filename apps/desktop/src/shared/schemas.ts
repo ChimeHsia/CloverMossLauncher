@@ -51,9 +51,16 @@ export const schemas = {
     })
     .partial(),
 
+  gitBranches: z
+    .object({
+      source: urlLike.optional(),
+    })
+    .optional(),
+
   gitCommits: z.object({
     branch: z.string().min(1).max(120),
     limit: z.number().int().min(1).max(200).default(60),
+    source: urlLike.optional(),
   }),
 
   instanceCreate: z.object({
