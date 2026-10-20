@@ -5,6 +5,11 @@ import type { BackendInfo } from '@shared/backend'
 import type { JobRecord } from '@shared/types'
 import { onEmit } from '../lib/events'
 import { cancelJob, getJob, listJobs, startJob } from './supervisor'
+import { getCatalog } from './models'
+import { listGallery } from './gallery'
+import { listInstances } from './instances'
+import { deleteProject, getProject, listProjects, saveProject } from './projects'
+import { getSettings } from './settings'
 
 let child: UtilityProcess | null = null
 let info: BackendInfo = { ready: false, url: null, token: null }
@@ -31,6 +36,21 @@ function handleRpc(message: Record<string, unknown>): void {
         respond(await getJob(String(params['id'] ?? '')))
       } else if (method === 'listJobs') {
         respond(await listJobs())
+      } else if (method === 'listProjects') {
+        respond(listProjects())
+      } else if (method === 'getProject') {
+        respond(getProject(String(params['id'] ?? '')))
+      } else if (method === 'saveProject') {
+        respond(saveProject(params as never))
+      } else if (method === 'deleteProject') {
+        deleteProject(String(params['id'] ?? ''))
+        respond(true)
+      } else if (method === 'listInstances') {
+        respond(await listInstances())
+      } else if (method === 'listModels') {
+        respond(await getCatalog(getSettings()))
+      } else if (method === 'listGallery') {
+        respond(await listGallery(getSettings(), params as never))
       } else {
         respond(null, `unknown backend method: ${method}`)
       }

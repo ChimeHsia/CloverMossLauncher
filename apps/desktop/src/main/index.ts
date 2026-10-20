@@ -865,13 +865,15 @@ exit 0
     const health = await fetch(`${backend.url}/health`).then((res) => res.json())
     const unauthorized = await fetch(`${backend.url}/api/jobs`).then((res) => res.status)
     const jobs = await fetch(`${backend.url}/api/jobs`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())
+    const studio = (await fetch(`${backend.url}/api/studio/bootstrap`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())) as { projects?: unknown[]; instances?: unknown[]; models?: { models?: unknown[] } }
+    const models = (await fetch(`${backend.url}/api/models`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())) as { models?: unknown[] }
     const hello = await new Promise<unknown>((resolve, reject) => {
       const ws = new WebSocket(`${backend.url!.replace('http', 'ws')}/ws?token=${backend.token}`)
       const timer = setTimeout(() => { ws.close(); reject(new Error('ws timeout')) }, 5000)
       ws.once('message', (data) => { clearTimeout(timer); ws.close(); resolve(JSON.parse(String(data))) })
       ws.once('error', reject)
     })
-    console.log(JSON.stringify({ scenario: 'backend-http', health, unauthorized, jobs: Array.isArray(jobs) ? jobs.length : null, hello }, null, 2))
+    console.log(JSON.stringify({ scenario: 'backend-http', health, unauthorized, jobs: Array.isArray(jobs) ? jobs.length : null, studio: { projects: Array.isArray(studio.projects) ? studio.projects.length : null, instances: Array.isArray(studio.instances) ? studio.instances.length : null, models: Array.isArray(studio.models?.models) ? studio.models.models.length : null }, models: Array.isArray(models?.models) ? models.models.length : null, hello }, null, 2))
     app.exit(0)
     return
   }

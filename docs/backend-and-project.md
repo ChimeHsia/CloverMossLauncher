@@ -1,6 +1,6 @@
-# Clover 后端与 Project
+# MossStudio 后端与 Project
 
-- 状态：代码基座；真实权重/运行时生成未验收
+- 状态：Job + Studio API 基座；WebUI 尚未实现；真实权重/运行时生成未验收
 - 应用版本：`0.1.0`
 - 事实来源：[status.md](status.md)
 
@@ -14,7 +14,7 @@
 - 因此 Job、终端日志、诊断、画廊仍由 main 统一拥有。
 
 ```
-Renderer / Creator
+MossStudio 桌面 / Web shell
    │ HTTP / WS (token)
    ▼
 utilityProcess backend.js
@@ -38,6 +38,12 @@ Authorization: Bearer <token>
 | POST | `/api/jobs` | 提交 StartJobInput |
 | GET | `/api/jobs/:id` | 查询 Job |
 | POST | `/api/jobs/:id/cancel` | 取消 Job |
+| GET | `/api/studio/bootstrap` | Project / Instance / 模型目录的 Studio 启动数据 |
+| GET/POST | `/api/projects` | Project 列表/保存 |
+| GET/DELETE | `/api/projects/:id` | Project 读取/删除 |
+| GET | `/api/instances` | 实例列表 |
+| GET | `/api/models` | 模型目录 |
+| GET | `/api/gallery` | 画廊分页（cursor/limit/query/root） |
 
 `POST /api/jobs` 的 body 与 `StartJobInput` 一致：
 
@@ -77,7 +83,7 @@ ws://127.0.0.1:<port>/ws?token=<token>
 { "type": "event", "channel": "event:job-log", "payload": { "...JobLogLine": true } }
 ```
 
-主要给 Job/API 集成使用；Creator 不做浏览器版，仍由 renderer store 的 IPC 事件更新 UI。
+主要给 Job/Studio API 集成使用；桌面 MossStudio 仍走 IPC，局域网 WebUI（ADR-0007）将复用同一 HTTP/WS。
 
 ## 4. Project 文件
 
@@ -133,7 +139,7 @@ ws://127.0.0.1:<port>/ws?token=<token>
 ## 5. 已知边界
 
 - 真实 backend 生成未验收（缺权重/runtime）；
-- Clover Creator 浏览器版不做（ADR-0004）；WS 事件只完成基础广播；
+- 局域网 WebUI 尚未实现；token/PIN、静态资源、响应式布局仍待做；WS 事件只完成基础广播；
 - Project 完整回放/资产重链/导入导出未做；
 - 后端 token 只保存在内存，应用重启重新生成；
 - 打包时 `backend.js` 与 `ws` 依赖的打包路径待 M6 验证。

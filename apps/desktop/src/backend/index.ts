@@ -8,6 +8,7 @@ interface ParentPort {
 
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
 const token = process.env['CLOVER_BACKEND_TOKEN'] ?? ''
+const host = process.env['CLOVER_BACKEND_HOST'] ?? '127.0.0.1'
 const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
 let nextId = 0
 
@@ -41,7 +42,7 @@ function send(res: ServerResponse, code: number, body: unknown): void {
     'content-length': Buffer.byteLength(data),
     'access-control-allow-origin': '*',
     'access-control-allow-headers': 'authorization, content-type',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
   })
   res.end(data)
 }
@@ -72,6 +73,51 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (req.method === 'GET' && url.pathname === '/api/jobs') {
       send(res, 200, await rpc('listJobs'))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/studio/bootstrap') {
+      const [projects, instances, models] = await Promise.all([
+        rpc('listProjects'),
+        rpc('listInstances'),
+        rpc('listModels'),
+      ])
+      send(res, 200, { projects, instances, models })
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/projects') {
+      send(res, 200, await rpc('listProjects'))
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/projects') {
+      send(res, 200, await rpc('saveProject', await readBody(req)))
+      return
+    }
+    if (url.pathname.startsWith('/api/projects/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/projects/'.length))
+      if (req.method === 'GET') {
+        send(res, 200, await rpc('getProject', { id }))
+        return
+      }
+      if (req.method === 'DELETE') {
+        send(res, 200, await rpc('deleteProject', { id }))
+        return
+      }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/instances') {
+      send(res, 200, await rpc('listInstances'))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/models') {
+      send(res, 200, await rpc('listModels'))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/gallery') {
+      send(res, 200, await rpc('listGallery', {
+        cursor: url.searchParams.get('cursor') ?? undefined,
+        limit: Number(url.searchParams.get('limit') ?? 48) || 48,
+        query: url.searchParams.get('query') ?? undefined,
+        root: url.searchParams.get('root') ?? undefined,
+      }))
       return
     }
     if (req.method === 'GET' && url.pathname.startsWith('/api/jobs/')) {
@@ -133,11 +179,11 @@ parentPort?.on('message', (event) => {
   }
 })
 
-server.listen(0, '127.0.0.1', () => {
+server.listen(0, host, () => {
   const address = server.address()
   const port = typeof address === 'object' && address ? address.port : 0
   parentPort?.postMessage({ type: 'ready', port })
-  console.log(`[clover-backend] listening on 127.0.0.1:${port}`)
+  console.log(`[clover-backend] listening on ${host}:${port}`)
 })
 
 process.on('disconnect', () => process.exit(0))
