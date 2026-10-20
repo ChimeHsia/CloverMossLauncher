@@ -165,8 +165,23 @@ export function WebUiSettingsSheet({ open, onClose, initialInstanceId }: Props):
             </p>
           ) : (
             <div className="mt-2 space-y-1.5">
+              <div className="mb-2 flex items-center gap-2">
+                <Button
+                  tone="ghost"
+                  onClick={() => {
+                    const local = access.urls.find((url) => url.includes('127.0.0.1'))
+                    if (local) void call(Ipc.openExternal, { url: local })
+                  }}
+                >
+                  <span className="inline-flex items-center gap-1"><Globe2 className="size-3" /> 本机打开</span>
+                </Button>
+                <span className="text-[9px] text-[var(--color-text-tertiary)]">先用本机验证，再用手机扫二维码</span>
+              </div>
               {access.urls.map((url) => (
                 <div key={url} className="flex items-center gap-2">
+                  <span className="w-7 shrink-0 text-[8.5px] text-[var(--color-text-tertiary)]">
+                    {url.includes('127.0.0.1') ? '本机' : '局域网'}
+                  </span>
                   <code className="min-w-0 flex-1 truncate text-[9.5px] text-[var(--color-text-secondary)]">{url}</code>
                   <button type="button" className="shrink-0 text-accent-300" onClick={() => void copy(url)}>
                     <Copy className="size-3" />

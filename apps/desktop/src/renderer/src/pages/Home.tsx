@@ -17,7 +17,7 @@ import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
 import { Presence } from '../components/motion'
 import { WebUiSettingsSheet } from '../components/WebUiSettingsSheet'
-import { Button, Field, IconButton, Input, Select, cn, useToast } from '../components/ui'
+import { Button, Field, IconButton, Input, Select, Switch, cn, useToast } from '../components/ui'
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -27,6 +27,7 @@ export function HomePage(): React.JSX.Element {
   const cases = useApp((state) => state.cases)
   const env = useApp((state) => state.env)
   const settings = useApp((state) => state.settings)
+  const saveSettings = useApp((state) => state.saveSettings)
   const homeCopy = useApp((state) => state.updates?.home)
   const refreshCases = useApp((state) => state.refreshCases)
 
@@ -216,18 +217,26 @@ export function HomePage(): React.JSX.Element {
               }
             />
           </Field>
-          <Field label="外部 UI" className="w-[100px]">
-            <button
-              type="button"
-              onClick={() => setWebUiOpen(true)}
-              className="app-input flex w-full items-center gap-1.5"
-              title="配置局域网 MossStudio WebUI"
-            >
-              <Globe2 className="size-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
-              <span className="truncate text-[10.5px]">
-                {settings?.lanWebEnabled ? '已开启' : '未开启'}
-              </span>
-            </button>
+          <Field label="外部 UI" className="w-[150px]">
+            <div className="flex items-center gap-2">
+              <Switch
+                aria-label="启用外部 UI"
+                checked={settings?.lanWebEnabled ?? false}
+                onCheckedChange={(value: boolean) => {
+                  void saveSettings({ lanWebEnabled: value })
+                    .then(() => toast.push(value ? '外部 UI 已开启' : '外部 UI 已关闭', 'success'))
+                    .catch((error: unknown) => toast.push(error instanceof Error ? error.message : String(error), 'error'))
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setWebUiOpen(true)}
+                className="inline-flex items-center gap-1 text-[9.5px] text-accent-300 hover:underline"
+                title="配置端口、密钥、实例和二维码"
+              >
+                <Globe2 className="size-3" /> 配置
+              </button>
+            </div>
           </Field>
           <Field label="档位" className="w-[88px]">
             <Select
