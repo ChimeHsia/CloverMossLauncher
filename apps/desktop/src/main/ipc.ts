@@ -453,7 +453,19 @@ export function registerIpc(): void {
   })
 
   handle(Ipc.openExternal, schemas.openExternal, async ({ url }) => {
-    if (!/^https:\/\//.test(url)) throw new Error('只允许打开 https 链接')
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^\[|\]$/g, '')
+    const privateHttp =
+      parsed.protocol === 'http:' &&
+      (host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '::1' ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host))
+    if (parsed.protocol !== 'https:' && !privateHttp) {
+      throw new Error('只允许打开 https 或本机/局域网 http 链接')
+    }
     await shell.openExternal(url)
     return true
   })
