@@ -4,19 +4,7 @@ import { releaseInstallerSchema } from './release'
 const pathLike = z.string().min(1).max(4096)
 const urlLike = z.string().min(8).max(2048).regex(/^https?:\/\//)
 
-const gradioConfig = z.object({
-  modelSource: z.enum(['instance', 'custom']).optional(),
-  model: z.string().max(4096).optional(),
-  modelRoot: z.string().max(4096).optional(),
-  localFilesOnly: z.boolean().default(false),
-  outputDir: z.string().max(4096).optional(),
-  promptDefaults: z.string().max(4096).optional(),
-  profile: z.enum(['auto', '16gb', '24gb', '48gb']).default('auto'),
-  listen: z.enum(['local', 'lan']).default('local'),
-  port: z.number().int().min(1024).max(65535).nullable().default(null),
-  openMode: z.enum(['browser', 'app-window', 'copy']).default('browser'),
-  extraArgs: z.string().max(4000).optional(),
-})
+
 
 const hostSaveSchema = z.object({
   id: z.string().max(80).optional(),
@@ -211,10 +199,9 @@ export const schemas = {
     caseName: z.string().max(240),
     instanceId: z.string().min(1).max(160),
     instanceName: z.string().max(240),
-    workspace: z.enum(['official', 'clover']),
+    workspace: z.literal('clover'),
     deviceId: z.string().max(160),
     profile: z.enum(['base', 'dmd8']),
-    gradio: gradioConfig.optional(),
     jobId: z.string().max(160).optional(),
     state: z.enum(['queued', 'starting', 'running', 'stopped', 'failed']),
     queuedAt: z.string(),
@@ -270,10 +257,9 @@ export const schemas = {
     id: z.string().max(80).optional(),
     name: z.string().max(120).optional(),
     instanceId: z.string().min(1).max(120),
-    workspace: z.enum(['official', 'clover']),
+    workspace: z.literal('clover'),
     deviceId: z.string().min(1).max(120),
     profile: z.enum(['base', 'dmd8']),
-    gradio: gradioConfig.optional(),
   }),
 
   caseRemove: z.object({ id: z.string().min(1).max(80) }),
@@ -288,13 +274,12 @@ export const schemas = {
     cfg: z.number().min(0).max(20),
     seed: z.number().int().min(0).max(4294967295),
     profile: z.enum(['base', 'dmd8']).default('base'),
-    mode: z.enum(['runner', 'gradio', 'simulate']).default('runner'),
+    mode: z.enum(['runner', 'simulate']).default('runner'),
     caseId: z.string().max(80).optional(),
     caseName: z.string().max(120).optional(),
-    workspace: z.enum(['official', 'clover']).optional(),
+    workspace: z.literal('clover').optional(),
     deviceId: z.string().max(120).optional(),
     kind: z.enum(['inference', 'training']).optional(),
-    gradio: gradioConfig.optional(),
   }),
 
   jobId: z.object({ id: z.string().min(1).max(120) }),

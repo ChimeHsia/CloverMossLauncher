@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LaunchRow } from '@shared/types'
-import { normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
 import { paths } from '../lib/paths'
 
 const FILE = () => join(paths.root(), 'launch-queue.json')
@@ -16,12 +15,7 @@ interface StoredRow extends Partial<LaunchRow> {
 
 function migrate(stored: StoredRow): LaunchRow | null {
   if (!stored.id || !stored.instanceId) return null
-  const workspace = normalizeWorkspace(stored.workspace ?? stored.backend)
-  const legacyPort = typeof stored.port === 'number' ? stored.port : null
-  const legacyArgs = typeof stored.extraArgs === 'string' ? stored.extraArgs : undefined
-  const gradioInput =
-    stored.gradio ??
-    (legacyPort !== null || legacyArgs ? { port: legacyPort, extraArgs: legacyArgs } : undefined)
+  // Gradio launch metadata is discarded; keep only MossStudio queue state.
   const now = new Date().toISOString()
   return {
     id: stored.id,
@@ -29,10 +23,9 @@ function migrate(stored: StoredRow): LaunchRow | null {
     caseName: typeof stored.caseName === 'string' && stored.caseName ? stored.caseName : stored.instanceId,
     instanceId: stored.instanceId,
     instanceName: typeof stored.instanceName === 'string' ? stored.instanceName : stored.instanceId,
-    workspace,
+    workspace: 'clover',
     deviceId: typeof stored.deviceId === 'string' ? stored.deviceId : 'mps',
     profile: stored.profile === 'dmd8' ? 'dmd8' : 'base',
-    gradio: workspace === 'official' || gradioInput ? normalizeGradioConfig(gradioInput) : undefined,
     jobId: typeof stored.jobId === 'string' ? stored.jobId : undefined,
     state: STATES.has(stored.state as LaunchRow['state'])
       ? (stored.state as LaunchRow['state'])
@@ -54,6 +47,19 @@ function ensure(): LaunchRow[] {
     rows = Array.isArray(parsed)
       ? parsed.map(migrate).filter((item): item is LaunchRow => item !== null)
       : []
+    if (
+      Array.isArray(parsed) &&
+      parsed.some(
+        (item) =>
+          'backend' in item ||
+          'port' in item ||
+          'extraArgs' in item ||
+          'gradio' in item ||
+          (item as { workspace?: unknown }).workspace === 'official',
+      )
+    ) {
+      persist()
+    }
   } catch {
     rows = []
   }

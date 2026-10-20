@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LaunchCase } from '@shared/types'
-import { normalizeWorkspace } from '@shared/launch'
 import { paths } from '../lib/paths'
 import { getInstance } from './instances'
 
@@ -17,9 +16,8 @@ interface StoredCase extends Partial<LaunchCase> {
 
 function migrate(stored: StoredCase): LaunchCase | null {
   if (!stored.id || !stored.instanceId) return null
-  const workspace = normalizeWorkspace(stored.workspace ?? stored.backend)
-  // Gradio launch config is retired; drop it without losing the Case's
-  // instance/device/profile. Kept fields are read for migration only.
+  // Gradio is retired; every Case now belongs to MossStudio.
+  const workspace = 'clover' as const
   const now = new Date().toISOString()
   return {
     id: stored.id,
@@ -46,7 +44,7 @@ function ensure(): LaunchCase[] {
       : []
     cases = migrated
     // Rewrite once so old `backend`/`port`/`extraArgs` fields do not linger.
-    if (Array.isArray(parsed) && parsed.some((item) => 'backend' in item || 'port' in item || 'extraArgs' in item || 'gradio' in item || item.workspace === 'official')) {
+    if (Array.isArray(parsed) && parsed.some((item) => 'backend' in item || 'port' in item || 'extraArgs' in item || 'gradio' in item || (item as { workspace?: unknown }).workspace === 'official')) {
       persist()
     }
   } catch {

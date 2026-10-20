@@ -119,29 +119,6 @@ function persistLaunchRow(row: LaunchRow): void {
   void call(Ipc.launchQueueUpsert, row).catch(() => undefined)
 }
 
-async function startOfficialJob(row: LaunchRow): Promise<JobRecord> {
-  if (row.workspace !== 'official') {
-    throw new Error('Clover 工作台尚未接入；当前只能启动官方 Gradio')
-  }
-  return call<JobRecord>(Ipc.jobStart, {
-    instanceId: row.instanceId,
-    caseId: row.caseId,
-    caseName: row.caseName,
-    workspace: row.workspace,
-    deviceId: row.deviceId,
-    prompt: '',
-    negativePrompt: '',
-    width: 1024,
-    height: 1024,
-    steps: row.profile === 'dmd8' ? 8 : 50,
-    cfg: row.profile === 'dmd8' ? 1 : 3,
-    seed: Math.floor(Math.random() * 4294967295),
-    profile: row.profile,
-    gradio: row.gradio,
-    mode: 'gradio',
-  })
-}
-
 function upsertJob(list: JobRecord[], job: JobRecord): JobRecord[] {
   return [job, ...list.filter((item) => item.id !== job.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 }
@@ -624,69 +601,8 @@ export const useApp = create<AppStore>((set, get) => {
       }
     },
 
-    async startLaunch(input) {
-      if (input.workspace === 'clover') {
-        throw new Error('请在 MossStudio 中开始生成；旧的 Gradio 启动路径已退役。')
-      }
-      const instance = get().instances.find((item) => item.id === input.instanceId)
-      if (!instance) throw new Error('实例不存在')
-      const row: LaunchRow = {
-        id: `launch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        caseId: input.caseId,
-        caseName: input.caseName?.trim() || `${instance.name} · 官方`,
-        instanceId: instance.id,
-        instanceName: instance.name,
-        workspace: input.workspace,
-        deviceId: input.deviceId,
-        profile: input.profile,
-        gradio: input.gradio,
-        state: 'queued',
-        queuedAt: new Date().toISOString(),
-      }
-      const busy =
-        get().launchRows.some(
-          (item) =>
-            item.deviceId === input.deviceId &&
-            (item.state === 'queued' || item.state === 'starting' || item.state === 'running'),
-        ) ||
-        get().jobs.some(
-          (job) =>
-            job.deviceId === input.deviceId &&
-            (job.state === 'starting' || job.state === 'running'),
-        ) ||
-        get().jobs.some(
-          (job) =>
-            job.kind === 'training' &&
-            (!job.hostId || job.hostId === 'local') &&
-            (job.state === 'starting' || job.state === 'running'),
-        )
-
-      if (busy) {
-        const queued = { ...row, state: 'queued' as const }
-        set((state) => ({ launchRows: upsertLaunch(state.launchRows, queued) }))
-        persistLaunchRow(queued)
-        return queued
-      }
-
-      const starting: LaunchRow = { ...row, state: 'starting', startedAt: new Date().toISOString() }
-      set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
-      persistLaunchRow(starting)
-      try {
-        const job = await startOfficialJob(starting)
-        const next = { ...starting, jobId: job.id }
-        set((state) => ({ launchRows: upsertLaunch(state.launchRows, next) }))
-        persistLaunchRow(next)
-        return next
-      } catch (error) {
-        const failed: LaunchRow = {
-          ...starting,
-          state: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-        }
-        set((state) => ({ launchRows: upsertLaunch(state.launchRows, failed) }))
-        persistLaunchRow(failed)
-        throw error
-      }
+    async startLaunch(_input) {
+      throw new Error('MossStudio 是唯一创作入口；请从 Home 或 Studio 打开。')
     },
 
     async stopLaunch(rowId) {
@@ -706,33 +622,9 @@ export const useApp = create<AppStore>((set, get) => {
       }
     },
 
-    async startNextQueued(deviceId) {
-      const rows = get().launchRows
-      if (rows.some((row) => row.deviceId === deviceId && (row.state === 'starting' || row.state === 'running'))) {
-        return
-      }
-      const next = rows
-        .filter((row) => row.deviceId === deviceId && row.state === 'queued' && row.workspace !== 'official')
-        .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))[0]
-      if (!next) return
-      const starting: LaunchRow = { ...next, state: 'starting', startedAt: new Date().toISOString() }
-      set((state) => ({ launchRows: upsertLaunch(state.launchRows, starting) }))
-      persistLaunchRow(starting)
-      try {
-        const job = await startOfficialJob(starting)
-        const started = { ...starting, jobId: job.id }
-        set((state) => ({ launchRows: upsertLaunch(state.launchRows, started) }))
-        persistLaunchRow(started)
-      } catch (error) {
-        const failed = {
-          ...starting,
-          state: 'failed' as const,
-          error: error instanceof Error ? error.message : String(error),
-        }
-        set((state) => ({ launchRows: upsertLaunch(state.launchRows, failed) }))
-        persistLaunchRow(failed)
-        void get().startNextQueued(deviceId)
-      }
+    async startNextQueued(_deviceId) {
+      // Gradio launch queue is retired; MossStudio jobs are submitted directly.
     },
+
   }
 })

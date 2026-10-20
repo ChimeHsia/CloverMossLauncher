@@ -5,24 +5,9 @@ import sys
 import tempfile
 import types
 import unittest
-import subprocess
 
 
 class ModelRuntimeTest(unittest.TestCase):
-    def test_gradio_bootstrap_installs_loader_before_importing_official_app(self):
-        launcher = Path(__file__).resolve().parents[1] / 'gradio_launcher.py'
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / 'torch.py').write_text("bfloat16='bf16'\nfloat16='fp16'\nfloat32='fp32'\n", encoding='utf-8')
-            (root / 'diffusers.py').write_text("class DiffusionPipeline:\n @staticmethod\n def from_pretrained(*a, **kw): return kw\n", encoding='utf-8')
-            (root / 'inference_runtime.py').write_text("def load_pipeline(model, local_files_only=False): raise RuntimeError('original loader was used')\n", encoding='utf-8')
-            (root / 'gradio_app.py').write_text("from inference_runtime import load_pipeline\nimport json, sys\nprint(json.dumps(load_pipeline(sys.argv[1])))\n", encoding='utf-8')
-            (root / 'clover_model.json').write_text(json.dumps({'version': 1, 'components': [{'role': 'dit', 'precision': 'fp16'}]}), encoding='utf-8')
-            result = subprocess.run([sys.executable, str(launcher), str(root / 'gradio_app.py'), str(root)], cwd=root, check=True, capture_output=True, text=True)
-            result = json.loads(result.stdout)
-            self.assertTrue(result['local_files_only'])
-            self.assertEqual(result['torch_dtype']['transformer'], 'fp16')
-
     def test_precision_and_legacy_passthrough(self):
         module_path = Path(__file__).resolve().parents[1] / 'model_runtime.py'
         spec = importlib.util.spec_from_file_location('clover_test_model_runtime', module_path)

@@ -67,9 +67,8 @@ export function DiagnosticsPage(): React.JSX.Element {
           cfg: job.params.cfg,
           seed: job.params.seed,
           profile: job.params.profile,
-          workspace: job.workspace,
-          gradio: job.gradio,
-          mode: job.mode === 'simulate' ? 'simulate' : job.mode === 'gradio' ? 'gradio' : 'runner',
+          workspace: 'clover',
+          mode: job.mode === 'simulate' ? 'simulate' : 'runner',
         })
         setActiveJob(next.id)
         toast.push(`已用 ${width}×${height} 重新提交`, 'success')

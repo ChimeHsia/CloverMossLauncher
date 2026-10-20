@@ -2,20 +2,16 @@ import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'n
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import net from 'node:net'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, posix as posixPath } from 'node:path'
+import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import { Events } from '@shared/channels'
-import { buildGradioArgs, normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
 import type {
-  GradioLaunchConfig,
   JobLogLine,
   JobParams,
   JobRecord,
   JobStage,
   JobState,
-  TrainingHost,
   WorkspaceKind,
 } from '@shared/types'
 import { emit } from '../lib/events'
@@ -25,16 +21,9 @@ import { prepareModelBundle } from './modelBundles'
 import { legacyModelReady } from './modelReadiness'
 import { readRuntime, venvPython } from './runtimes'
 import { getSettings } from './settings'
-import { getTrainingHost } from './trainingHosts'
 import { remoteModelReady, remoteRoots } from './remoteInstances'
 import {
-  posixQuote,
-  remoteFreePort,
-  scpFrom,
-  sshArgs,
-  sshCommand,
   sshExec,
-  sshTunnelArgs,
 } from './ssh'
 import { pushDiagnostic } from './diagnostics'
 import { pushLocalNotification } from './desktopNotifications'
@@ -63,15 +52,6 @@ interface RunningJob {
   lastLines: string[]
   cancelRequested: boolean
   cancelCommand?: { command: string; args: string[] }
-  tunnel?: ChildProcess
-  tunnelUrl?: string
-  remoteHost?: TrainingHost
-  remotePidFile?: string
-  remoteOutputDir?: string
-  syncedRemoteFiles?: Set<string>
-  syncTimer?: NodeJS.Timeout
-  syncBusy?: boolean
-  syncError?: boolean
 }
 
 const jobs = new Map<string, JobRecord>()
@@ -100,9 +80,7 @@ async function loadJobs(): Promise<void> {
       const { backend: legacyBackend, ...rest } = stored
       const job: JobRecord = {
         ...rest,
-        workspace: normalizeWorkspace(
-          stored.workspace ?? legacyBackend ?? (stored.mode === 'gradio' ? 'official' : 'clover'),
-        ),
+        workspace: 'clover',
       }
       if (job.state === 'running' || job.state === 'starting' || job.state === 'queued') {
         job.state = 'failed'
@@ -187,17 +165,6 @@ function recordError(job: JobRecord, raw: string, rule = matchRule(raw)): void {
   pushDiagnostic(diagnostic)
 }
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve) => {
-    const server = net.createServer()
-    server.once('error', () => resolve(7860))
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      const port = typeof address === 'object' && address ? address.port : 7860
-      server.close(() => resolve(port))
-    })
-  })
-}
 
 function runnerScript(): string {
   const candidates = [
@@ -240,78 +207,10 @@ function killTree(child: ChildProcess): void {
   }
 }
 
-function killTunnel(runningJob: RunningJob): void {
-  if (!runningJob.tunnel) return
-  try {
-    killTree(runningJob.tunnel)
-  } catch {
-    // already gone
-  }
-  runningJob.tunnel = undefined
-}
-
-function killRemoteProcess(runningJob: RunningJob): void {
-  if (!runningJob.remoteHost || !runningJob.remotePidFile) return
-  try {
-    spawn(
-      sshCommand(),
-      sshArgs(runningJob.remoteHost, `kill -TERM "$(cat ${posixQuote(runningJob.remotePidFile)})" 2>/dev/null || true`),
-      { windowsHide: true, stdio: 'ignore' },
-    ).unref()
-  } catch {
-    // best effort
-  }
-}
-
-async function syncRemoteOutputs(job: JobRecord, runningJob: RunningJob): Promise<void> {
-  if (!runningJob.remoteHost || !runningJob.remoteOutputDir || runningJob.syncBusy) return
-  runningJob.syncBusy = true
-  try {
-    const result = await sshExec(
-      runningJob.remoteHost,
-      `find ${posixQuote(runningJob.remoteOutputDir)} -type f 2>/dev/null || true`,
-      20_000,
-    )
-    if (result.code !== 0) return
-    const localRoot = join(paths.instance(job.instanceId), 'outputs', posixPath.basename(runningJob.remoteOutputDir))
-    const synced = (runningJob.syncedRemoteFiles ??= new Set<string>())
-    for (const raw of result.stdout.split('\n')) {
-      const remoteFile = raw.trim()
-      if (!remoteFile || synced.has(remoteFile)) continue
-      const rel = posixPath.relative(runningJob.remoteOutputDir, remoteFile)
-      if (!rel || rel.startsWith('..')) continue
-      const localFile = join(localRoot, ...rel.split('/'))
-      await mkdir(dirname(localFile), { recursive: true })
-      const copied = await scpFrom(runningJob.remoteHost, remoteFile, localFile, 120_000)
-      if (copied.code === 0) {
-        synced.add(remoteFile)
-      } else if (!runningJob.syncError) {
-        runningJob.syncError = true
-        appendLog(job, 'system', `远端输出拉取失败（后续会继续重试）：${(copied.stderr || copied.stdout).trim().slice(-500)}`, runningJob)
-      }
-    }
-  } catch {
-    // Remote output sync must never turn a running generation into a failure.
-  } finally {
-    runningJob.syncBusy = false
-  }
-}
-
-function startRemoteOutputSync(job: JobRecord, runningJob: RunningJob): void {
-  if (!runningJob.remoteHost || !runningJob.remoteOutputDir || runningJob.syncTimer) return
-  void syncRemoteOutputs(job, runningJob)
-  runningJob.syncTimer = setInterval(() => {
-    void syncRemoteOutputs(job, runningJob)
-  }, 5_000)
-}
-
 function finish(job: JobRecord, runningJob: RunningJob, code: number | null): void {
   if (!running.has(job.id)) return
   clearTimeout(runningJob.readyTimer)
   if (runningJob.killTimer) clearTimeout(runningJob.killTimer)
-  if (runningJob.syncTimer) clearInterval(runningJob.syncTimer)
-  killTunnel(runningJob)
-  killRemoteProcess(runningJob)
   for (const line of runningJob.out.flush()) appendLog(job, 'stdout', line, runningJob)
   for (const line of runningJob.err.flush()) appendLog(job, 'stderr', line, runningJob)
   running.delete(job.id)
@@ -492,21 +391,6 @@ function handleLine(job: JobRecord, runningJob: RunningJob, stream: 'stdout' | '
 
   appendLog(job, stream, line, runningJob)
 
-  if (job.mode === 'gradio') {
-    const url = line.match(/Running on local URL:\s*(http:\/\/\S+)/)
-    if (url?.[1]) {
-      clearTimeout(runningJob.readyTimer)
-      // Remote Gradio is reached through the local SSH tunnel; local Gradio
-      // normalizes 0.0.0.0/[::] because a browser needs a loopback host.
-      const localUrl =
-        runningJob.tunnelUrl ??
-        url[1]
-          .replace('://0.0.0.0:', '://127.0.0.1:')
-          .replace('://[::]:', '://127.0.0.1:')
-      update(job, { state: 'running', stage: 'ready', url: localUrl })
-      return
-    }
-  }
 
   const download = parseDownloadProgress(line)
   if (download) {
@@ -563,8 +447,7 @@ export interface StartJobInput {
   cfg: number
   seed: number
   profile?: 'base' | 'dmd8'
-  mode?: 'runner' | 'gradio' | 'simulate'
-  gradio?: GradioLaunchConfig
+  mode?: 'runner' | 'simulate'
 }
 
 export async function startJob(input: StartJobInput): Promise<JobRecord> {
@@ -572,8 +455,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
   const instance = await getInstance(input.instanceId)
   if (!instance) throw new Error('实例不存在')
   const mode = input.mode ?? 'runner'
-  const workspace = input.workspace ?? (mode === 'gradio' ? 'official' : 'clover')
-  let gradio = mode === 'gradio' ? normalizeGradioConfig(input.gradio) : undefined
+  const workspace = 'clover' as const
   const remote = instance.placement.kind === 'ssh' ? instance.placement : null
   const runtime = await readRuntime(instance.runtimeId)
   if (mode !== 'simulate' && (!runtime || runtime.state !== 'ready')) {
@@ -595,40 +477,16 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
 
   let bundlePath: string | undefined
   let modelSnapshot: unknown
-  const extraModel = /(?:^|\s)--model(?:[=\s]|$)/.test(gradio?.extraArgs ?? '')
-  if (mode !== 'simulate' && !remote && instance.modelBinding && (!gradio || gradio.modelSource !== 'custom') && !extraModel) {
+  if (mode !== 'simulate' && !remote && instance.modelBinding) {
     bundlePath = await prepareModelBundle(instance.modelBinding, getSettings())
     modelSnapshot = JSON.parse(await readFile(join(bundlePath, 'clover_model.json'), 'utf8'))
-    if (gradio) gradio = { ...gradio, model: bundlePath, modelRoot: dirname(bundlePath), localFilesOnly: true }
   }
 
   if (mode !== 'simulate' && !bundlePath) {
-    const requestedModel = gradio?.model?.trim()
-    const usesDefault = !requestedModel || requestedModel === 'OpenMOSS-Team/MOSS-Image-SFT'
-    let modelAvailable = true
-    if (remote) {
-      if (usesDefault) {
-        const roots = await remoteRoots(getSettings(), remote.hostId)
-        modelAvailable = await remoteModelReady(roots)
-      }
-    } else {
-      const modelDir = join(paths.hub(getSettings().modelsRoot), 'models--OpenMOSS-Team--MOSS-Image-SFT')
-      const localModel =
-        requestedModel &&
-        (isAbsolute(requestedModel) || requestedModel.startsWith('/') ||
-          requestedModel.startsWith('./') ||
-          requestedModel.startsWith('../') ||
-          requestedModel.startsWith('~'))
-      const localModelPath =
-        localModel && requestedModel
-          ? requestedModel.startsWith('~/')
-            ? join(homedir(), requestedModel.slice(2))
-            : isAbsolute(requestedModel)
-              ? requestedModel
-              : join(instance.path, requestedModel)
-          : null
-      modelAvailable = usesDefault ? await legacyModelReady(modelDir) : localModelPath ? await legacyModelReady(localModelPath) : true
-    }
+    const modelDir = join(paths.hub(getSettings().modelsRoot), 'models--OpenMOSS-Team--MOSS-Image-SFT')
+    const modelAvailable = remote
+      ? await remoteModelReady(await remoteRoots(getSettings(), remote.hostId))
+      : await legacyModelReady(modelDir)
     if (!modelAvailable) {
       pushDiagnostic({
         jobId: undefined,
@@ -636,7 +494,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
         severity: 'error',
         title: '还没有下载 MOSS-Image 权重',
         explain: remote
-          ? '远端模型缓存里没有默认 SFT。请先在远端准备好模型，或在 Gradio 参数里指定可用的模型。'
+          ? '远端模型缓存里没有默认 SFT。请先在远端准备好模型。'
           : '所选模型不完整。请在模型库补齐组件并绑定到实例，或指定一个完整的本地模型目录。',
         solutions: [{ label: '打开模型库', action: 'open_models' }],
         raw: 'model missing',
@@ -673,8 +531,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     instanceName: instance.name,
     caseId: input.caseId,
     caseName: input.caseName,
-    workspace,
-    gradio,
+    workspace: 'clover',
     modelSnapshot,
     hostId: remote?.hostId,
     deviceId: input.deviceId,
@@ -701,7 +558,7 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       {
         job_id: job.id,
         instance_id: instance.id,
-        model: bundlePath ? { path: bundlePath, snapshot: modelSnapshot } : { repo: gradio?.model ?? DEFAULT_MODEL },
+        model: bundlePath ? { path: bundlePath, snapshot: modelSnapshot } : { repo: DEFAULT_MODEL },
         prompt: params.prompt,
         negative_prompt: params.negativePrompt,
         width: params.width,
@@ -725,59 +582,13 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
 
   let command = ''
   let args: string[] = []
-  let tunnel: ChildProcess | undefined
-  let tunnelUrl: string | undefined
-  let remoteHost: TrainingHost | undefined
-  let remotePidFile: string | undefined
-  let remoteOutputDir: string | undefined
   try {
-    if (remote && mode !== 'gradio') {
-      throw new Error('远端 runner 尚未接入；当前支持远端官方 Gradio')
+    if (remote) {
+      throw new Error('远端 runner 尚未接入；MossStudio 当前仅支持本机生成')
     }
-    if (mode === 'gradio') {
-      if (remote) {
-        remoteHost = getTrainingHost(getSettings(), remote.hostId)
-        if (!remoteHost) throw new Error('远端 host 不存在')
-        const roots = await remoteRoots(getSettings(), remote.hostId)
-        const localPort = await freePort()
-        const remotePort = gradio?.port ?? (await remoteFreePort(remoteHost))
-        const pidFile = `${instance.path.replace(/\/$/, '')}/.clover-gradio.pid`
-        const deviceIndex = input.deviceId?.match(/:cuda:(\d+)$/)?.[1]
-        const envPrefix = [
-          `HF_HOME=${posixQuote(`${roots.modelsRoot.replace(/\/$/, '')}/hf`)}`,
-          `HF_HUB_CACHE=${posixQuote(`${roots.modelsRoot.replace(/\/$/, '')}/hf/hub`)}`,
-          ...(deviceIndex ? [`CUDA_VISIBLE_DEVICES=${deviceIndex}`] : []),
-        ].join(' ')
-        const remoteArgs = buildGradioArgs(gradio!, remotePort)
-        const remoteCommand = [
-          `cd ${posixQuote(instance.path)}`,
-          `echo $$ > ${posixQuote(pidFile)}`,
-          `exec env ${envPrefix} ${posixQuote(python)} gradio_app.py ${remoteArgs.map(posixQuote).join(' ')}`,
-        ].join(' && ')
-        command = sshCommand()
-        args = sshArgs(remoteHost, remoteCommand)
-        tunnel = spawn(sshCommand(), sshTunnelArgs(remoteHost, localPort, remotePort), {
-          detached: process.platform !== 'win32',
-          windowsHide: true,
-          stdio: ['ignore', 'ignore', 'ignore'],
-        })
-        tunnelUrl = `http://127.0.0.1:${localPort}`
-        remotePidFile = pidFile
-        const outputArg = gradio?.outputDir?.trim() || 'outputs/gradio'
-        remoteOutputDir = outputArg.startsWith('/')
-          ? outputArg
-          : posixPath.join(instance.path, outputArg)
-      } else {
-        const port = gradio?.port ?? (await freePort())
-        command = python
-        args = [join(dirname(runnerScript()), 'gradio_launcher.py'), join(instance.path, 'gradio_app.py'), ...buildGradioArgs(gradio!, port)]
-      }
-    } else {
-      command = python
-      args = [runnerScript(), '--job', jobFile, ...(mode === 'simulate' ? ['--simulate'] : [])]
-    }
+    command = python
+    args = [runnerScript(), '--job', jobFile, ...(mode === 'simulate' ? ['--simulate'] : [])]
   } catch (error) {
-    tunnel?.kill('SIGKILL')
     const message = error instanceof Error ? error.message : String(error)
     update(job, { state: 'failed', error: { code: 'E_REMOTE', message } })
     throw error
@@ -793,7 +604,6 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
   } catch (error) {
-    tunnel?.kill('SIGKILL')
     const message = error instanceof Error ? error.message : String(error)
     update(job, { state: 'failed', error: { code: 'E_SPAWN', message } })
     throw error
@@ -823,31 +633,9 @@ export async function startJob(input: StartJobInput): Promise<JobRecord> {
     readyTimer,
     lastLines: [],
     cancelRequested: false,
-    tunnel,
-    tunnelUrl,
-    remoteHost,
-    remotePidFile,
-    remoteOutputDir,
   }
   running.set(job.id, runningJob)
   update(job, { pid: child.pid ?? undefined })
-  startRemoteOutputSync(job, runningJob)
-
-  tunnel?.on('error', (error) => {
-    appendLog(job, 'system', `SSH 隧道错误：${String(error)}`, runningJob)
-    if (job.state === 'starting' || job.state === 'running') {
-      update(job, { state: 'failed', error: { code: 'E_TUNNEL', message: 'SSH 隧道启动失败' } })
-      killTree(child)
-    }
-  })
-  tunnel?.on('exit', (code) => {
-    if (runningJob.cancelRequested) return
-    if (job.state === 'starting' || job.state === 'running') {
-      appendLog(job, 'system', `SSH 隧道已退出（${code ?? '?'}）`, runningJob)
-      update(job, { state: 'failed', error: { code: 'E_TUNNEL', message: 'SSH 隧道已断开' } })
-      killTree(child)
-    }
-  })
 
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
@@ -1012,8 +800,6 @@ export async function cancelJob(id: string): Promise<JobRecord | null> {
   }
   runningJob.cancelRequested = true
   appendLog(job, 'system', '正在停止任务…', runningJob)
-  killTunnel(runningJob)
-  killRemoteProcess(runningJob)
   if (runningJob.cancelCommand) {
     try {
       spawn(runningJob.cancelCommand.command, runningJob.cancelCommand.args, {

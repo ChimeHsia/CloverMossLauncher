@@ -1,4 +1,4 @@
-"""Local component precision adapter shared by the runner and official Gradio."""
+"""Local component precision adapter used by the MossStudio runner."""
 from __future__ import annotations
 
 import json

@@ -194,14 +194,6 @@ async function diskInfo(target: string): Promise<{ total: number; free: number }
   }
 }
 
-function portFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer()
-    server.once('error', () => resolve(false))
-    server.once('listening', () => server.close(() => resolve(true)))
-    server.listen(port, '127.0.0.1')
-  })
-}
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '未知'
@@ -279,14 +271,13 @@ export async function scanEnvironment(
   const dataPath = paths.root()
   const modelsPath = paths.models(settings.modelsRoot)
 
-  const [disk, pythons, git, uv, network, gpu, gradioFree] = await Promise.all([
+  const [disk, pythons, git, uv, network, gpu] = await Promise.all([
     diskInfo(modelsPath),
     (report('tools', 'running'), detectPythons(settings)),
     detectTool('git', ['--version']),
     detectTool('uv', ['--version']),
     (report('network', 'running'), probeNetwork(settings.networkMode)),
     (report('accelerator', 'running'), detectGpu()),
-    portFree(7860),
   ])
 
   report('system', 'done')
@@ -387,14 +378,6 @@ export async function scanEnvironment(
         selected.hf ? `hf ${selected.hf.replace(/^https?:\/\//, '')}` : 'hf 直连',
       ].join(' · '),
       detail: '启动器会按延迟自动选择镜像；可在设置中固定。',
-    },
-    {
-      id: 'port',
-      group: 'ports',
-      label: 'Gradio 端口',
-      status: gradioFree ? 'ok' : 'warn',
-      value: gradioFree ? '7860 可用' : '7860 被占用',
-      detail: gradioFree ? undefined : '启动 Gradio 时会自动选择其它端口。',
     },
   ]
 

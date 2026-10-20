@@ -94,17 +94,9 @@ export async function pickPython(settings: Settings): Promise<{ path: string; ve
   throw new Error('未找到 Python 3.10+。可在设置中指定解释器，或稍后安装托管 Python。')
 }
 
-function withUiDependencies(deps: string[], uiDeps: string[] = []): string[] {
-  const combined = [...deps, ...uiDeps]
-  if (!combined.some((dep) => /^gradio(?:\s|[<>=!~;\[@]|$)/i.test(dep))) {
-    combined.push('gradio>=6.30')
-  }
-  return [...new Set(combined)]
-}
 
-export function parseDepsFromPyproject(instanceDir: string, includeUi = false): string[] {
+export function parseDepsFromPyproject(instanceDir: string): string[] {
   let deps = [...MOSS_DEPS]
-  let uiDeps: string[] = []
   try {
     const text = readFileSync(join(instanceDir, 'pyproject.toml'), 'utf8')
     const project = text.match(/\[project\][\s\S]*?(?=\n\[|$)/)
@@ -117,17 +109,10 @@ export function parseDepsFromPyproject(instanceDir: string, includeUi = false): 
         if (list.length) deps = list
       }
     }
-    if (includeUi) {
-      const optional = text.match(/\[project\.optional-dependencies\][\s\S]*?(?=\n\[|$)/)
-      const ui = optional?.[0].match(/^\s*ui\s*=\s*\[([\s\S]*?)\]/m)
-      uiDeps = [...(ui?.[1] ?? '').matchAll(/["']([^"']+)["']/g)]
-        .map((match) => match[1]!)
-        .filter((dep) => !dep.startsWith('-e') && dep.trim().length > 0)
-    }
   } catch {
     // fall through
   }
-  return includeUi ? withUiDependencies(deps, uiDeps) : deps
+  return deps
 }
 
 function lockHash(pythonVersionText: string, deps: string[]): string {
@@ -169,7 +154,7 @@ export interface EnsureRuntimeInput {
 }
 
 export async function ensureRuntime(input: EnsureRuntimeInput): Promise<RuntimeInfo> {
-  const deps = parseDepsFromPyproject(input.instanceDir, true)
+  const deps = parseDepsFromPyproject(input.instanceDir)
   const python = input.python ?? (await pickPython(input.settings))
   const lock = lockHash(python.version, deps)
 
@@ -223,8 +208,8 @@ export async function installDeps(
 
   const source = instanceDir ?? paths.instance(runtime.instanceId)
   runtime.deps = existsSync(join(source, 'pyproject.toml'))
-    ? parseDepsFromPyproject(source, true)
-    : withUiDependencies(runtime.deps)
+    ? parseDepsFromPyproject(source)
+    : runtime.deps
   runtime.lockHash = lockHash(runtime.pythonVersion, runtime.deps)
   runtime.state = 'installing'
   await writeRuntime(runtime)

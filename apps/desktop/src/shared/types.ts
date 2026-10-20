@@ -419,11 +419,8 @@ export interface TrainerRuntimeInfo {
   createdAt: string
 }
 
-export type WorkspaceKind = 'official' | 'clover'
+export type WorkspaceKind = 'clover'
 export type DeviceKind = 'mps' | 'cuda' | 'cpu'
-export type GradioProfile = 'auto' | '16gb' | '24gb' | '48gb'
-export type GradioListen = 'local' | 'lan'
-export type GradioOpenMode = 'browser' | 'app-window' | 'copy'
 
 export interface LaunchDevice {
   id: string
@@ -436,36 +433,13 @@ export interface LaunchDevice {
   source?: 'local' | 'remote'
 }
 
-/**
- * Launch-level options for the official Gradio process.
- *
- * This intentionally mirrors `gradio_app.py`'s argparse surface only. Sampling
- * parameters (steps/CFG/SLG/...) are owned by the Gradio page, not by the
- * launcher, and must not be added here without a new product decision.
- */
-export interface GradioLaunchConfig {
-  modelSource?: 'instance' | 'custom'
-  model?: string
-  modelRoot?: string
-  localFilesOnly: boolean
-  outputDir?: string
-  promptDefaults?: string
-  profile: GradioProfile
-  listen: GradioListen
-  port: number | null
-  openMode: GradioOpenMode
-  extraArgs?: string
-}
-
 export interface LaunchCase {
   id: string
   name: string
   instanceId: string
   workspace: WorkspaceKind
   deviceId: string
-  /** Clover runner sampling profile; Gradio has its own config.profile. */
   profile: 'base' | 'dmd8'
-  gradio?: GradioLaunchConfig
   createdAt: string
   lastUsedAt?: string
 }
@@ -484,7 +458,7 @@ export interface OnboardingStatus {
   checkedAt: string
 }
 
-export type JobMode = 'runner' | 'gradio' | 'simulate' | 'training'
+export type JobMode = 'runner' | 'simulate' | 'training'
 export type JobState = 'queued' | 'starting' | 'running' | 'succeeded' | 'failed' | 'canceled'
 export type JobStage = 'load' | 'text' | 'denoise' | 'decode' | 'save' | 'ready' | 'idle'
 
@@ -507,7 +481,6 @@ export interface LaunchStartInput {
   workspace: WorkspaceKind
   deviceId: string
   profile: 'base' | 'dmd8'
-  gradio?: GradioLaunchConfig
 }
 
 export interface LaunchRow {
@@ -519,7 +492,6 @@ export interface LaunchRow {
   workspace: WorkspaceKind
   deviceId: string
   profile: 'base' | 'dmd8'
-  gradio?: GradioLaunchConfig
   jobId?: string
   state: 'queued' | 'starting' | 'running' | 'stopped' | 'failed'
   queuedAt: string
@@ -543,8 +515,7 @@ export interface JobStartInput {
   cfg: number
   seed: number
   profile?: 'base' | 'dmd8'
-  mode?: 'runner' | 'gradio' | 'simulate'
-  gradio?: GradioLaunchConfig
+  mode?: 'runner' | 'simulate'
 }
 
 export interface JobProgress {
@@ -564,7 +535,6 @@ export interface JobRecord {
   caseId?: string
   caseName?: string
   workspace?: WorkspaceKind
-  gradio?: GradioLaunchConfig
   deviceId?: string
   kind?: 'inference' | 'training'
   trainerVersionId?: string

@@ -1,35 +1,21 @@
 import {
-  ChevronDown,
   Cpu,
   FolderCog,
-  ListChecks,
   Play,
   Settings2,
-  Square,
-  SquareTerminal,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Events, Ipc } from '@shared/channels'
 import type {
-  JobRecord,
   LaunchCase,
-  LaunchRow,
   ManagedHost,
 } from '@shared/types'
 import { call, onEvent } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Collapse, Presence } from '../components/motion'
+import { Presence } from '../components/motion'
 import { Button, Field, IconButton, Input, Select, cn, useToast } from '../components/ui'
-
-const stateLabel: Record<LaunchRow['state'], string> = {
-  queued: '排队中',
-  starting: '启动中',
-  running: '运行中',
-  stopped: '已停止',
-  failed: '失败',
-}
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -37,12 +23,8 @@ export function HomePage(): React.JSX.Element {
   const instances = useApp((state) => state.instances)
   const allDevices = useApp((state) => state.devices)
   const cases = useApp((state) => state.cases)
-  const launchRows = useApp((state) => state.launchRows)
-  const jobs = useApp((state) => state.jobs)
   const env = useApp((state) => state.env)
   const homeCopy = useApp((state) => state.updates?.home)
-  const stopLaunch = useApp((state) => state.stopLaunch)
-  const setActiveJob = useApp((state) => state.setActiveJob)
   const refreshCases = useApp((state) => state.refreshCases)
 
   const [caseId, setCaseId] = useState('new')
@@ -54,8 +36,6 @@ export function HomePage(): React.JSX.Element {
   )
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [caseName, setCaseName] = useState('')
-  const [collapsed, setCollapsed] = useState(false)
-  const [sort, setSort] = useState<'started' | 'name'>('started')
 
   const selectedCase = cases.find((item) => item.id === caseId)
   const instance = instances.find((item) => item.id === instanceId)
@@ -99,19 +79,6 @@ export function HomePage(): React.JSX.Element {
     setProfile(selectedCase.profile)
     setCaseName(selectedCase.name)
   }, [selectedCase])
-
-  const activeRows = useMemo(() => {
-    const rows = launchRows.filter(
-      (row) => row.state === 'queued' || row.state === 'starting' || row.state === 'running',
-    )
-    return rows.sort((a, b) => {
-      if (sort === 'name') return a.caseName.localeCompare(b.caseName)
-      return (b.startedAt ?? b.queuedAt).localeCompare(a.startedAt ?? a.queuedAt)
-    })
-  }, [launchRows, sort])
-
-  const runningCount = activeRows.filter((row) => row.state === 'running' || row.state === 'starting').length
-  const queuedCount = activeRows.filter((row) => row.state === 'queued').length
 
   async function launch(): Promise<void> {
     if (!instanceId) {
@@ -159,19 +126,6 @@ export function HomePage(): React.JSX.Element {
     setProfile(env?.recommendation.profile === 'base' ? 'base' : 'dmd8')
   }
 
-  function openTerminal(row: LaunchRow): void {
-    if (row.jobId) setActiveJob(row.jobId)
-    openWindow('terminal')
-  }
-
-  function deviceName(id: string): string {
-    return devices.find((item) => item.id === id)?.name ?? id
-  }
-
-  function rowJob(row: LaunchRow): JobRecord | undefined {
-    return jobs.find((item) => item.id === row.jobId)
-  }
-
   return (
     <div className="flex flex-1 flex-col">
       <div className="relative z-10 mx-auto flex w-full max-w-[880px] flex-1 flex-col">
@@ -188,94 +142,6 @@ export function HomePage(): React.JSX.Element {
       </header>
 
       <div className="min-h-[18vh] flex-1" />
-
-      <section className="glass-strong mb-12 overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)]">
-        <div className="flex h-10 items-center gap-2 px-3">
-          <button
-            type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            aria-expanded={!collapsed}
-            aria-controls="launch-stack"
-            className="flex h-full min-w-0 flex-1 items-center gap-2 text-left hover:bg-white/[0.025]"
-          >
-            <ListChecks className="size-3.5 text-[var(--color-text-tertiary)]" />
-            <span className="text-[11px] font-medium">运行中的 Case</span>
-            <span className="text-[9.5px] text-[var(--color-text-tertiary)]">
-              {runningCount} 进行中 · {queuedCount} 待处理
-            </span>
-            <ChevronDown
-              className={cn('ml-auto size-4 shrink-0 text-[var(--color-text-tertiary)] transition-transform', collapsed && '-rotate-90')}
-            />
-          </button>
-          <button
-            type="button"
-            onClick={() => setSort((value) => (value === 'started' ? 'name' : 'started'))}
-            aria-label={`排序：${sort === 'started' ? '启动时间' : '名称'}，点击切换`}
-            className="inline-flex h-full shrink-0 items-center text-[9px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]"
-          >
-            {sort === 'started' ? '启动时间' : '名称'}
-          </button>
-        </div>
-
-        <Collapse id="launch-stack" open={!collapsed && activeRows.length > 0}>
-          <div className="border-t border-[var(--color-border-subtle)]">
-            {activeRows.map((row) => {
-              const running = row.state === 'running' || row.state === 'starting'
-              const queued = row.state === 'queued'
-              const job = rowJob(row)
-              return (
-                <div
-                  key={row.id}
-                  className="flex h-11 items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 last:border-0"
-                >
-                  <span
-                    className={cn(
-                      'size-1.5 shrink-0 rounded-full',
-                      queued ? 'bg-neutral-500' : running ? 'bg-accent-400' : 'bg-red-400',
-                    )}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="truncate text-[10.5px] font-medium">{row.caseName}</span>
-                      <span className="shrink-0 text-[9px] text-[var(--color-text-tertiary)]">
-                        {stateLabel[row.state]}
-                      </span>
-                    </div>
-                    <div className="truncate text-[9px] text-[var(--color-text-tertiary)]">
-                      {row.instanceName} · {deviceName(row.deviceId)}
-                      {job?.url ? ' · 已就绪' : ''}
-                    </div>
-                  </div>
-                  {row.state === 'running' && job?.progress.percent ? (
-                    <div className="hidden w-16 shrink-0 sm:block">
-                      <div className="h-px overflow-hidden rounded-full bg-white/[0.08]">
-                        <div className="h-full bg-accent-500" style={{ width: `${job.progress.percent}%` }} />
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <IconButton
-                      label="终端"
-                      className="size-6"
-                      onClick={() => openTerminal(row)}
-                      disabled={!row.jobId}
-                    >
-                      <SquareTerminal className="size-3" />
-                    </IconButton>
-                    <IconButton
-                      label={queued ? '取消排队' : '停止'}
-                      className="size-6 text-red-300 hover:bg-red-500/10"
-                      onClick={() => void stopLaunch(row.id)}
-                    >
-                      <Square className="size-2.5" />
-                    </IconButton>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Collapse>
-      </section>
 
       <div className="sticky bottom-0 z-20 mt-3">
         <Presence open={advancedOpen} preset="flyout" className="app-popover glass-strong absolute bottom-[calc(100%+6px)] left-0 right-0 z-20 border border-[var(--color-border)] p-3 shadow-2xl">

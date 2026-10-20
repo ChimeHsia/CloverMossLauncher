@@ -47,5 +47,5 @@ runner 在下一个 step 检查标记并抛出取消；Supervisor 5 秒后仍未
 ## 限制
 
 - DMD 8 步 profile 目前只透传，仍走官方 pipeline；
-- 本地实例支持模型组件绑定，与 Gradio 共用精度适配层；见 [模型组件管理](../docs/model-management.md)；
-- 受管 Gradio 使用薄启动脚本运行原始 `gradio_app.py`；已用加载桩验证启动顺序，真实 CUDA 出图仍待验收。
+- 本地实例支持模型组件绑定，使用 runner 的精度适配层；见 [模型组件管理](../docs/model-management.md)；
+- 官方 Gradio 已从产品路径退役（ADR-0007），runner 不再包含 Gradio 启动脚本。
