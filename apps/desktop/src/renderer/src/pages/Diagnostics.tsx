@@ -6,7 +6,8 @@ import type { Diagnostic, DiagnosticSolution } from '@shared/types'
 import { call } from '../lib/api'
 import { relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Pill, cn, useToast } from '../components/ui'
+import { MotionPanel } from '../components/motion'
+import { Button, Card, EmptyState, IconButton, Pill, cn, useToast } from '../components/ui'
 
 const severityMeta = {
   error: { icon: <XCircle className="size-4 text-red-500" />, label: '错误', tone: 'red' as const },
@@ -96,9 +97,9 @@ export function DiagnosticsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button tone="ghost" onClick={() => void refreshDiagnostics()}>
+          <IconButton label="刷新" onClick={() => void refreshDiagnostics()}>
             <RefreshCw className="size-3.5" />
-          </Button>
+          </IconButton>
           <Button
             tone="secondary"
             onClick={() => {
@@ -150,91 +151,93 @@ export function DiagnosticsPage(): React.JSX.Element {
         <span className="text-[10px] text-[var(--color-text-tertiary)]">诊断数据保存在本地</span>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircle2 className="size-7 text-accent-500" />}
-          title={diagnostics.length === 0 ? '没有诊断记录' : '当前筛选下没有记录'}
-          description="任务失败、OOM、网络与依赖问题会生成卡片，并附带解决按钮。"
-          action={
-            <Button tone="secondary" onClick={() => openWindow('terminal')}>
-              查看运行
-            </Button>
-          }
-        />
-      ) : (
-        <div className="space-y-2.5">
-          {filtered.map((diagnostic) => {
-            const meta = severityMeta[diagnostic.severity]
-            const job = jobs.find((item) => item.id === diagnostic.jobId)
-            return (
-              <Card key={diagnostic.id} className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 shrink-0">{meta.icon}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-medium">{diagnostic.title}</span>
-                      <Pill tone={meta.tone}>{meta.label}</Pill>
-                      <span className="text-[10px] text-[var(--color-text-tertiary)]">{diagnostic.ruleId}</span>
-                      {diagnostic.count > 1 ? (
-                        <span className="text-[10px] text-[var(--color-text-tertiary)]">
-                          ×{diagnostic.count}
+      <MotionPanel transitionKey={filter}>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<CheckCircle2 className="size-7 text-accent-500" />}
+            title={diagnostics.length === 0 ? '没有诊断记录' : '当前筛选下没有记录'}
+            description="任务失败、OOM、网络与依赖问题会生成卡片，并附带解决按钮。"
+            action={
+              <Button tone="secondary" onClick={() => openWindow('terminal')}>
+                查看运行
+              </Button>
+            }
+          />
+        ) : (
+          <div className="space-y-2.5">
+            {filtered.map((diagnostic) => {
+              const meta = severityMeta[diagnostic.severity]
+              const job = jobs.find((item) => item.id === diagnostic.jobId)
+              return (
+                <Card key={diagnostic.id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0">{meta.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[13px] font-medium">{diagnostic.title}</span>
+                        <Pill tone={meta.tone}>{meta.label}</Pill>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)]">{diagnostic.ruleId}</span>
+                        {diagnostic.count > 1 ? (
+                          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                            ×{diagnostic.count}
+                          </span>
+                        ) : null}
+                        <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">
+                          {relative(diagnostic.lastAt)}
                         </span>
-                      ) : null}
-                      <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">
-                        {relative(diagnostic.lastAt)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
-                      {diagnostic.explain}
-                    </p>
-                    {job ? (
-                      <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
-                        {job.instanceName} · {job.params.width}×{job.params.height} · {job.params.steps} 步
+                      </div>
+                      <p className="mt-1 text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
+                        {diagnostic.explain}
                       </p>
-                    ) : null}
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {diagnostic.solutions.map((solution) => (
+                      {job ? (
+                        <p className="mt-1 text-[10px] text-[var(--color-text-tertiary)]">
+                          {job.instanceName} · {job.params.width}×{job.params.height} · {job.params.steps} 步
+                        </p>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {diagnostic.solutions.map((solution) => (
+                          <Button
+                            key={solution.label}
+                            tone={solution.action === 'retry_lower' ? 'primary' : 'secondary'}
+                            onClick={() => void act(diagnostic, solution)}
+                            disabled={busy === diagnostic.id}
+                          >
+                            {solution.label}
+                          </Button>
+                        ))}
                         <Button
-                          key={solution.label}
-                          tone={solution.action === 'retry_lower' ? 'primary' : 'secondary'}
-                          onClick={() => void act(diagnostic, solution)}
-                          disabled={busy === diagnostic.id}
+                          tone="ghost"
+                          onClick={() => void dismissDiagnostic(diagnostic.id)}
                         >
-                          {solution.label}
+                          忽略
                         </Button>
-                      ))}
-                      <Button
-                        tone="ghost"
-                        onClick={() => void dismissDiagnostic(diagnostic.id)}
-                      >
-                        忽略
-                      </Button>
+                      </div>
+                      {diagnostic.raw ? (
+                        <details className="mt-2 group">
+                          <summary className="cursor-pointer list-none text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">
+                            原始输出 ▸
+                          </summary>
+                          <pre className="mt-1.5 max-h-40 overflow-auto rounded-lg bg-white/45 p-2.5 font-mono text-[9.5px] leading-4 text-[var(--color-text-secondary)] dark:bg-black/25">
+                            {diagnostic.raw}
+                          </pre>
+                        </details>
+                      ) : null}
                     </div>
-                    {diagnostic.raw ? (
-                      <details className="mt-2 group">
-                        <summary className="cursor-pointer list-none text-[10px] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]">
-                          原始输出 ▸
-                        </summary>
-                        <pre className="mt-1.5 max-h-40 overflow-auto rounded-lg bg-white/45 p-2.5 font-mono text-[9.5px] leading-4 text-[var(--color-text-secondary)] dark:bg-black/25">
-                          {diagnostic.raw}
-                        </pre>
-                      </details>
-                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void dismissDiagnostic(diagnostic.id)}
+                      className="text-[var(--color-text-tertiary)] hover:text-red-500"
+                      aria-label="关闭诊断"
+                    >
+                      <XCircle className="size-3.5" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void dismissDiagnostic(diagnostic.id)}
-                    className="text-[var(--color-text-tertiary)] hover:text-red-500"
-                    aria-label="关闭诊断"
-                  >
-                    <XCircle className="size-3.5" />
-                  </button>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </MotionPanel>
 
       <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">
         <ShieldAlert className="size-3.5" />

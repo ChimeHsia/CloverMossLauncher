@@ -325,7 +325,7 @@ export function registerIpc(): void {
       emit(Events.instancesChanged, { id: instanceId })
       return next
     }
-    const runtime = await installDeps(instance.runtimeId, getSettings(), logger)
+    const runtime = await installDeps(instance.runtimeId, getSettings(), logger, instance.path)
     emit(Events.instancesChanged, { id: instanceId })
     return runtime
   })

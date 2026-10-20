@@ -18,7 +18,7 @@ import { call } from '../lib/api'
 import { dateTime } from '../lib/format'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { Button, Card, Modal, Pill, Spinner, cn, useToast } from '../components/ui'
+import { Button, Card, Input, Modal, Pill, Spinner, cn, useToast } from '../components/ui'
 
 interface HostForm {
   id?: string
@@ -42,9 +42,6 @@ const EMPTY_FORM: HostForm = {
   instanceRoot: '~/CloverMoss/instances',
   modelsRoot: '~/CloverMoss/models',
 }
-
-const inputClass =
-  'h-8 w-full rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.04] px-2.5 text-[11px] outline-none transition focus:border-accent-500/60'
 
 function statusTone(host: ManagedHost): 'accent' | 'red' | 'amber' | 'neutral' {
   if (host.status === 'ok') return 'accent'
@@ -471,72 +468,64 @@ export function DevicesPage(): React.JSX.Element {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">显示名称</span>
-              <input
+              <Input
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 placeholder="例如：4090 工作站"
-                className={inputClass}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">Host</span>
-              <input
+              <Input
                 value={form.host}
                 onChange={(event) => setForm({ ...form, host: event.target.value })}
                 placeholder="192.168.1.20 或 gpu.example.com"
-                className={inputClass}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">User</span>
-              <input
+              <Input
                 value={form.user}
                 onChange={(event) => setForm({ ...form, user: event.target.value })}
                 placeholder="ubuntu"
-                className={inputClass}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">Port</span>
-              <input
+              <Input
                 inputMode="numeric"
                 value={form.port}
                 onChange={(event) => setForm({ ...form, port: event.target.value.replace(/[^0-9]/g, '') })}
                 placeholder="22"
-                className={inputClass}
               />
             </label>
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">Identity file（可选）</span>
-              <input
+              <Input
                 value={form.identityFile}
                 onChange={(event) => setForm({ ...form, identityFile: event.target.value })}
                 placeholder="~/.ssh/id_ed25519"
-                className={inputClass}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">训练器根目录</span>
-              <input
+              <Input
                 value={form.trainerRoot}
                 onChange={(event) => setForm({ ...form, trainerRoot: event.target.value })}
-                className={inputClass}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">实例根目录（推理）</span>
-              <input
+              <Input
                 value={form.instanceRoot}
                 onChange={(event) => setForm({ ...form, instanceRoot: event.target.value })}
-                className={inputClass}
               />
             </label>
             <label className="block sm:col-span-2">
               <span className="mb-1 block text-[10px] text-[var(--color-text-secondary)]">模型缓存根目录（远端）</span>
-              <input
+              <Input
                 value={form.modelsRoot}
                 onChange={(event) => setForm({ ...form, modelsRoot: event.target.value })}
-                className={inputClass}
               />
             </label>
           </div>

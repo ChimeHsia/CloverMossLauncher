@@ -6,12 +6,19 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentProps,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import type { CheckStatus } from '@shared/types'
+import { Presence, useMotionPresence } from './motion'
+
+export { Field, Input, Select, Switch, Textarea } from './form'
 
 export function cn(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(' ')
@@ -25,7 +32,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'glass rounded-[6px] border border-[var(--color-border-subtle)]',
+        'glass border border-[var(--color-border-subtle)]',
         className,
       )}
       {...rest}
@@ -103,7 +110,7 @@ export function Button({
       size={size}
       className={cn(tint, className)}
       style={{
-        borderRadius: 4,
+        borderRadius: 'var(--radius-control)',
         fontSize: 12,
         lineHeight: '16px',
         minHeight: 30,
@@ -130,7 +137,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex size-7 items-center justify-center rounded-[6px] text-[var(--color-text-secondary)] transition hover:bg-white/[0.07] hover:text-[var(--color-text)]',
+        'app-icon-button inline-flex size-7 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition enabled:hover:bg-white/[0.07] enabled:hover:text-[var(--color-text)] disabled:opacity-45',
         className,
       )}
       {...rest}
@@ -154,7 +161,7 @@ export function ProgressBar({
     <div className={cn('h-[3px] w-full overflow-hidden rounded-full bg-white/[0.08]', className)}>
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-300 ease-out',
+          'h-full rounded-full transition-[width] duration-200 ease-out',
           tone === 'accent' ? 'bg-accent-500' : 'bg-[var(--color-text-tertiary)]',
         )}
         style={{ width: `${width}%` }}
@@ -179,7 +186,7 @@ export function EmptyState({
   action?: ReactNode
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] px-6 py-12 text-center">
       {icon ? <div className="text-[var(--color-text-tertiary)]">{icon}</div> : null}
       <p className="text-sm font-medium">{title}</p>
       {description ? (
@@ -190,15 +197,7 @@ export function EmptyState({
   )
 }
 
-export function Modal({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  footer,
-  width = 'max-w-2xl',
-}: {
+interface DialogProps {
   open: boolean
   onClose: () => void
   title: string
@@ -206,112 +205,118 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   width?: string
-}): React.JSX.Element | null {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
+}
+
+function Dialog({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  width,
+  sheet = false,
+}: DialogProps & { sheet?: boolean }): React.JSX.Element | null {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const backdropPressed = useRef(false)
+  const titleId = useId()
+  const descriptionId = useId()
+  const { present, ref: panel } = useMotionPresence(open, sheet ? 'sheet' : 'dialog')
+  const content = useRef<ReactNode>(null)
+  const trigger = useRef<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    const element = dialog.current
+    // A browser close request may be non-cancelable. Reopening during the
+    // retained exit must re-enter the native top layer even if presence stayed true.
+    if (!open || !element || element.open) return
+    trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    element.showModal()
+  })
+
+  useLayoutEffect(() => {
+    const element = dialog.current
+    if (!present || !element) return
+    // Native modal dialogs own the top layer, background inertness, focus trap
+    // and focus restoration, including when another dialog opens above them.
+    return () => {
+      element.close()
+      if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [present])
 
-  if (!open) return null
+  const body = (
+    <>
+      <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
+        <div className="min-w-0 break-words">
+          <h2 id={titleId} className="text-[15px] font-semibold">{title}</h2>
+          {description ? (
+            <p id={descriptionId} className="mt-1 break-all text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
+          ) : null}
+        </div>
+        <IconButton label="关闭" onClick={onClose}>
+          <X className="size-4" />
+        </IconButton>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+      {footer ? (
+        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
+          {footer}
+        </footer>
+      ) : null}
+    </>
+  )
+  if (open) content.current = body
+  if (!present) return null
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-6 backdrop-blur-[2px]"
-      onMouseDown={onClose}
+  return createPortal(
+    <dialog
+      ref={dialog}
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      className={cn('app-dialog', sheet && 'app-dialog-sheet')}
+      data-motion-state={open ? 'open' : 'closed'}
+      onClose={(event) => {
+        event.stopPropagation()
+        if (open && !event.currentTarget.open) onClose()
+      }}
+      onCancel={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (open) onClose()
+      }}
+      onMouseDown={(event) => {
+        backdropPressed.current = event.target === event.currentTarget
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        if (open && backdropPressed.current && event.target === event.currentTarget) onClose()
+        backdropPressed.current = false
+      }}
     >
       <div
+        ref={panel}
+        inert={!open}
         className={cn(
-          'glass-strong flex max-h-[82vh] w-full flex-col overflow-hidden rounded-[6px] border border-[var(--color-border-subtle)] shadow-2xl',
-          width,
+          'app-dialog-panel glass-strong flex w-full flex-col overflow-hidden border border-[var(--color-border-subtle)] shadow-2xl',
+          sheet ? 'h-full border-l' : 'max-h-[82vh]',
+          width ?? (sheet ? 'max-w-[520px]' : 'max-w-2xl'),
         )}
-        onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <div>
-            <h2 className="text-[15px] font-semibold">{title}</h2>
-            {description ? (
-              <p className="mt-1 text-[12.5px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
-            ) : null}
-          </div>
-          <IconButton label="关闭" onClick={onClose}>
-            <X className="size-4" />
-          </IconButton>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? (
-          <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
-            {footer}
-          </footer>
-        ) : null}
+        {content.current}
       </div>
-    </div>
+    </dialog>,
+    document.body,
   )
 }
 
-export function Sheet({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  footer,
-  width = 'max-w-[520px]',
-}: {
-  open: boolean
-  onClose: () => void
-  title: string
-  description?: string
-  children: ReactNode
-  footer?: ReactNode
-  width?: string
-}): React.JSX.Element | null {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+export function Modal(props: DialogProps): React.JSX.Element {
+  return <Dialog {...props} />
+}
 
-  if (!open) return null
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-[2px]"
-      onMouseDown={onClose}
-    >
-      <div
-        className={cn(
-          'glass-strong flex h-full w-full flex-col border-l border-[var(--color-border-subtle)] shadow-2xl',
-          width,
-        )}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--color-border-subtle)] px-5 py-4">
-          <div>
-            <h2 className="text-[15px] font-semibold">{title}</h2>
-            {description ? (
-              <p className="mt-1 text-[12px] leading-5 text-[var(--color-text-secondary)]">{description}</p>
-            ) : null}
-          </div>
-          <IconButton label="关闭" onClick={onClose}>
-            <X className="size-4" />
-          </IconButton>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? (
-          <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border-subtle)] px-5 py-3">
-            {footer}
-          </footer>
-        ) : null}
-      </div>
-    </div>
-  )
+export function Sheet(props: DialogProps): React.JSX.Element {
+  return <Dialog {...props} sheet />
 }
 
 type ToastTone = 'info' | 'success' | 'error'
@@ -320,6 +325,7 @@ interface ToastItem {
   id: string
   message: string
   tone: ToastTone
+  open: boolean
 }
 
 const ToastContext = createContext<{ push: (message: string, tone?: ToastTone) => void }>({
@@ -338,12 +344,28 @@ const toastIcon: Record<ToastTone, ReactNode> = {
 
 export function ToastProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [items, setItems] = useState<ToastItem[]>([])
+  const timers = useRef(new Map<string, number>())
+  useEffect(() => () => {
+    timers.current.forEach((timer) => window.clearTimeout(timer))
+    timers.current.clear()
+  }, [])
+  useEffect(() => {
+    const retained = new Set(items.map((item) => item.id))
+    for (const [id, timer] of timers.current) {
+      if (!retained.has(id)) {
+        window.clearTimeout(timer)
+        timers.current.delete(id)
+      }
+    }
+  }, [items])
   const push = useCallback((message: string, tone: ToastTone = 'info') => {
     const id = crypto.randomUUID()
-    setItems((previous) => [...previous.slice(-2), { id, message, tone }])
-    window.setTimeout(() => {
-      setItems((previous) => previous.filter((item) => item.id !== id))
+    setItems((previous) => [...previous.slice(-2), { id, message, tone, open: true }])
+    const timer = window.setTimeout(() => {
+      timers.current.delete(id)
+      setItems((previous) => previous.map((item) => item.id === id ? { ...item, open: false } : item))
     }, 5000)
+    timers.current.set(id, timer)
   }, [])
   const value = useMemo(() => ({ push }), [push])
 
@@ -352,13 +374,17 @@ export function ToastProvider({ children }: { children: ReactNode }): React.JSX.
       {children}
       <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[300px] flex-col gap-1.5">
         {items.map((item) => (
-          <div
+          <Presence
             key={item.id}
+            open={item.open}
+            preset="toast"
+            onExited={() => setItems((previous) => previous.filter((entry) => entry.id !== item.id))}
+            role="status"
             className="glass-strong pointer-events-auto flex items-start gap-2 rounded-[6px] border border-[var(--color-border-subtle)] px-2.5 py-2 text-[11.5px] shadow-lg"
           >
             {toastIcon[item.tone]}
             <span className="leading-5">{item.message}</span>
-          </div>
+          </Presence>
         ))}
       </div>
     </ToastContext.Provider>
@@ -380,19 +406,22 @@ export function Segmented<T extends string>({
   options,
   onChange,
   className,
+  label,
 }: {
   value: T
   options: Array<{ value: T; label: string; hint?: string }>
   onChange: (value: T) => void
   className?: string
+  label?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('inline-flex rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
+    <div role="group" aria-label={label} className={cn('app-segmented inline-flex rounded-[4px] border border-[var(--color-border-subtle)] bg-white/[0.035] p-0.5', className)}>
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           title={option.hint}
+          aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
             'rounded-[3px] px-2.5 py-1 text-[10.5px] font-medium transition',

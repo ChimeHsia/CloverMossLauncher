@@ -27,6 +27,7 @@ import { TrainingPage } from './pages/Training'
 import { TrainerWindow } from './pages/TrainerWindow'
 import { useApp } from './store'
 import { cloverUrl } from './lib/clover'
+import { MotionPanel } from './components/motion'
 
 function useAppBackground(): React.CSSProperties {
   const settings = useApp((state) => state.settings)
@@ -101,7 +102,7 @@ function LauncherShell(): React.JSX.Element {
           className="content-surface min-w-0 flex-1 overflow-y-auto"
           style={backgroundStyle}
         >
-          <div className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1100px] flex-col px-6 py-5">
+          <MotionPanel transitionKey={location.pathname} className="mx-auto flex min-h-[calc(100vh-44px)] w-full max-w-[1100px] flex-col px-6 py-5">
             <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<HomePage />} />
@@ -115,14 +116,14 @@ function LauncherShell(): React.JSX.Element {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </ErrorBoundary>
-          </div>
+          </MotionPanel>
         </main>
         <NotificationPanel />
       </div>
       <UpdateDialog />
-      {onboarding && !onboarding.ready ? (
+      {onboarding ? (
         <Oobe
-          open={!oobeDismissed}
+          open={!oobeDismissed && !onboarding.ready}
           status={onboarding}
           onClose={() => setOobeDismissed(true)}
         />
@@ -132,6 +133,7 @@ function LauncherShell(): React.JSX.Element {
 }
 
 function CreatorShell(): React.JSX.Element {
+  const location = useLocation()
   const backgroundStyle = useAppBackground()
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
@@ -139,7 +141,7 @@ function CreatorShell(): React.JSX.Element {
       <div className="flex min-h-0 flex-1">
         <CreatorSidebar />
         <main className="content-surface min-w-0 flex-1 overflow-y-auto" style={backgroundStyle}>
-          <div className="mx-auto w-full max-w-[1180px] px-6 py-5">
+          <MotionPanel transitionKey={location.pathname} className="mx-auto w-full max-w-[1180px] px-6 py-5">
             <ErrorBoundary>
               <Routes>
                 <Route path="/studio" element={<StudioPage />} />
@@ -147,7 +149,7 @@ function CreatorShell(): React.JSX.Element {
                 <Route path="*" element={<Navigate to="/studio" replace />} />
               </Routes>
             </ErrorBoundary>
-          </div>
+          </MotionPanel>
         </main>
       </div>
     </div>
@@ -159,9 +161,9 @@ function TrainerShell(): React.JSX.Element {
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
       <AppTitlebar kind="trainer" appName="Kohaku Trainer" appTag="external" />
-      <div className="min-h-0 flex-1 overflow-y-auto" style={backgroundStyle}>
+      <MotionPanel transitionKey="trainer" className="min-h-0 flex-1 overflow-y-auto" style={backgroundStyle}>
         <TrainerWindow />
-      </div>
+      </MotionPanel>
     </div>
   )
 }
@@ -171,11 +173,11 @@ function TerminalShell(): React.JSX.Element {
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
       <AppTitlebar kind="terminal" />
-      <div className="min-h-0 flex-1" style={backgroundStyle}>
+      <MotionPanel transitionKey="terminal" className="min-h-0 flex-1" style={backgroundStyle}>
         <ErrorBoundary>
           <TerminalPage />
         </ErrorBoundary>
-      </div>
+      </MotionPanel>
     </div>
   )
 }
@@ -186,11 +188,11 @@ function DevicesShell(): React.JSX.Element {
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
       <AppTitlebar kind="devices" appName="CloverMoss Devices" />
       <div className="min-h-0 flex-1 overflow-y-auto" style={backgroundStyle}>
-        <div className="mx-auto w-full max-w-[1100px] px-6 py-5">
+        <MotionPanel transitionKey="devices" className="mx-auto w-full max-w-[1100px] px-6 py-5">
           <ErrorBoundary>
             <DevicesPage />
           </ErrorBoundary>
-        </div>
+        </MotionPanel>
       </div>
     </div>
   )

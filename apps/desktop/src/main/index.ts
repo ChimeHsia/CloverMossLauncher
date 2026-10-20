@@ -848,7 +848,7 @@ app.whenReady().then(async () => {
     try {
       const [instance] = await listInstances()
       if (!instance) throw new Error('没有实例，先运行 --scenario=create')
-      const runtime = await installDeps(instance.runtimeId, settings, (line) => console.log(line))
+      const runtime = await installDeps(instance.runtimeId, settings, (line) => console.log(line), instance.path)
       console.log(JSON.stringify({ scenario: 'install', runtime }, null, 2))
       app.exit(0)
     } catch (error) {

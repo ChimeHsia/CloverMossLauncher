@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { OnboardingStatus } from '@shared/types'
 import { useApp } from '../store'
 import { Button, IconButton, cn } from './ui'
+import { Presence } from './motion'
 
 export function Oobe({
   open,
@@ -15,7 +16,6 @@ export function Oobe({
 }): React.JSX.Element | null {
   const navigate = useNavigate()
   const refreshOnboarding = useApp((state) => state.refreshOnboarding)
-  if (!open) return null
 
   const remaining = status.steps.filter((step) => step.status !== 'ok').length
 
@@ -27,7 +27,7 @@ export function Oobe({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[2px]">
+    <Presence open={open} className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-[2px]">
       <div
         className="glass-strong flex w-full max-w-[560px] flex-col overflow-hidden rounded-[6px] border border-[var(--color-border)] shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
         role="dialog"
@@ -110,6 +110,6 @@ export function Oobe({
           </div>
         </footer>
       </div>
-    </div>
+    </Presence>
   )
 }

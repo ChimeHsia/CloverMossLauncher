@@ -347,7 +347,8 @@ const tasks = new Map<string, DownloadTask>()
 const controllers = new Map<string, AbortController>()
 
 export function listDownloads(): DownloadTask[] {
-  return [...tasks.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  // Map insertion order keeps the initial list consistent with live queue updates.
+  return [...tasks.values()]
 }
 
 function touch(task: DownloadTask, patch: Partial<DownloadTask>): void {

@@ -112,6 +112,7 @@ export interface EnvReport {
 
 export interface Settings {
   theme: 'system' | 'light' | 'dark'
+  uiAnimation: 'system' | 'on' | 'off'
   language: 'zh-CN' | 'en'
   networkMode: 'auto' | 'direct' | 'mirror'
   gitMirror: string | null

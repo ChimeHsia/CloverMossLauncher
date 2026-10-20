@@ -8,7 +8,7 @@ import { cloverUrl } from '../lib/clover'
 import { openWindow } from '../lib/windows'
 import { bytes, dateTime, relative } from '../lib/format'
 import { useApp } from '../store'
-import { Button, Card, EmptyState, Modal, Pill, Spinner, useToast } from '../components/ui'
+import { Button, Card, EmptyState, IconButton, Input, Modal, Pill, Spinner, useToast } from '../components/ui'
 
 const PAGE_SIZE = 48
 
@@ -99,20 +99,20 @@ export function GalleryPage(): React.JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           <Pill tone="neutral">{total} 张作品</Pill>
-          <Button tone="ghost" onClick={() => void load(true, null, query)} disabled={loading}>
+          <IconButton label="刷新" onClick={() => void load(true, null, query)} disabled={loading}>
             <RefreshCw className={loading ? 'size-3.5 animate-spin' : 'size-3.5'} />
-          </Button>
+          </IconButton>
         </div>
       </header>
 
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-tertiary)]" />
-          <input
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索文件名或路径…"
-            className="h-8 w-full rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.04] pl-8 pr-3 text-[11px] outline-none backdrop-blur-md transition focus:border-accent-500/60"
+            className="w-full pl-8 pr-3"
           />
         </div>
         <Button
@@ -144,7 +144,7 @@ export function GalleryPage(): React.JSX.Element {
               key={item.id}
               type="button"
               onClick={() => void openDetail(item)}
-              className="group relative overflow-hidden rounded-xl border border-[var(--color-border-subtle)] bg-white/40 text-left shadow-[0_2px_10px_rgba(15,35,70,0.04)] transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-[0_8px_24px_rgba(37,99,235,0.12)] dark:bg-white/[0.03]"
+              className="group relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border-subtle)] bg-white/[0.03] text-left shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition hover:-translate-y-0.5 hover:border-accent-400/40 hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
               style={{ contentVisibility: 'auto', containIntrinsicSize: '240px' }}
             >
               <div className="aspect-square w-full overflow-hidden bg-[var(--color-surface-tertiary)]">
@@ -153,7 +153,7 @@ export function GalleryPage(): React.JSX.Element {
                   alt={item.name}
                   loading="lazy"
                   decoding="async"
-                  className="size-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                  className="size-full object-cover transition duration-200 group-hover:scale-[1.03]"
                 />
               </div>
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-2.5 pb-2 pt-7">

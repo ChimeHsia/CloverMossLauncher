@@ -5,6 +5,8 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme {
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--motion-ease);
   --font-sans: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, -apple-system, BlinkMacSystemFont,
     "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "Cascadia Code", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -51,6 +53,12 @@
   --hairline-strong: rgba(255, 255, 255, 0.13);
   --accent: #8ab6ff;
   --accent-strong: #5b8fe0;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-dialog: 10px;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 html,
@@ -86,43 +94,158 @@ body {
   background: transparent;
 }
 
-/* Thin acrylic: titlebar / sidebar. Thick acrylic: content surface. */
+/* Electron uses the standard property. A trailing WebKit alias can make the
+   CSS optimizer discard it, leaving Chromium with no supported backdrop filter.
+   Thin acrylic: titlebar / sidebar. Thick acrylic: content surface. */
 .glass-thin {
   background: rgba(22, 24, 28, 0.42);
   backdrop-filter: blur(42px) saturate(118%);
-  -webkit-backdrop-filter: blur(42px) saturate(118%);
 }
 
 .glass {
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(26px) saturate(112%);
-  -webkit-backdrop-filter: blur(26px) saturate(112%);
 }
 
 .glass-strong {
-  border-radius: 6px;
+  border-radius: var(--radius-card);
   background: rgba(28, 30, 35, 0.92);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(44px) saturate(120%);
-  -webkit-backdrop-filter: blur(44px) saturate(120%);
 }
 
 .content-surface {
   background: rgba(26, 28, 32, 0.52);
   backdrop-filter: blur(46px) saturate(112%);
-  -webkit-backdrop-filter: blur(46px) saturate(112%);
 }
 
-/* Fluent 2-ish primitives. */
-button,
-input,
-select,
-textarea {
-  font: inherit;
+.app-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  overflow: hidden;
 }
 
+.app-dialog[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  opacity: 1;
+  transition: opacity var(--motion-normal) var(--motion-ease);
+}
+
+.app-dialog[data-motion-state="closed"]::backdrop {
+  opacity: 0;
+}
+
+@starting-style {
+  .app-dialog[open]::backdrop { opacity: 0; }
+}
+
+.app-dialog-sheet {
+  padding: 0;
+}
+
+.app-dialog-sheet[open] {
+  justify-content: flex-end;
+}
+
+.app-dialog-panel,
+.app-popover {
+  border-radius: var(--radius-dialog);
+}
+
+.app-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition: grid-template-rows var(--motion-normal) var(--motion-ease), opacity var(--motion-normal) var(--motion-ease);
+}
+
+.app-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.app-collapse-inner {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@layer components {
+  .app-input {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-control);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text);
+    font-size: 11px;
+    line-height: 18px;
+    outline: none;
+    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+  }
+
+  .app-input:hover:not(:disabled) {
+    border-color: var(--color-border);
+  }
+
+  .app-input:focus-visible,
+  .app-icon-button:focus-visible,
+  .app-segmented button:focus-visible,
+  .app-switch [role="switch"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .app-input:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .app-input[aria-invalid="true"] {
+    border-color: var(--color-red-500);
+  }
+
+  .app-select {
+    appearance: auto;
+    padding-inline-end: 24px;
+    text-overflow: ellipsis;
+  }
+
+  .app-select option {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .app-textarea {
+    height: auto;
+    min-height: 80px;
+    padding-block: 6px;
+    resize: vertical;
+  }
+}
+
+/* Tailwind's base-layer font reset leaves control typography utilities in charge. */
 button {
   cursor: pointer;
 }
@@ -246,28 +369,6 @@ html[data-theme="dark"] {
   background: #191b1f;
 }
 
-/* Apps SDK Select menus render in a portal; keep them opaque and above the launcher stack. */
-body > span[class*="_Menu_"] {
-  position: relative;
-  z-index: 9999;
-}
-
-body > span[class*="_Menu_"] > div {
-  z-index: 9999 !important;
-}
-
-[role="dialog"][class*="_MenuList_"] {
-  z-index: 9999 !important;
-  border: 1px solid var(--hairline-strong) !important;
-  border-radius: 5px !important;
-  background: #202329 !important;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45) !important;
-}
-
-[class*="_OptionsList_"] {
-  background: #202329 !important;
-}
-
 /* xterm sits on the shared background, not on its own opaque slab. */
 .xterm,
 .xterm-viewport,
@@ -282,4 +383,27 @@ main {
 
 main::-webkit-scrollbar {
   display: none;
+}
+
+/* CSS media queries follow system changes immediately, in every window. */
+html[data-ui-animation="off"] *,
+html[data-ui-animation="off"] *::before,
+html[data-ui-animation="off"] *::after,
+html[data-ui-animation="off"] *::backdrop {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-ui-animation="on"]) *,
+  html:not([data-ui-animation="on"]) *::before,
+  html:not([data-ui-animation="on"]) *::after,
+  html:not([data-ui-animation="on"]) *::backdrop {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
 }
