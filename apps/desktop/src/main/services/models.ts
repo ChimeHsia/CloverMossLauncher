@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import {
   copyFile,
@@ -29,6 +29,12 @@ import { localReleaseDir } from './updates'
 import { listInstances } from './instances'
 import { listJobs } from './supervisor'
 import packagedCatalog from '../../../../../release/models.json'
+import {
+  importModelFolder as importModelDirectory,
+  readImportedModels,
+  removeImportedModel,
+  verifyImportedModelFile,
+} from './modelImports'
 import {
   downloadFile,
   fileSize,
@@ -177,6 +183,10 @@ async function fetchText(url: string, timeoutMs = 8000): Promise<string> {
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return response.text()
+}
+
+function importedModelsIndex(settings: Settings): string {
+  return join(paths.modelImports(settings.modelsRoot), 'index.json')
 }
 
 interface InstallRecord {
@@ -354,6 +364,35 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
       return entry
     }),
   )
+  for (const imported of await readImportedModels(importedModelsIndex(settings))) {
+    let installed = false
+    try {
+      const info = await stat(imported.path)
+      installed = info.isFile() && info.size === imported.size && info.mtimeMs === imported.mtimeMs
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    models.push({
+      id: imported.id,
+      name: imported.name,
+      provider: 'local',
+      repo: imported.path,
+      revision: 'local',
+      role: imported.role,
+      precision: 'local',
+      format: 'comfyui',
+      family: 'local',
+      sizeBytes: imported.size,
+      files: [imported.relativePath],
+      license: 'local',
+      tags: ['local-import', 'comfyui', `sha256:${imported.sha256}`],
+      notes: `外部文件引用；移除记录不会删除原文件。SHA256 ${imported.sha256}`,
+      localPath: imported.path,
+      installState: installed ? 'ready' : 'error',
+      installed,
+      installedBytes: installed ? imported.size : 0,
+    })
+  }
   const adapters: AdapterEntry[] = await Promise.all(
     (raw.adapters ?? []).map(async (adapter) => {
       const dir = join(paths.adapters(settings.modelsRoot), adapter.id)
@@ -464,10 +503,34 @@ async function runModelDownload(
   }
   const owned = new Set([...(oldRecord?.owned ?? []), ...pendingOwned])
   const repos = await readdir(paths.hub(settings.modelsRoot)).catch(() => [] as string[])
+  const importedModels = await readImportedModels(importedModelsIndex(settings))
   // Reuse matching HF blobs from older full Base/SFT installations before requesting bytes.
   for (const file of selected) {
     const blob = join(dir, 'blobs', blobKey(file))
     if ((await fileSize(blob)) >= 0 || !file.oid) continue
+    if (file.oid.length === 64) {
+      const imported = importedModels.find((candidate) => candidate.sha256 === file.oid)
+      if (
+        imported &&
+        (await verifyImportedModelFile(imported, file.oid, file.size))
+      ) {
+        const temporary = `${blob}.${randomUUID()}.importing`
+        await mkdir(dirname(blob), { recursive: true })
+        try {
+          await copyFile(imported.path, temporary)
+          if (
+            (await fileSize(temporary)) === file.size &&
+            (await hashFile(temporary)) === file.oid
+          ) {
+            await rename(temporary, blob)
+            owned.add(file.path)
+            continue
+          }
+        } finally {
+          await rm(temporary, { force: true })
+        }
+      }
+    }
     for (const repo of repos.filter((name) => name.startsWith('models--'))) {
       const candidate = join(paths.hub(settings.modelsRoot), repo, 'blobs', file.oid)
       if (candidate === blob || (await fileSize(candidate)) !== file.size) continue
@@ -680,7 +743,17 @@ export async function startDownload(
       ? catalog.models.find((m) => m.id === id)
       : catalog.adapters.find((m) => m.id === id)
   if (!entry) throw new Error('目录中没有该条目')
+  if (entry.provider === 'local') throw new Error('本地导入文件不能作为远程下载任务')
   return beginDownload(kind, entry, settings)
+}
+
+export async function importModelFolder(
+  directory: string,
+  settings: Settings,
+): Promise<{ added: number; duplicates: number }> {
+  const result = await importModelDirectory(directory, importedModelsIndex(settings))
+  invalidateCatalog()
+  return result
 }
 export async function installBundle(id: string, settings: Settings): Promise<DownloadTask[]> {
   const catalog = await getCatalog(settings, true)
@@ -768,6 +841,11 @@ export async function deleteModel(
       return
     }
     const model = entry as ModelEntry
+    if (model.provider === 'local') {
+      await removeImportedModel(importedModelsIndex(settings), id)
+      invalidateCatalog()
+      return
+    }
     let record: InstallRecord
     try {
       record = JSON.parse(await readFile(marker(settings, id, model.repo), 'utf8')) as InstallRecord

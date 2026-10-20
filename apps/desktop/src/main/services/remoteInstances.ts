@@ -38,21 +38,48 @@ export function remoteInstancePath(roots: RemoteInstanceRoots, id: string): stri
   return `${roots.instanceRoot.replace(/\/$/, '')}/${id}`
 }
 
-export function remoteMirrorPath(roots: RemoteInstanceRoots): string {
-  return `${roots.instanceRoot.replace(/\/$/, '')}/git/moss-image.git`
+export function remoteMirrorPath(roots: RemoteInstanceRoots, source = DEFAULT_SOURCE): string {
+  const base = `${roots.instanceRoot.replace(/\/$/, '')}/git`
+  if (source === DEFAULT_SOURCE) return `${base}/moss-image.git`
+  const key = createHash('sha1').update(source).digest('hex').slice(0, 12)
+  return `${base}/moss-image-${key}.git`
 }
 
 export async function ensureRemoteMirror(
   roots: RemoteInstanceRoots,
   source = DEFAULT_SOURCE,
 ): Promise<void> {
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
+  const gitDir = `${roots.instanceRoot.replace(/\/$/, '')}/git`
   const command = [
-    `mkdir -p ${posixQuote(`${roots.instanceRoot.replace(/\/$/, '')}/git`)}`,
-    `if [ ! -f ${posixQuote(`${mirror}/HEAD`)} ]; then`,
-    `  git clone --bare --progress ${posixQuote(source)} ${posixQuote(mirror)}`,
-    'else',
-    `  git -C ${posixQuote(mirror)} fetch --prune origin '+refs/heads/*:refs/heads/*'`,
+    'set -e',
+    `mirror=${posixQuote(mirror)}`,
+    `mkdir -p ${posixQuote(gitDir)}`,
+    'mirror_healthy() {',
+    '  [ -f "$mirror/HEAD" ] || return 1',
+    `  refs=$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads 2>/dev/null) || return 1`,
+    '  [ -n "$refs" ] || return 1',
+    '  for ref in $refs; do',
+    '    git -C "$mirror" rev-parse --verify "${ref}^{commit}" >/dev/null 2>&1 && return 0',
+    '  done',
+    '  return 1',
+    '}',
+    'archive_broken() {',
+    '  archive="$mirror.broken-$(date +%s)-$$"',
+    '  mv "$mirror" "$archive"',
+    '  printf "保留损坏镜像：%s\\n" "$archive" >&2',
+    '}',
+    'if [ -e "$mirror" ]; then',
+    '  if mirror_healthy; then',
+    `    git -C "$mirror" fetch --prune origin '+refs/heads/*:refs/heads/*'`,
+    '  elif ! git -C "$mirror" fetch --prune origin \'+refs/heads/*:refs/heads/*\'; then',
+    '    echo "无法通过 fetch 修复远端镜像，将保留旧目录并重新克隆" >&2',
+    '  fi',
+    'fi',
+    'if ! mirror_healthy; then',
+    '  if [ -e "$mirror" ]; then archive_broken; fi',
+    `  git clone --bare --progress ${posixQuote(source)} "$mirror"`,
+    '  mirror_healthy || { echo "克隆后的远端镜像仍不可用" >&2; exit 1; }',
     'fi',
   ].join('\n')
   const result = await sshExec(roots.host, command, 300_000)
@@ -61,8 +88,8 @@ export async function ensureRemoteMirror(
   }
 }
 
-export async function remoteBranches(roots: RemoteInstanceRoots): Promise<BranchInfo[]> {
-  const mirror = remoteMirrorPath(roots)
+export async function remoteBranches(roots: RemoteInstanceRoots, source = DEFAULT_SOURCE): Promise<BranchInfo[]> {
+  const mirror = remoteMirrorPath(roots, source)
   const result = await sshExec(
     roots.host,
     [
@@ -92,8 +119,9 @@ export async function remoteCommits(
   roots: RemoteInstanceRoots,
   branch: string,
   limit = 80,
+  source = DEFAULT_SOURCE,
 ): Promise<CommitInfo[]> {
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
   const safe = branch.replace(/[^A-Za-z0-9._/-]/g, '')
   const result = await sshExec(
     roots.host,
@@ -120,9 +148,10 @@ export async function createRemoteWorktree(
   roots: RemoteInstanceRoots,
   id: string,
   commit: string,
+  source = DEFAULT_SOURCE,
 ): Promise<string> {
   const target = remoteInstancePath(roots, id)
-  const mirror = remoteMirrorPath(roots)
+  const mirror = remoteMirrorPath(roots, source)
   const result = await sshExec(
     roots.host,
     [

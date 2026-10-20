@@ -59,8 +59,13 @@ export function InstanceDetailPage(): React.JSX.Element {
             hostId: placement.hostId,
             branch: instance.branch,
             limit: 80,
+            source: instance.source,
           })
-        : call<CommitInfo[]>(Ipc.gitCommits, { branch: instance.branch, limit: 80 })
+        : call<CommitInfo[]>(Ipc.gitCommits, {
+            branch: instance.branch,
+            limit: 80,
+            source: instance.source,
+          })
     void request
       .then((rows) => {
         setCommits(rows)

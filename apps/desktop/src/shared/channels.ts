@@ -63,6 +63,7 @@ export const Ipc = {
   runtimeIsolate: 'runtime:isolate',
   runtimeState: 'runtime:state',
   modelsCatalog: 'models:catalog',
+  modelsImportFolder: 'models:import-folder',
   modelsInstalled: 'models:installed',
   modelDownload: 'models:download',
   modelBundleInstall: 'models:install-bundle',

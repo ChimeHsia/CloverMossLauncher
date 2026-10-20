@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Cpu,
   Download,
+  FolderOpen,
   HardDrive,
   Layers,
   Package,
@@ -50,6 +51,7 @@ const labels: Record<DownloadTask['state'], string> = {
   error: '下载失败',
 }
 const categories = [
+  { id: 'all', name: '全部', icon: Package },
   { id: 'dit', name: 'MOSS 模型', icon: Layers },
   { id: 'text_encoder', name: 'Qwen 编码器', icon: Cpu },
   { id: 'vae', name: 'VAE', icon: Package },
@@ -98,7 +100,9 @@ export function ModelsPage(): React.JSX.Element {
         : (catalog?.models ?? [])
             .filter(
               (m) =>
-                (m.role === category || (category === 'dit' && m.role === 'full')) &&
+                (category === 'all' ||
+                  m.role === category ||
+                  (category === 'dit' && m.role === 'full')) &&
                 (format === 'all' || (m.format ?? 'diffusers') === format),
             )
             .map((value) => ({ kind: 'model', value }))
@@ -120,6 +124,32 @@ export function ModelsPage(): React.JSX.Element {
       await call(Ipc.modelBundleInstall, { id: bundle.id })
       await refreshCatalog()
       toast.push('缺失组件已加入下载队列', 'success')
+    } catch (e) {
+      toast.push(e instanceof Error ? e.message : String(e), 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+  async function importFolder(): Promise<void> {
+    setBusy('import')
+    try {
+      const result = await call<{
+        canceled: boolean
+        added: number
+        duplicates: number
+      }>(Ipc.modelsImportFolder)
+      if (result.canceled) return
+      await refreshCatalog()
+      setCategory('all')
+      setFormat('comfyui')
+      setInstalledOnly(false)
+      setQuery('')
+      toast.push(
+        result.added
+          ? `已导入 ${result.added} 个模型文件，重复内容 ${result.duplicates} 个已跳过`
+          : `所选目录中的 ${result.duplicates} 个文件已导入过`,
+        'success',
+      )
     } catch (e) {
       toast.push(e instanceof Error ? e.message : String(e), 'error')
     } finally {
@@ -179,9 +209,15 @@ export function ModelsPage(): React.JSX.Element {
             按需下载，自由组合。编码器与 VAE 只需准备一次。
           </p>
         </div>
-        <IconButton label="刷新模型库" onClick={() => void refreshCatalog()}>
-          <RefreshCw className="size-4" />
-        </IconButton>
+        <div className="flex items-center gap-2">
+          <Button tone="secondary" disabled={busy !== null} onClick={() => void importFolder()}>
+            {busy === 'import' ? <Spinner className="size-3.5" /> : <FolderOpen className="size-3.5" />}
+            导入本地模型
+          </Button>
+          <IconButton label="刷新模型库" onClick={() => void refreshCatalog()}>
+            <RefreshCw className="size-4" />
+          </IconButton>
+        </div>
       </header>
 
       {bundle ? (
@@ -416,7 +452,9 @@ export function ModelsPage(): React.JSX.Element {
                         </h3>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <Pill>
-                            {component?.format === 'comfyui'
+                            {component?.provider === 'local'
+                              ? '本地引用'
+                              : component?.format === 'comfyui'
                               ? 'ComfyUI'
                               : entry.kind === 'adapter'
                                 ? entry.value.kind.toUpperCase()
@@ -437,9 +475,13 @@ export function ModelsPage(): React.JSX.Element {
                         )}
                       >
                         {model.installed
-                          ? '已就绪'
+                          ? component?.provider === 'local'
+                            ? '已引用'
+                            : '已就绪'
                           : working
                             ? labels[task.state]
+                            : component?.provider === 'local'
+                              ? '源文件不可用'
                             : component?.installState === 'error'
                               ? '需修复'
                               : '未安装'}
@@ -468,7 +510,7 @@ export function ModelsPage(): React.JSX.Element {
                             <Trash2 className="size-3.5" />
                           </IconButton>
                         ) : null}
-                        {!model.installed ? (
+                        {!model.installed && component?.provider !== 'local' ? (
                           <Button
                             tone="secondary"
                             disabled={working || busy === model.id}
@@ -574,12 +616,20 @@ export function ModelsPage(): React.JSX.Element {
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <HardDrive className="size-3.5" />
-              最多可释放
+              {removing?.kind === 'model' && removing.value.provider === 'local'
+                ? '外部文件引用'
+                : '最多可释放'}
             </span>
-            <span>{bytes(removing?.value.installedBytes ?? 0)}</span>
+            <span>
+              {removing?.kind === 'model' && removing.value.provider === 'local'
+                ? '原文件不会删除'
+                : bytes(removing?.value.installedBytes ?? 0)}
+            </span>
           </div>
           <p>
-            只清理此组件独占的受管文件；其他组件或外部缓存仍在使用的文件会保留，实际释放容量取决于共享引用。
+            {removing?.kind === 'model' && removing.value.provider === 'local'
+              ? '移除只会取消模型库中的引用，不会删除或修改原始模型文件。'
+              : '只清理此组件独占的受管文件；其他组件或外部缓存仍在使用的文件会保留，实际释放容量取决于共享引用。'}
           </p>
           {users.length ? (
             <p className="text-amber-300">

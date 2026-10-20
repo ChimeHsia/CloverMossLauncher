@@ -215,8 +215,9 @@ export async function createInstance(input: CreateInstanceInput, settings: Setti
 async function createRemoteInstance(input: CreateInstanceInput, settings: Settings): Promise<InstanceInfo> {
   if (!input.hostId) throw new Error('缺少远端 host')
   const roots = await remoteRoots(settings, input.hostId)
-  await ensureRemoteMirror(roots, input.source ?? DEFAULT_SOURCE)
-  const commits = await remoteCommits(roots, input.branch, 200)
+  const source = input.source ?? DEFAULT_SOURCE
+  await ensureRemoteMirror(roots, source)
+  const commits = await remoteCommits(roots, input.branch, 200, source)
   const commit = commits.find((item) => item.sha === input.commit || item.sha.startsWith(input.commit))
   const sha = commit?.sha ?? input.commit
   const short = sha.slice(0, 7)
@@ -228,20 +229,20 @@ async function createRemoteInstance(input: CreateInstanceInput, settings: Settin
     id = `${slugify(name)}-${suffix}`
   }
   const remotePath = remoteInstancePath(roots, id)
-  await createRemoteWorktree(roots, id, sha)
+  await createRemoteWorktree(roots, id, sha, source)
   const runtime = await createRemoteRuntime(roots, id, sha)
   const record: InstanceRecord = {
     schemaVersion: 1,
     id,
     name,
-    source: input.source ?? DEFAULT_SOURCE,
+    source,
     branch: input.branch,
     commit: sha,
     shortCommit: short,
     commitDate: commit?.date ?? new Date().toISOString(),
     subject: commit?.subject ?? '',
     author: commit?.author ?? '',
-    channel: channelFor(input.branch, sha, await branchStableSha(input.source), input.source),
+    channel: channelFor(input.branch, sha, await branchStableSha(source), source),
     runtimeId: runtime.id,
     runtimeMode: 'isolated',
     placement: {
@@ -266,7 +267,7 @@ export async function deleteInstance(id: string, keepOutputs: boolean, settings?
     if (!settings) throw new Error('缺少设置，无法清理远端实例')
     const placement = record.placement
     const roots = await remoteRoots(settings, placement.hostId)
-    const mirror = remoteMirrorPath(roots)
+    const mirror = remoteMirrorPath(roots, record.source)
     const backup = `${roots.instanceRoot.replace(/\/$/, '')}/outputs-kept/${id}`
     const command = [
       keepOutputs
@@ -316,7 +317,7 @@ export async function updateInstance(
   if (record.placement?.kind === 'ssh') {
     if (!settings) throw new Error('缺少设置，无法切换远端实例版本')
     const roots = await remoteRoots(settings, record.placement.hostId)
-    const commits = await remoteCommits(roots, record.branch, 200)
+    const commits = await remoteCommits(roots, record.branch, 200, record.source)
     info = commits.find((item) => item.sha === commit || item.sha.startsWith(commit))
     const sha = info?.sha ?? commit
     await remoteCheckout(roots, id, sha)

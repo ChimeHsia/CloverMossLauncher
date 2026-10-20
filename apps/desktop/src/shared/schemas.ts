@@ -74,12 +74,16 @@ export const schemas = {
     hostId: z.string().max(80).optional(),
   }),
 
-  instanceRemoteHost: z.object({ hostId: z.string().min(1).max(80) }),
+  instanceRemoteHost: z.object({
+    hostId: z.string().min(1).max(80),
+    source: urlLike.optional(),
+  }),
 
   instanceRemoteCommits: z.object({
     hostId: z.string().min(1).max(80),
     branch: z.string().min(1).max(120),
     limit: z.number().int().min(1).max(200).default(80),
+    source: urlLike.optional(),
   }),
 
   instanceDelete: z.object({

@@ -101,7 +101,7 @@ export function InstancesPage(): React.JSX.Element {
     try {
       const list =
         nextHostId
-          ? await call<BranchInfo[]>(Ipc.instanceRemoteBranches, { hostId: nextHostId })
+          ? await call<BranchInfo[]>(Ipc.instanceRemoteBranches, { hostId: nextHostId, source })
           : await call<BranchInfo[]>(Ipc.gitBranches, { source })
       setBranches(list)
       const preferred = list.find((item) => item.isStable) ?? list.find((item) => item.isDefault) ?? list[0]
@@ -130,6 +130,7 @@ export function InstancesPage(): React.JSX.Element {
             hostId: targetHostId,
             branch: branchName,
             limit: 60,
+            source: targetSource,
           })
         : await call<CommitInfo[]>(Ipc.gitCommits, { branch: branchName, limit: 60, source: targetSource })
       setCommits(list)
@@ -374,7 +375,6 @@ export function InstancesPage(): React.JSX.Element {
                     setCommit('')
                     setBranchError(null)
                   }}
-                  disabled={Boolean(hostId)}
                   placeholder={DEFAULT_SOURCE}
                   className="min-w-0 flex-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 font-mono text-[11.5px] outline-none focus:border-accent-500 disabled:opacity-50"
                 />
@@ -390,7 +390,7 @@ export function InstancesPage(): React.JSX.Element {
               </div>
               <span className="block text-[10px] leading-4 text-[var(--color-text-tertiary)]">
                 {hostId
-                  ? '远端实例当前固定使用官方 MOSS-Image 源；本机镜像可按来源独立缓存。'
+                  ? '远端也会按来源独立缓存镜像；已有实例继续使用创建时记录的来源。'
                   : '默认官方仓库；自定义来源会使用独立镜像目录，不会覆盖官方镜像。'}
               </span>
             </label>

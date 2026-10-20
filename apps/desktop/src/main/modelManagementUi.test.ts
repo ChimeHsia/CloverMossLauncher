@@ -68,6 +68,14 @@ export async function runModelManagementUi(): Promise<void> {
       break
     await new Promise((r) => setTimeout(r, 100))
   }
+  assert.equal(
+    await execute("[...document.querySelectorAll('button')].some(b => b.textContent.includes('导入本地模型'))"),
+    true,
+  )
+  assert.equal(
+    await execute("[...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === '全部')"),
+    true,
+  )
   const checks: unknown[] = []
   async function capture(name: string): Promise<void> {
     await settle()

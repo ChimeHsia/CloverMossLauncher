@@ -23,7 +23,7 @@ import {
   remoteCommits as remoteMossCommits,
   remoteRoots,
 } from './services/remoteInstances'
-import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload, installBundle } from './services/models'
+import { getCatalog, deleteModel, importModelFolder, listDownloads, pauseDownload, startDownload, installBundle } from './services/models'
 import { galleryDetail, listGallery, revealInFolder } from './services/gallery'
 import { cancelJob, getJob, getJobLogs, inputJob, listJobs, startJob } from './services/supervisor'
 import { clearDiagnostics, dismissDiagnostic, listDiagnostics } from './services/diagnostics'
@@ -275,16 +275,16 @@ export function registerIpc(): void {
 
   handle(Ipc.instanceCreate, schemas.instanceCreate, (input) => createInstance(input, getSettings()))
 
-  handle(Ipc.instanceRemoteBranches, schemas.instanceRemoteHost, async ({ hostId }) => {
+  handle(Ipc.instanceRemoteBranches, schemas.instanceRemoteHost, async ({ hostId, source }) => {
     const roots = await remoteRoots(getSettings(), hostId)
-    await ensureRemoteMirror(roots)
-    return remoteMossBranches(roots)
+    await ensureRemoteMirror(roots, source)
+    return remoteMossBranches(roots, source)
   })
 
-  handle(Ipc.instanceRemoteCommits, schemas.instanceRemoteCommits, async ({ hostId, branch, limit }) => {
+  handle(Ipc.instanceRemoteCommits, schemas.instanceRemoteCommits, async ({ hostId, branch, limit, source }) => {
     const roots = await remoteRoots(getSettings(), hostId)
-    await ensureRemoteMirror(roots)
-    return remoteMossCommits(roots, branch, limit)
+    await ensureRemoteMirror(roots, source)
+    return remoteMossCommits(roots, branch, limit, source)
   })
 
   handle(Ipc.instanceDelete, schemas.instanceDelete, ({ id, keepOutputs }) =>
@@ -340,6 +340,16 @@ export function registerIpc(): void {
   })
 
   handle(Ipc.modelsCatalog, null, () => getCatalog(getSettings(), true))
+
+  handle(Ipc.modelsImportFolder, null, async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择模型文件夹',
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || !result.filePaths[0]) return { canceled: true, added: 0, duplicates: 0 }
+    const imported = await importModelFolder(result.filePaths[0], getSettings())
+    return { canceled: false, ...imported }
+  })
 
   handle(Ipc.modelsInstalled, null, async () => {
     const catalog = await getCatalog(getSettings())

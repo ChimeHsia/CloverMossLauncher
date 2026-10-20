@@ -241,7 +241,7 @@ export interface RuntimeInfo {
 export interface ModelEntry {
   id: string
   name: string
-  provider: 'hf'
+  provider: 'hf' | 'local'
   repo: string
   revision: string
   role: 'full' | 'dit' | 'text_encoder' | 'vae' | 'support'
@@ -258,6 +258,7 @@ export interface ModelEntry {
   tags: string[]
   notes?: string
   preview?: string
+  localPath?: string
   installed: boolean
   installedBytes: number
 }

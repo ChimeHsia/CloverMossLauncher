@@ -9,6 +9,7 @@ import {
   componentSnapshot,
   deleteModel,
   getCatalog,
+  importModelFolder,
   installBundle,
   listDownloads,
   startDownload,
@@ -147,6 +148,30 @@ export async function runModelManagementTests(): Promise<void> {
       oldRequests,
     )
     assert((await componentSnapshot('qwen35-encoder', imported)).record.entries.length > 0)
+    const external = {
+      ...settings,
+      modelsRoot: join(app.getPath('userData'), 'external-model-import'),
+    }
+    ensureDirs(external.modelsRoot)
+    const externalDir = join(external.modelsRoot, 'ComfyUI', 'models', 'text_encoders')
+    await mkdir(externalDir, { recursive: true })
+    await writeFile(join(externalDir, 'qwen.safetensors'), te)
+    assert.deepEqual(await importModelFolder(join(external.modelsRoot, 'ComfyUI', 'models'), external), {
+      added: 1,
+      duplicates: 0,
+    })
+    const importedCatalog = await getCatalog(external, true)
+    const localModel = importedCatalog.models.find((model) => model.provider === 'local')
+    assert.equal(localModel?.installed, true)
+    const modelRequests = requested.filter((p) => p === 'text_encoder/model.safetensors').length
+    await startDownload('model', 'qwen35-encoder', external)
+    await wait()
+    assert.equal(
+      requested.filter((p) => p === 'text_encoder/model.safetensors').length,
+      modelRequests,
+    )
+    await deleteModel('model', localModel!.id, external)
+    assert.equal((await readFile(join(externalDir, 'qwen.safetensors'))).toString(), te.toString())
     // Bindings protect shared components, and can be cleared without removing weights.
     const id = 'component-test-instance'
     await mkdir(paths.instance(id), { recursive: true })
@@ -192,6 +217,7 @@ export async function runModelManagementTests(): Promise<void> {
           'fp16-assembly',
           'corruption-repair',
           'legacy-blob-reuse',
+          'external-model-import',
           'binding-protection',
           'safe-delete',
         ],

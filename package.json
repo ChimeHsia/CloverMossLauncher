@@ -14,6 +14,7 @@
     "release:md": "node tools/release-md.mjs",
     "release:md:check": "node tools/release-md.mjs --check",
     "test:models": "node --test tests/model-files.test.mjs",
+    "test:model-imports": "node --test tests/model-imports.test.mjs",
     "test:model-runtime": "python -m unittest discover -s runner/tests"
   }
 }
