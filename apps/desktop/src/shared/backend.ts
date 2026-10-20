@@ -11,3 +11,9 @@ export interface BackendRpc {
   method: 'startJob' | 'cancelJob' | 'getJob' | 'listJobs'
   params?: unknown
 }
+
+export interface WebAccessInfo {
+  ready: boolean
+  urls: string[]
+  error?: string
+}

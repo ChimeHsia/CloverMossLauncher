@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { runModelManagementTests } from './modelManagement.test'
 import { runModelManagementUi } from './modelManagementUi.test'
 import { ensureDirs, paths } from './lib/paths'
-import { getBackendInfo, startBackend, stopBackend } from './services/backend'
+import { getBackendInfo, getWebAccessInfo, startBackend, stopBackend } from './services/backend'
 import type { JobRecord } from '@shared/types'
 import { compareSemver, findInstaller, parseReleaseMarkdown } from '@shared/release'
 import { downloadUpdate } from './services/updateDownload'
@@ -855,6 +855,15 @@ exit 0
     return
   }
 
+  if (scenario === 'web-access') {
+    const access = getWebAccessInfo()
+    const remote = access.urls.find((url) => !url.includes('127.0.0.1')) ?? null
+    const page = access.ready ? await fetch(remote ?? access.urls[0]!).then(async (res) => ({ status: res.status, html: (await res.text()).includes('MossStudio') })).catch(() => null) : null
+    console.log(JSON.stringify({ scenario: 'web-access', ready: access.ready, urls: access.urls.length, remote: Boolean(remote), page }, null, 2))
+    app.exit(access.ready && remote && page?.status === 200 && page.html ? 0 : 1)
+    return
+  }
+
   if (scenario === 'backend-http') {
     const backend = getBackendInfo()
     if (!backend.ready || !backend.url || !backend.token) {
@@ -867,13 +876,14 @@ exit 0
     const jobs = await fetch(`${backend.url}/api/jobs`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())
     const studio = (await fetch(`${backend.url}/api/studio/bootstrap`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())) as { projects?: unknown[]; instances?: unknown[]; models?: { models?: unknown[] } }
     const models = (await fetch(`${backend.url}/api/models`, { headers: { authorization: `Bearer ${backend.token}` } }).then((res) => res.json())) as { models?: unknown[] }
+    const web = await fetch(`${backend.url}/`).then(async (res) => ({ status: res.status, html: (await res.text()).includes('MossStudio') }))
     const hello = await new Promise<unknown>((resolve, reject) => {
       const ws = new WebSocket(`${backend.url!.replace('http', 'ws')}/ws?token=${backend.token}`)
       const timer = setTimeout(() => { ws.close(); reject(new Error('ws timeout')) }, 5000)
       ws.once('message', (data) => { clearTimeout(timer); ws.close(); resolve(JSON.parse(String(data))) })
       ws.once('error', reject)
     })
-    console.log(JSON.stringify({ scenario: 'backend-http', health, unauthorized, jobs: Array.isArray(jobs) ? jobs.length : null, studio: { projects: Array.isArray(studio.projects) ? studio.projects.length : null, instances: Array.isArray(studio.instances) ? studio.instances.length : null, models: Array.isArray(studio.models?.models) ? studio.models.models.length : null }, models: Array.isArray(models?.models) ? models.models.length : null, hello }, null, 2))
+    console.log(JSON.stringify({ scenario: 'backend-http', health, unauthorized, jobs: Array.isArray(jobs) ? jobs.length : null, web, studio: { projects: Array.isArray(studio.projects) ? studio.projects.length : null, instances: Array.isArray(studio.instances) ? studio.instances.length : null, models: Array.isArray(studio.models?.models) ? studio.models.models.length : null }, models: Array.isArray(models?.models) ? models.models.length : null, hello }, null, 2))
     app.exit(0)
     return
   }

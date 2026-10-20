@@ -78,6 +78,8 @@ Electron renderer        浏览器 / 手机（响应式）
 - 桌面与 Web 共用 Studio feature，不复制页面；
 - Web 只拿到 Studio 安全子集，不暴露终端/训练/设置写操作；
 - 局域网服务由桌面主机显式开启，token/PIN，应用退出即停止；
+- 当前已落：Studio HTTP API、静态 Web root、`WebStudioClient`、移动优先的 prompt/generate shell；
+  token/PIN/QR、画布 Web 版与真实手机验收仍待做。
 - 详细决策见 [ADR-0007](decisions/0007-mossstudio-single-ui-and-web.md)。
 
 ## 3. 代码结构

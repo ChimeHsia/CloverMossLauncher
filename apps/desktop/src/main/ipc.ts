@@ -32,6 +32,7 @@ import { installDeps, readRuntime } from './services/runtimes'
 import { getSettings, updateSettings } from './services/settings'
 import { checkUpdates, dismissAnnouncement } from './services/updates'
 import { cancelUpdateDownload, downloadUpdate } from './services/updateDownload'
+import { getWebAccessInfo, startBackend, stopBackend } from './services/backend'
 import { pushTestNotification } from './services/desktopNotifications'
 import { isInside } from './lib/paths'
 import { openWindow } from './windows'
@@ -115,6 +116,8 @@ export function registerIpc(): void {
   }))
 
   handle(Ipc.backendInfo, null, () => getBackendInfo())
+
+  handle(Ipc.webAccessInfo, null, () => getWebAccessInfo())
 
   handle(Ipc.windowOpen, schemas.windowOpen, ({ kind, route }) => {
     openWindow(kind, route)
@@ -232,9 +235,14 @@ export function registerIpc(): void {
 
   handle(Ipc.settingsGet, null, () => getSettings())
 
-  handle(Ipc.settingsUpdate, schemas.settingsUpdate, (patch) => {
+  handle(Ipc.settingsUpdate, schemas.settingsUpdate, async (patch) => {
+    const before = getSettings()
     const settings = updateSettings(patch)
     ensureDirs(settings.modelsRoot)
+    if (before.lanWebEnabled !== settings.lanWebEnabled) {
+      stopBackend()
+      await startBackend()
+    }
     emit(Events.settingsChanged, settings)
     return settings
   })

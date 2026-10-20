@@ -122,6 +122,7 @@ export interface Settings {
   pythonPath: string | null
   autoCheckUpdates: boolean
   desktopNotifications: boolean
+  lanWebEnabled: boolean
   updateChannel: 'stable' | 'beta'
   dismissedAnnouncements: string[]
   dismissedUpdateVersion: string | null

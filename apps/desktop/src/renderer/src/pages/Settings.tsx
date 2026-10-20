@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Ipc } from '@shared/channels'
 import type { AppInfo, Settings } from '@shared/types'
+import type { WebAccessInfo } from '@shared/backend'
 import defaultHomeBackground from '../assets/home-background.png'
 import { call } from '../lib/api'
 import { cloverUrl } from '../lib/clover'
@@ -32,10 +33,20 @@ export function SettingsPage(): React.JSX.Element {
   const [edits, setEdits] = useState<Partial<Settings>>({})
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [saving, setSaving] = useState(false)
+  const [webAccess, setWebAccess] = useState<WebAccessInfo | null>(null)
 
   useEffect(() => {
     void call<AppInfo>(Ipc.appInfo).then(setAppInfo).catch(() => undefined)
+    void refreshWebAccess()
   }, [])
+
+  async function refreshWebAccess(): Promise<void> {
+    try {
+      setWebAccess(await call<WebAccessInfo>(Ipc.webAccessInfo))
+    } catch {
+      setWebAccess(null)
+    }
+  }
 
   const changes = useMemo(
     () => settings ? pendingSettings(settings, edits) : {},
@@ -519,6 +530,41 @@ export function SettingsPage(): React.JSX.Element {
                 />
               </div>
             </div>
+            <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
+              <div>
+                <div className="text-[12px] font-medium">局域网 WebUI</div>
+                <div className="mt-0.5 text-[10.5px] text-[var(--color-text-tertiary)]">
+                  同一 Wi‑Fi 用手机浏览器打开 MossStudio；默认关闭
+                </div>
+              </div>
+              <Switch
+                aria-label="局域网 WebUI"
+                checked={draft.lanWebEnabled}
+                onCheckedChange={(value: boolean) => patch({ lanWebEnabled: value })}
+              />
+            </div>
+            {draft.lanWebEnabled ? (
+              <div className="rounded-[5px] border border-[var(--color-border-subtle)] bg-white/[0.025] p-2.5">
+                <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">
+                  保存后地址会更新；同一网络内拿到链接的人可以访问。
+                </div>
+                {(webAccess?.urls ?? []).map((url) => (
+                  <div key={url} className="flex items-center gap-2 py-0.5">
+                    <code className="min-w-0 flex-1 truncate text-[9.5px] text-[var(--color-text-secondary)]">{url}</code>
+                    <button
+                      type="button"
+                      className="shrink-0 text-[9.5px] text-accent-300 hover:underline"
+                      onClick={() => void navigator.clipboard.writeText(url)}
+                    >
+                      复制
+                    </button>
+                  </div>
+                ))}
+                {!webAccess?.ready ? (
+                  <div className="text-[10px] text-amber-300">{webAccess?.error ?? '保存设置后生成地址'}</div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-4 border-t border-[var(--color-border-subtle)] pt-2.5">
               <div>
                 <div className="text-[12px] font-medium">更新通道</div>

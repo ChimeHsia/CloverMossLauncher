@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pythonPath: null,
   autoCheckUpdates: true,
   desktopNotifications: true,
+  lanWebEnabled: false,
   updateChannel: 'stable',
   dismissedAnnouncements: [],
   dismissedUpdateVersion: null,

@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto'
+import { networkInterfaces } from 'node:os'
 import { join } from 'node:path'
-import { utilityProcess, type UtilityProcess } from 'electron'
-import type { BackendInfo } from '@shared/backend'
+import { app, utilityProcess, type UtilityProcess } from 'electron'
+import type { BackendInfo, WebAccessInfo } from '@shared/backend'
 import type { JobRecord } from '@shared/types'
 import { onEmit } from '../lib/events'
 import { cancelJob, getJob, listJobs, startJob } from './supervisor'
@@ -66,7 +67,12 @@ export async function startBackend(): Promise<BackendInfo> {
     const timer = setTimeout(() => resolve({ ready: false, url: null, token: null, error: 'backend startup timeout' }), 8000)
     try {
       child = utilityProcess.fork(join(__dirname, 'backend.js'), [], {
-        env: { ...process.env, CLOVER_BACKEND_TOKEN: token },
+        env: {
+          ...process.env,
+          CLOVER_BACKEND_TOKEN: token,
+          CLOVER_BACKEND_HOST: getSettings().lanWebEnabled ? '0.0.0.0' : '127.0.0.1',
+          CLOVER_WEB_ROOT: join(app.getAppPath(), 'out', 'renderer'),
+        },
         stdio: 'pipe',
       })
     } catch (error) {
@@ -126,4 +132,22 @@ export function stopBackend(): void {
   }
   child = null
   info = { ready: false, url: null, token: null }
+}
+
+export function getWebAccessInfo(): WebAccessInfo {
+  if (!info.ready || !info.url || !info.token) {
+    return { ready: false, urls: [], error: info.error ?? '后端尚未就绪' }
+  }
+  const port = new URL(info.url).port
+  const token = encodeURIComponent(info.token)
+  const hosts = new Set<string>(['127.0.0.1'])
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === 'IPv4' && !address.internal) hosts.add(address.address)
+    }
+  }
+  return {
+    ready: true,
+    urls: [...hosts].map((host) => `http://${host}:${port}/?token=${token}`),
+  }
 }

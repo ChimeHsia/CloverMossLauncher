@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { extname, join, normalize, resolve, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 
 interface ParentPort {
@@ -9,6 +11,7 @@ interface ParentPort {
 const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort
 const token = process.env['CLOVER_BACKEND_TOKEN'] ?? ''
 const host = process.env['CLOVER_BACKEND_HOST'] ?? '127.0.0.1'
+const webRoot = process.env['CLOVER_WEB_ROOT'] ?? ''
 const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
 let nextId = 0
 
@@ -56,10 +59,45 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   return body ? JSON.parse(body) : undefined
 }
 
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
+}
+
+async function serveStatic(pathname: string, res: ServerResponse): Promise<boolean> {
+  if (!webRoot) return false
+  const requested = pathname === '/' ? '/web.html' : pathname
+  if (!/^\/(web\.html|assets\/|favicon)/.test(requested)) return false
+  const root = resolve(webRoot)
+  const target = resolve(join(root, normalize(requested).replace(/^\.(?:\.|$)/, '')))
+  if (target !== root && !target.startsWith(root + sep)) return false
+  try {
+    const data = await readFile(target)
+    res.writeHead(200, {
+      'content-type': MIME[extname(target).toLowerCase()] ?? 'application/octet-stream',
+      'content-length': data.byteLength,
+      'cache-control': requested === '/web.html' ? 'no-cache' : 'public, max-age=3600',
+    })
+    res.end(data)
+    return true
+  } catch {
+    return false
+  }
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') {
       send(res, 204, {})
+      return
+    }
+    if ((req.method === 'GET' || req.method === 'HEAD') && (await serveStatic(new URL(req.url ?? '/', 'http://127.0.0.1').pathname, res))) {
       return
     }
     if (req.url === '/health') {

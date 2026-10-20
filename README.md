@@ -28,7 +28,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | 启动器与环境检查 | 系统、GPU、内存、磁盘、Python、网络检查；MOSS 实例、共享/独立运行时与推荐档位 | 已实现 |
 | 模型与下载 | 组件分类、共享 HF 缓存、推荐组合与本地实例模型绑定；真实出图待验收 | 部分 |
 | 启动与任务 | Case、设备选择、任务队列、Supervisor 与共享终端 | 已实现 / 部分验收；Gradio 入口退役中 |
-| MossStudio | Prompt、画布区域标注、官方 Layout JSON 编译；Project 自动保存和基础图层；局域网/移动 WebUI 规划中 | 部分，完整 UI 与真实生成待验收 |
+| MossStudio | Prompt、画布区域标注、官方 Layout JSON 编译；Project 自动保存和基础图层；局域网/移动 WebUI 基础生成页 | 部分，完整 UI、画布 Web 版与真实生成待验收 |
 | 画廊与诊断 | 输出浏览、元数据、布局底图交接；错误识别、去重与处理建议 | 已实现 |
 | 训练与设备 | 外部 Trainer 版本/环境管理、训练窗口、本机与 SSH host 管理 | 代码已接，真实 CUDA/SSH 待验收 |
 | 远端实例 | SSH mirror/worktree/venv、placement、设备过滤、输出回传 | fake ssh 端到端，真实 host 待验收；Gradio 隧道退役 |

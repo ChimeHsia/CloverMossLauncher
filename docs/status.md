@@ -45,7 +45,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 启动条/运行栈 | 🟡 | Case/实例/设备/档位/Case 设置；旧 Gradio 工作台退役中 |
 | Gradio 启动参数 | ⛔ | UI/侧滑面板/独立窗口/IPC/类型/启动模式/runner launcher 已删除；旧 Case/队列读取时迁移 |
 | MossStudio 桌面 | 🟡 | 改名/Home 启动入口/旧 Case 迁移已完成；Project IPC 已补；生成与真实权重待验收 |
-| MossStudio WebUI | 🟡 | Studio HTTP API（bootstrap/projects/instances/models/gallery）与 WebStudioClient 基座已接；Web shell/LAN token/PIN/响应式未做 |
+| MossStudio WebUI | 🟡 | 移动优先 Web shell（提示词/实例/尺寸/seed/生成/Project 草稿）、LAN 开关与 token URL 已接；QR/PIN/画布/画廊/真实手机验收未做 |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
 | 设备管理器 | 🟡 | 第五窗口；本机/SSH host、GPU 库存、测试、路径；fake ssh 验证，真实 host 未验收 |
 | 设备维护 | 🟡 | 设置内启用/禁用/重命名，启动条过滤；未做完整验收 |
@@ -60,7 +60,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | runner | ✅ | NDJSON + `--simulate`；真实权重未验收 |
 | 解析/诊断 | ✅ | tqdm/ANSI/下载条/规则/去重/toast 预算 |
 | 创作台 | ✅ | Studio、画布、layout 编译、插入 Prompt |
-| Studio 后端 | 🟡 | utilityProcess HTTP/WS、token、RPC；health/WS/Job/Studio API 验证；真实生成与 Web shell 未验收 |
+| Studio 后端 | 🟡 | utilityProcess HTTP/WS、token、RPC、静态 Web root；health/WS/Job/Studio API/static 已验；真实生成与手机验收未做 |
 | 创作生成 | 🟡 | 已通过 backend `/api/jobs` 提交 Supervisor；缺权重/运行时预检仍拦截 |
 | Project/图层 | 🟡 | `projects/<id>/project.json` + assets、自动保存、图层 visible/lock/opacity；未做完整 UI 验收 |
 | 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景（历史阶段） |
