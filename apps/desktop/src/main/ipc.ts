@@ -13,6 +13,7 @@ import {
   isolateInstance,
   listInstances,
   updateAdapterBindings,
+  updateModelBinding,
   updateInstance,
 } from './services/instances'
 import {
@@ -22,7 +23,7 @@ import {
   remoteCommits as remoteMossCommits,
   remoteRoots,
 } from './services/remoteInstances'
-import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload } from './services/models'
+import { getCatalog, deleteModel, listDownloads, pauseDownload, startDownload, installBundle } from './services/models'
 import { galleryDetail, listGallery, revealInFolder } from './services/gallery'
 import { cancelJob, getJob, getJobLogs, inputJob, listJobs, startJob } from './services/supervisor'
 import { clearDiagnostics, dismissDiagnostic, listDiagnostics } from './services/diagnostics'
@@ -344,6 +345,9 @@ export function registerIpc(): void {
     const catalog = await getCatalog(getSettings())
     return catalog.models.filter((model) => model.installed)
   })
+
+  handle(Ipc.modelBundleInstall, schemas.modelBundle, ({ id }) => installBundle(id, getSettings()))
+  handle(Ipc.instanceModelBinding, schemas.instanceModelBinding, ({ id, binding }) => updateModelBinding(id, binding, getSettings()))
 
   handle(Ipc.modelDownload, schemas.download, ({ kind, id }) =>
     startDownload(kind, id, getSettings()),

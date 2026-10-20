@@ -212,6 +212,7 @@ export interface InstanceInfo {
   placement: InstancePlacement
   hostId?: string
   models: string[]
+  modelBinding?: ModelBinding
   adapters: string[]
   adapterBindings?: Array<{ id: string; enabled: boolean; strength: number }>
   createdAt: string
@@ -243,7 +244,12 @@ export interface ModelEntry {
   provider: 'hf'
   repo: string
   revision: string
-  role: 'full' | 'dit' | 'text_encoder' | 'vae'
+  role: 'full' | 'dit' | 'text_encoder' | 'vae' | 'support'
+  format?: 'diffusers' | 'comfyui'
+  family?: string
+  subfolder?: string
+  installState?: 'missing' | 'partial' | 'ready' | 'error'
+  resolvedRevision?: string
   precision: string
   sizeBytes: number
   /** When set, only these repo paths are downloaded (e.g. sft/transformer/*). */
@@ -274,14 +280,31 @@ export interface AdapterEntry {
   installedBytes: number
 }
 
+export interface ModelBinding {
+  bundleId: string
+  dit: string
+  textEncoder: string
+  vae: string
+}
+
+export interface ModelBundle {
+  id: string
+  name: string
+  description: string
+  components: Pick<ModelBinding, 'dit' | 'textEncoder' | 'vae'>
+  support: string
+  recommended?: boolean
+}
+
 export interface Catalog {
+  bundles: ModelBundle[]
   updatedAt: string
   models: ModelEntry[]
   adapters: AdapterEntry[]
   source: 'local' | 'remote' | 'cache' | 'builtin'
 }
 
-export type DownloadState = 'queued' | 'running' | 'paused' | 'done' | 'error'
+export type DownloadState = 'queued' | 'running' | 'verifying' | 'paused' | 'done' | 'error'
 
 export interface DownloadTask {
   id: string
@@ -420,6 +443,7 @@ export interface LaunchDevice {
  * launcher, and must not be added here without a new product decision.
  */
 export interface GradioLaunchConfig {
+  modelSource?: 'instance' | 'custom'
   model?: string
   modelRoot?: string
   localFilesOnly: boolean
@@ -532,6 +556,7 @@ export interface JobProgress {
 }
 
 export interface JobRecord {
+  modelSnapshot?: unknown
   id: string
   instanceId: string
   instanceName: string

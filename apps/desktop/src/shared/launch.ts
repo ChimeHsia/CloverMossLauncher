@@ -41,6 +41,7 @@ export function normalizeWorkspace(value: unknown): WorkspaceKind {
 
 export function createDefaultGradioConfig(): GradioLaunchConfig {
   return {
+    modelSource: 'instance',
     model: DEFAULT_GRADIO_MODEL,
     modelRoot: undefined,
     localFilesOnly: false,
@@ -66,6 +67,12 @@ export function normalizeGradioConfig(
 ): GradioLaunchConfig {
   const defaults = createDefaultGradioConfig()
   if (!input) return defaults
+  const extra = splitCommandArgs(input.extraArgs)
+  let extraModel: string | undefined
+  for (let i = 0; i < extra.length; i += 1) {
+    if (extra[i] === '--model') extraModel = optionalText(extra[i + 1])
+    else if (extra[i]?.startsWith('--model=')) extraModel = optionalText(extra[i]!.slice(8))
+  }
   const profile = GRADIO_PROFILES.includes(input.profile as GradioProfile)
     ? (input.profile as GradioProfile)
     : defaults.profile
@@ -80,7 +87,8 @@ export function normalizeGradioConfig(
       ? input.port
       : null
   return {
-    model: optionalText(input.model) ?? DEFAULT_GRADIO_MODEL,
+    modelSource: extraModel ? 'custom' : input.modelSource ?? (optionalText(input.model) && input.model !== DEFAULT_GRADIO_MODEL ? 'custom' : 'instance'),
+    model: extraModel ?? optionalText(input.model) ?? DEFAULT_GRADIO_MODEL,
     modelRoot: optionalText(input.modelRoot),
     localFilesOnly: input.localFilesOnly === true,
     outputDir: optionalText(input.outputDir),
@@ -146,7 +154,7 @@ function shortModel(model: string | undefined): string {
 
 export function gradioSummary(config: GradioLaunchConfig): string {
   return [
-    shortModel(config.model),
+    config.modelSource === 'instance' ? '实例模型' : shortModel(config.model),
     GRADIO_PROFILE_LABELS[config.profile],
     config.port ? `:${config.port}` : '自动端口',
   ].join(' · ')

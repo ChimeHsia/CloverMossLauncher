@@ -1,42 +1,50 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "updated_at": "2026-10-19T09:48:26Z",
   "models": [
     {
-      "id": "moss-sft",
+      "id": "moss-sft-dit",
       "name": "MOSS-Image SFT",
       "provider": "hf",
       "repo": "OpenMOSS-Team/MOSS-Image-SFT",
       "revision": "main",
-      "role": "full",
+      "role": "dit",
       "precision": "bf16",
-      "size_bytes": 27200000000,
-      "size_estimated": true,
+      "size_bytes": 10164704750,
+      "files": [
+        "transformer/*"
+      ],
+      "subfolder": "transformer",
+      "format": "diffusers",
+      "family": "moss-image",
       "license": "Apache-2.0",
       "tags": [
         "official",
-        "sft",
-        "recommended"
+        "sft"
       ],
-      "preview": "https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/resolve/main/assets/teaser.webp",
-      "notes": "官方 SFT 权重，含 transformer / text_encoder / vae / tokenizer / scheduler。"
+      "notes": "官方 SFT 主模型，适合日常生成。"
     },
     {
-      "id": "moss-base",
+      "id": "moss-base-dit",
       "name": "MOSS-Image Base",
       "provider": "hf",
       "repo": "OpenMOSS-Team/MOSS-Image-Base",
       "revision": "main",
-      "role": "full",
+      "role": "dit",
       "precision": "bf16",
-      "size_bytes": 27200000000,
-      "size_estimated": true,
+      "size_bytes": 10164704750,
+      "files": [
+        "transformer/*"
+      ],
+      "subfolder": "transformer",
+      "format": "diffusers",
+      "family": "moss-image",
       "license": "Apache-2.0",
       "tags": [
         "official",
         "base"
       ],
-      "notes": "官方 Base 权重，适合继续微调或作为 LoRA 基座。"
+      "notes": "官方 Base 主模型，适合继续训练与微调。"
     },
     {
       "id": "moss-base-fp16-fixed",
@@ -61,7 +69,10 @@
         "v100"
       ],
       "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/base_diffusers_p3_s11.webp",
-      "notes": "社区 FP16 修复版，只包含 DiT transformer；需搭配官方 TE/VAE/tokenizer/pipeline。模型卡称 residual stream 余量约 16.9×，更接近 fp32；社区反馈 2080 Ti/V100 无需特殊处理。下载后使用 base/transformer。"
+      "notes": "社区 FP16 修复版主模型；与共享 Qwen、VAE 组合使用，按 FP16 加载。",
+      "format": "diffusers",
+      "family": "moss-image",
+      "subfolder": "base/transformer"
     },
     {
       "id": "moss-sft-fp16-fixed",
@@ -86,7 +97,10 @@
         "v100"
       ],
       "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/sft_diffusers_p3_s11.webp",
-      "notes": "社区 FP16 修复版，只包含 DiT transformer；需搭配官方 TE/VAE/tokenizer/pipeline。模型卡称 residual stream 余量约 16.9×，更接近 fp32；社区反馈 2080 Ti/V100 无需特殊处理。下载后使用 sft/transformer。"
+      "notes": "社区 FP16 修复版主模型；与共享 Qwen、VAE 组合使用，按 FP16 加载。",
+      "format": "diffusers",
+      "family": "moss-image",
+      "subfolder": "sft/transformer"
     },
     {
       "id": "moss-base-fp16-fixed-comfy",
@@ -111,7 +125,10 @@
         "v100"
       ],
       "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/base_comfyui_p3_s11.webp",
-      "notes": "ComfyUI 单文件 FP16-fixed DiT；搭配官方 Qwen3.5 文本编码器与 Flux2 VAE，启动需 --fp16-unet。2080 Ti/V100 社区反馈无需特殊处理。"
+      "notes": "社区 FP16 修复版主模型；供 ComfyUI 使用，不支持绑定到官方 Gradio。",
+      "format": "comfyui",
+      "family": "moss-image",
+      "subfolder": ""
     },
     {
       "id": "moss-sft-fp16-fixed-comfy",
@@ -136,63 +153,265 @@
         "v100"
       ],
       "preview": "https://huggingface.co/KBlueLeaf/MOSS-Image-FP16-fixed/resolve/main/images/gallery/sft_comfyui_p3_s11.webp",
-      "notes": "ComfyUI 单文件 FP16-fixed DiT；搭配官方 Qwen3.5 文本编码器与 Flux2 VAE，启动需 --fp16-unet。2080 Ti/V100 社区反馈无需特殊处理。"
+      "notes": "社区 FP16 修复版主模型；供 ComfyUI 使用，不支持绑定到官方 Gradio。",
+      "format": "comfyui",
+      "family": "moss-image",
+      "subfolder": ""
     },
     {
-      "id": "moss-sft-int8",
-      "name": "MOSS-Image SFT INT8 (社区)",
+      "id": "qwen35-encoder",
+      "name": "Qwen3.5 · 文本编码器",
       "provider": "hf",
-      "repo": "Abiray/MOSS-Image-SFT-INT8-convrot",
+      "repo": "OpenMOSS-Team/MOSS-Image-SFT",
       "revision": "main",
-      "role": "dit",
-      "precision": "int8",
-      "size_bytes": 5400000000,
-      "size_estimated": true,
+      "role": "text_encoder",
+      "precision": "bf16",
+      "size_bytes": 16785543633,
+      "files": [
+        "text_encoder/*",
+        "tokenizer/*"
+      ],
+      "subfolder": "text_encoder",
+      "format": "diffusers",
+      "family": "moss-image",
       "license": "Apache-2.0",
       "tags": [
-        "community",
-        "quantized",
-        "int8",
-        "low-memory"
+        "official",
+        "shared"
       ],
-      "notes": "第三方量化 DiT；文本编码器与 VAE 仍需搭配官方组件。"
+      "notes": "含 tokenizer 与配置，Base、SFT 和 FP16-fixed 共用。"
     },
     {
-      "id": "moss-sft-int4",
-      "name": "MOSS-Image SFT INT4 (社区)",
+      "id": "flux2-vae-small",
+      "name": "FLUX.2 VAE · Small",
       "provider": "hf",
-      "repo": "toxicdog/MOSS-Image-SFT-INT4-ConvRot-ComfyUI",
+      "repo": "OpenMOSS-Team/MOSS-Image-SFT",
       "revision": "main",
-      "role": "dit",
-      "precision": "int4",
-      "size_bytes": 3000000000,
-      "size_estimated": true,
+      "role": "vae",
+      "precision": "fp32",
+      "size_bytes": 249522210,
+      "files": [
+        "vae/*"
+      ],
+      "subfolder": "vae",
+      "format": "diffusers",
+      "family": "moss-image",
       "license": "Apache-2.0",
       "tags": [
-        "community",
-        "quantized",
-        "int4",
-        "low-memory",
-        "comfy"
+        "official",
+        "shared"
       ],
-      "notes": "ComfyUI 键位的 INT4 DiT，启动器会做键位映射；质量请自行对比。"
+      "notes": "与官方 MOSS 匹配的 small decoder，运行时使用 FP32。"
     },
     {
-      "id": "moss-comfy-repack",
-      "name": "MOSS-Image (Comfy-Org 重打包)",
+      "id": "moss-pipeline",
+      "name": "MOSS Pipeline",
+      "provider": "hf",
+      "repo": "OpenMOSS-Team/MOSS-Image-SFT",
+      "revision": "main",
+      "role": "support",
+      "precision": "mixed",
+      "size_bytes": 50000,
+      "files": [
+        "model_index.json",
+        "pipeline_moss_image.py",
+        "scheduler/*"
+      ],
+      "subfolder": "",
+      "format": "diffusers",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [],
+      "notes": "推荐组合所需的 pipeline 与采样器配置。"
+    },
+    {
+      "id": "moss-base-comfy-bf16",
+      "name": "MOSS BASE · BF16",
       "provider": "hf",
       "repo": "Comfy-Org/MOSS-Image",
       "revision": "main",
-      "role": "full",
-      "precision": "mixed",
-      "size_bytes": 27000000000,
-      "size_estimated": true,
+      "role": "dit",
+      "precision": "bf16",
+      "size_bytes": 10164655808,
+      "files": [
+        "diffusion_models/moss_image_base_bf16.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
       "license": "Apache-2.0",
       "tags": [
-        "community",
-        "comfy"
+        "comfyui"
       ],
-      "notes": "ComfyUI 分发格式（unet/te/vae 分开），适合与 ComfyUI 共用缓存。"
+      "notes": "ComfyUI 单文件，仅供下载；不能绑定到官方 Gradio。"
+    },
+    {
+      "id": "moss-base-comfy-int8_convrot",
+      "name": "MOSS BASE · INT8_CONVROT",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "dit",
+      "precision": "int8",
+      "size_bytes": 5413698958,
+      "files": [
+        "diffusion_models/moss_image_base_int8_convrot.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 单文件，仅供下载；不能绑定到官方 Gradio。"
+    },
+    {
+      "id": "moss-sft-comfy-bf16",
+      "name": "MOSS SFT · BF16",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "dit",
+      "precision": "bf16",
+      "size_bytes": 10164655808,
+      "files": [
+        "diffusion_models/moss_image_sft_bf16.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 单文件，仅供下载；不能绑定到官方 Gradio。"
+    },
+    {
+      "id": "moss-sft-comfy-int8_convrot",
+      "name": "MOSS SFT · INT8_CONVROT",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "dit",
+      "precision": "int8",
+      "size_bytes": 5413698958,
+      "files": [
+        "diffusion_models/moss_image_sft_int8_convrot.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 单文件，仅供下载；不能绑定到官方 Gradio。"
+    },
+    {
+      "id": "qwen35-comfy-bf16",
+      "name": "Qwen3.5 · BF16",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "text_encoder",
+      "precision": "bf16",
+      "size_bytes": 19306312328,
+      "files": [
+        "text_encoders/qwen3.5_9b_bf16.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 编码器，量化版本需对应加载器。"
+    },
+    {
+      "id": "qwen35-comfy-int8_convrot",
+      "name": "Qwen3.5 · INT8_CONVROT",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "text_encoder",
+      "precision": "int8",
+      "size_bytes": 9748121532,
+      "files": [
+        "text_encoders/qwen3.5_9b_int8_convrot.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 编码器，量化版本需对应加载器。"
+    },
+    {
+      "id": "qwen35-comfy-w4a8_gptq",
+      "name": "Qwen3.5 · W4A8_GPTQ",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "text_encoder",
+      "precision": "w4a8",
+      "size_bytes": 7343591088,
+      "files": [
+        "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI 编码器，量化版本需对应加载器。"
+    },
+    {
+      "id": "flux2-vae-comfy-small",
+      "name": "FLUX.2 VAE · Small",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "vae",
+      "precision": "fp32",
+      "size_bytes": 249521340,
+      "files": [
+        "vae/flux2-vae_small.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI VAE 单文件，仅供下载。"
+    },
+    {
+      "id": "flux2-vae-comfy-full",
+      "name": "FLUX.2 VAE · Full",
+      "provider": "hf",
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "main",
+      "role": "vae",
+      "precision": "fp32",
+      "size_bytes": 336211292,
+      "files": [
+        "vae/flux2-vae.safetensors"
+      ],
+      "subfolder": "",
+      "format": "comfyui",
+      "family": "moss-image",
+      "license": "Apache-2.0",
+      "tags": [
+        "comfyui"
+      ],
+      "notes": "ComfyUI VAE 单文件，仅供下载。"
     }
   ],
   "adapters": [
@@ -242,6 +461,56 @@
         "8-step"
       ],
       "notes": "Base 版 DMD 适配器。"
+    }
+  ],
+  "bundles": [
+    {
+      "id": "moss-sft",
+      "name": "MOSS-Image SFT",
+      "description": "官方推荐，适合日常生成。",
+      "components": {
+        "dit": "moss-sft-dit",
+        "textEncoder": "qwen35-encoder",
+        "vae": "flux2-vae-small"
+      },
+      "support": "moss-pipeline",
+      "recommended": true
+    },
+    {
+      "id": "moss-base",
+      "name": "MOSS-Image Base",
+      "description": "官方 Base，适合微调与继续训练。",
+      "components": {
+        "dit": "moss-base-dit",
+        "textEncoder": "qwen35-encoder",
+        "vae": "flux2-vae-small"
+      },
+      "support": "moss-pipeline",
+      "recommended": false
+    },
+    {
+      "id": "moss-sft-fp16",
+      "name": "SFT · FP16-fixed",
+      "description": "社区修复版，主模型按 FP16 加载。",
+      "components": {
+        "dit": "moss-sft-fp16-fixed",
+        "textEncoder": "qwen35-encoder",
+        "vae": "flux2-vae-small"
+      },
+      "support": "moss-pipeline",
+      "recommended": false
+    },
+    {
+      "id": "moss-base-fp16",
+      "name": "Base · FP16-fixed",
+      "description": "社区修复版，与其他组合共用编码器和 VAE。",
+      "components": {
+        "dit": "moss-base-fp16-fixed",
+        "textEncoder": "qwen35-encoder",
+        "vae": "flux2-vae-small"
+      },
+      "support": "moss-pipeline",
+      "recommended": false
     }
   ]
 }

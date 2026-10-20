@@ -1,13 +1,46 @@
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, statfs, symlink, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, relative } from 'node:path'
-import type { AdapterEntry, Catalog, DownloadTask, ModelEntry, Settings } from '@shared/types'
+import { existsSync } from 'node:fs'
+import {
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  statfs,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import { basename, dirname, join } from 'node:path'
+import type {
+  AdapterEntry,
+  Catalog,
+  DownloadTask,
+  ModelEntry,
+  ModelBundle,
+  Settings,
+} from '@shared/types'
 import { Events } from '@shared/channels'
 import { emit } from '../lib/events'
 import { paths } from '../lib/paths'
 import { getLastNetwork } from './network'
 import { localReleaseDir } from './updates'
+import { listInstances } from './instances'
+import { listJobs } from './supervisor'
+import packagedCatalog from '../../../../../release/models.json'
+import {
+  downloadFile,
+  fileSize,
+  hashFile,
+  materialize,
+  resolveFiles,
+  safePath,
+  selectFiles,
+  validateSnapshot,
+  type ModelFile,
+  type Snapshot,
+} from './modelFiles'
 
 interface RawModel {
   id: string
@@ -17,6 +50,9 @@ interface RawModel {
   revision?: string
   role: ModelEntry['role']
   precision: string
+  format?: ModelEntry['format']
+  family?: string
+  subfolder?: string
   size_bytes?: number
   files?: string[]
   license: string
@@ -62,26 +98,12 @@ interface RawCatalog {
   schema_version: number
   updated_at?: string
   models: RawModel[]
+  bundles?: ModelBundle[]
   adapters?: RawAdapter[]
 }
 
-const BUILTIN: RawCatalog = {
-  schema_version: 1,
-  models: [
-    {
-      id: 'moss-sft',
-      name: 'MOSS-Image SFT',
-      provider: 'hf',
-      repo: 'OpenMOSS-Team/MOSS-Image-SFT',
-      role: 'full',
-      precision: 'bf16',
-      size_bytes: 27_200_000_000,
-      license: 'Apache-2.0',
-      tags: ['official', 'sft'],
-    },
-  ],
-  adapters: [],
-}
+const BUILTIN = packagedCatalog as RawCatalog
+let catalogRoot = ''
 
 let catalogCache: Catalog | null = null
 
@@ -100,7 +122,14 @@ async function readLocalAdapters(settings: Settings): Promise<LocalAdapterRecord
 
 export async function registerTrainedAdapter(
   settings: Settings,
-  input: { id: string; name: string; sourcePath: string; kind?: AdapterEntry['kind']; base?: string; license?: string },
+  input: {
+    id: string
+    name: string
+    sourcePath: string
+    kind?: AdapterEntry['kind']
+    base?: string
+    license?: string
+  },
 ): Promise<AdapterEntry> {
   const id = input.id.replace(/[^A-Za-z0-9._-]/g, '-')
   const destDir = join(paths.adapters(settings.modelsRoot), id)
@@ -120,7 +149,11 @@ export async function registerTrainedAdapter(
     createdAt: new Date().toISOString(),
   }
   const existing = (await readLocalAdapters(settings)).filter((item) => item.id !== id)
-  await writeFile(localAdapterFile(settings), JSON.stringify({ schema_version: 1, adapters: [...existing, record] }, null, 2), 'utf8')
+  await writeFile(
+    localAdapterFile(settings),
+    JSON.stringify({ schema_version: 1, adapters: [...existing, record] }, null, 2),
+    'utf8',
+  )
   invalidateCatalog()
   return {
     id,
@@ -141,135 +174,125 @@ export async function registerTrainedAdapter(
 }
 
 async function fetchText(url: string, timeoutMs = 8000): Promise<string> {
-  const response = await fetch(url, {
-    headers: { 'user-agent': 'CloverMoss-Launcher/0.1' },
-    signal: AbortSignal.timeout(timeoutMs),
-  })
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return await response.text()
+  return response.text()
 }
 
-function dirSize(dir: string): Promise<number> {
-  return readdir(dir, { withFileTypes: true })
-    .then(async (entries) => {
-      let total = 0
-      for (const entry of entries) {
-        const full = join(dir, entry.name)
-        try {
-          if (entry.isDirectory()) total += await dirSize(full)
-          else {
-            const info = await stat(full)
-            total += info.size
-          }
-        } catch {
-          // ignore broken symlinks
-        }
-      }
-      return total
-    })
-    .catch(() => 0)
+interface InstallRecord {
+  version: 2
+  id: string
+  repo: string
+  revision: string
+  sha: string
+  entries: ModelFile[]
+  owned: string[]
 }
 
-async function installedRepos(settings: Settings): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  try {
-    const entries = await readdir(paths.hub(settings.modelsRoot), { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.startsWith('models--')) continue
-      const repo = entry.name.replace('models--', '').replace('--', '/')
-      map.set(repo, await dirSize(join(paths.hub(settings.modelsRoot), entry.name)))
-    }
-  } catch {
-    // none
-  }
-  return map
+function blobKey(file: ModelFile): string {
+  if (file.oid && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(file.oid))
+    throw new Error('缓存文件 hash 无效')
+  return file.oid ?? createHash('sha1').update(file.path).digest('hex')
 }
 
-async function installedAdapters(settings: Settings): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  try {
-    const entries = await readdir(paths.adapters(settings.modelsRoot), { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue
-      map.set(entry.name, await dirSize(join(paths.adapters(settings.modelsRoot), entry.name)))
-    }
-  } catch {
-    // none
-  }
-  return map
-}
-
-function modelCacheDir(settings: Settings, repo: string): string {
+function cacheDir(settings: Settings, repo: string): string {
+  if (
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ||
+    repo.split('/').some((part) => part === '.' || part === '..')
+  )
+    throw new Error('无效的模型仓库 ID')
   return join(paths.hub(settings.modelsRoot), `models--${repo.replace('/', '--')}`)
 }
-
-function modelSentinel(settings: Settings, model: Pick<ModelEntry, 'id' | 'repo'>): string {
-  return join(modelCacheDir(settings, model.repo), `.clover-${model.id.replace(/[^A-Za-z0-9._-]/g, '-')}.json`)
+function marker(settings: Settings, id: string, repo: string): string {
+  return join(cacheDir(settings, repo), `.clover-${id.replace(/[^A-Za-z0-9._-]/g, '-')}.json`)
 }
-
-function matchesModelFile(pattern: string, file: string): boolean {
-  const normalized = pattern.replace(/\\/g, '/')
-  const escaped = normalized
-    .split('*')
-    .map((part) => part.replace(/[.+^${}()|[\]\\]/g, '\\$&'))
-    .join('.*')
-  return new RegExp(`^${escaped}$`).test(file)
-}
-
-function selectModelFiles(files: HfFile[], patterns?: string[]): HfFile[] {
-  if (!patterns?.length) return files
-  return files.filter((file) => patterns.some((pattern) => matchesModelFile(pattern, file.path)))
-}
-
-async function partialInstalledBytes(settings: Settings, model: RawModel): Promise<number | null> {
-  if (!model.files?.length) return null
+const installing = new Set<string>()
+const deleting = new Set<string>()
+async function readInstall(
+  settings: Settings,
+  model: Pick<ModelEntry, 'id' | 'repo' | 'revision' | 'role' | 'format' | 'subfolder'>,
+): Promise<InstallRecord | null> {
   try {
-    const sentinel = JSON.parse(
-      await readFile(modelSentinel(settings, model), 'utf8'),
-    ) as { sha?: string; files?: string[] }
-    if (!sentinel.sha || !Array.isArray(sentinel.files) || sentinel.files.length === 0) return 0
-    let total = 0
-    for (const file of sentinel.files) {
-      const info = await stat(join(modelCacheDir(settings, model.repo), 'snapshots', sentinel.sha, file))
-      total += info.size
+    const record = JSON.parse(
+      await readFile(marker(settings, model.id, model.repo), 'utf8'),
+    ) as InstallRecord
+    if (
+      record.version !== 2 ||
+      record.id !== model.id ||
+      record.repo !== model.repo ||
+      record.revision !== model.revision ||
+      !/^[a-f0-9]{40,64}$/.test(record.sha)
+    )
+      return null
+    const root = join(cacheDir(settings, model.repo), 'snapshots', record.sha)
+    if (
+      !(await validateSnapshot(
+        root,
+        record.entries,
+        model.format === 'comfyui' ? 'comfyui' : model.role,
+        model.subfolder,
+      ))
+    )
+      return null
+    if (model.role === 'full') {
+      for (const [role, folder] of [
+        ['dit', 'transformer'],
+        ['text_encoder', 'text_encoder'],
+        ['vae', 'vae'],
+        ['support', ''],
+      ]) {
+        if (!(await validateSnapshot(root, record.entries, role!, folder))) return null
+      }
     }
-    return total
+    return record
   } catch {
-    return 0
+    return null
   }
 }
 
 export async function getCatalog(settings: Settings, force = false): Promise<Catalog> {
-  if (catalogCache && !force) return catalogCache
-
+  const key = paths.models(settings.modelsRoot)
+  if (catalogCache && catalogRoot === key && !force) return catalogCache
   let raw = BUILTIN
   let source: Catalog['source'] = 'builtin'
   const local = localReleaseDir()
-  if (local && existsSync(join(local, 'models.json'))) {
-    try {
+  try {
+    if (local && existsSync(join(local, 'models.json'))) {
       raw = JSON.parse(await readFile(join(local, 'models.json'), 'utf8')) as RawCatalog
       source = 'local'
-    } catch {
-      raw = BUILTIN
-    }
-  } else {
-    const base = getLastNetwork()?.selected.manifest ?? 'https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main'
-    try {
-      raw = JSON.parse(await fetchText(`${base.replace(/\/$/, '')}/release/models.json`)) as RawCatalog
+    } else {
+      const base =
+        getLastNetwork()?.selected.manifest ??
+        'https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main'
+      raw = JSON.parse(
+        await fetchText(`${base.replace(/\/$/, '')}/release/models.json`),
+      ) as RawCatalog
       source = 'remote'
-    } catch {
-      raw = BUILTIN
+    }
+    if (!Array.isArray(raw.models)) throw new Error('无效目录')
+  } catch {
+    raw = BUILTIN
+    source = 'builtin'
+  }
+  // Old remote catalogs cannot reintroduce whole-repo downloads for known models.
+  if (raw.schema_version < 2) {
+    const known = new Set([
+      'moss-sft',
+      'moss-base',
+      'moss-comfy-repack',
+      'moss-sft-int8',
+      'moss-sft-int4',
+      ...BUILTIN.models.map((m) => m.id),
+    ])
+    raw = {
+      ...BUILTIN,
+      models: [...BUILTIN.models, ...raw.models.filter((m) => !known.has(m.id))],
+      adapters: raw.adapters ?? BUILTIN.adapters,
     }
   }
-
-  const modelsInstalled = await installedRepos(settings)
-  const adaptersInstalled = await installedAdapters(settings)
-
   const models: ModelEntry[] = await Promise.all(
     raw.models.map(async (model) => {
-      const partialBytes = await partialInstalledBytes(settings, model)
-      const installedBytes = partialBytes ?? modelsInstalled.get(model.repo) ?? 0
-      return {
+      const entry: ModelEntry = {
         id: model.id,
         name: model.name,
         provider: model.provider,
@@ -277,63 +300,101 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
         revision: model.revision ?? 'main',
         role: model.role,
         precision: model.precision,
+        format: model.format ?? 'diffusers',
+        subfolder: model.subfolder,
+        family: model.family ?? 'moss-image',
         sizeBytes: model.size_bytes ?? 0,
         files: model.files,
         license: model.license,
         tags: model.tags ?? [],
         notes: model.notes,
         preview: model.preview,
-        installed: installedBytes > 0,
-        installedBytes,
+        installed: false,
+        installedBytes: 0,
+      }
+      const record = await readInstall(settings, entry)
+      entry.installed = Boolean(record)
+      entry.installedBytes = record?.entries.reduce((n, f) => n + f.size, 0) ?? 0
+      const task = tasks.get(`model:${entry.id}`)
+      let partial =
+        existsSync(`${marker(settings, entry.id, entry.repo)}.pending`) ||
+        existsSync(marker(settings, entry.id, entry.repo))
+      try {
+        const sha = (
+          await readFile(join(cacheDir(settings, entry.repo), 'refs', entry.revision), 'utf8')
+        ).trim()
+        if (/^[a-f0-9]{40,64}$/.test(sha)) {
+          const snapshot = join(cacheDir(settings, entry.repo), 'snapshots', sha)
+          partial ||= (
+            await Promise.all(
+              (entry.files ?? []).map((pattern) =>
+                fileSize(
+                  safePath(
+                    snapshot,
+                    pattern.includes('*')
+                      ? pattern.slice(0, pattern.indexOf('*')).replace(/\/$/, '')
+                      : pattern,
+                  ),
+                ),
+              ),
+            )
+          ).some((size) => size >= 0)
+        }
+      } catch {
+        /* No cached snapshot for this component. */
+      }
+      entry.installState = entry.installed
+        ? 'ready'
+        : task?.state === 'error'
+          ? 'error'
+          : partial
+            ? 'partial'
+            : 'missing'
+      entry.resolvedRevision = record?.sha
+      return entry
+    }),
+  )
+  const adapters: AdapterEntry[] = await Promise.all(
+    (raw.adapters ?? []).map(async (adapter) => {
+      const dir = join(paths.adapters(settings.modelsRoot), adapter.id)
+      const ready = await Promise.all(adapter.files.map((f) => fileSize(safePath(dir, f))))
+      const installed = existsSync(join(dir, 'adapter.json')) && ready.every((n) => n > 0)
+      return {
+        id: adapter.id,
+        name: adapter.name,
+        provider: adapter.provider,
+        repo: adapter.repo,
+        revision: adapter.revision ?? 'main',
+        kind: adapter.kind,
+        base: adapter.base,
+        license: adapter.license,
+        files: adapter.files,
+        sizeBytes: adapter.size_bytes ?? 0,
+        requiresProfile: adapter.requires_profile,
+        tags: adapter.tags ?? [],
+        notes: adapter.notes,
+        installed,
+        installedBytes: installed ? ready.reduce((n, size) => n + size, 0) : 0,
       }
     }),
   )
-
-  const localAdapters = await readLocalAdapters(settings)
-  const adapters: AdapterEntry[] = (raw.adapters ?? []).map((adapter) => {
-    const installedBytes = adaptersInstalled.get(adapter.id) ?? 0
-    return {
-      id: adapter.id,
-      name: adapter.name,
-      provider: adapter.provider,
-      repo: adapter.repo,
-      revision: adapter.revision ?? 'main',
-      kind: adapter.kind,
-      base: adapter.base,
-      license: adapter.license,
-      files: adapter.files,
-      sizeBytes: adapter.size_bytes ?? 0,
-      requiresProfile: adapter.requires_profile,
-      tags: adapter.tags ?? [],
-      notes: adapter.notes,
-      installed: installedBytes > 0,
-      installedBytes,
-    }
-  })
-
-  for (const local of localAdapters) {
+  for (const local of await readLocalAdapters(settings)) {
     adapters.push({
-      id: local.id,
-      name: local.name,
+      ...local,
       provider: 'local',
       repo: local.path,
       revision: 'local',
-      kind: local.kind,
-      base: local.base,
-      license: local.license,
-      files: local.files,
-      sizeBytes: local.sizeBytes,
       tags: ['trained'],
-      notes: '由 Kohaku Trainer 产物登记',
       installed: true,
       installedBytes: local.sizeBytes,
     })
   }
-
+  catalogRoot = key
   catalogCache = {
     updatedAt: raw.updated_at ?? new Date().toISOString(),
     models,
     adapters,
+    bundles: raw.bundles ?? BUILTIN.bundles ?? [],
     source,
   }
   return catalogCache
@@ -342,51 +403,24 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
 export function invalidateCatalog(): void {
   catalogCache = null
 }
-
 const tasks = new Map<string, DownloadTask>()
 const controllers = new Map<string, AbortController>()
-
+const completions = new Map<string, Promise<void>>()
 export function listDownloads(): DownloadTask[] {
   // Map insertion order keeps the initial list consistent with live queue updates.
   return [...tasks.values()]
 }
-
 function touch(task: DownloadTask, patch: Partial<DownloadTask>): void {
   Object.assign(task, patch, { updatedAt: new Date().toISOString() })
+  invalidateCatalog()
   emit(Events.download, { ...task })
 }
-
 function endpoint(settings: Settings): string {
-  return (settings.hfEndpoint ?? getLastNetwork()?.selected.hf ?? 'https://huggingface.co').replace(/\/$/, '')
+  return (settings.hfEndpoint ?? getLastNetwork()?.selected.hf ?? 'https://huggingface.co').replace(
+    /\/$/,
+    '',
+  )
 }
-
-interface HfFile {
-  path: string
-  size: number
-  oid: string | null
-}
-
-async function resolveRepo(repo: string, revision: string, settings: Settings): Promise<{ sha: string; files: HfFile[] }> {
-  const base = endpoint(settings)
-  const meta = JSON.parse(await fetchText(`${base}/api/models/${repo}`, 30_000)) as { sha?: string }
-  const sha = meta.sha ?? revision
-  const tree = JSON.parse(await fetchText(`${base}/api/models/${repo}/tree/${sha}?recursive=true`, 30_000)) as Array<{
-    type: string
-    path: string
-    size?: number
-    oid?: string
-    lfs?: { oid?: string }
-  }>
-  const files = tree
-    .filter((item) => item.type === 'file')
-    .map((item) => ({
-      path: item.path,
-      size: item.size ?? 0,
-      oid: item.lfs?.oid ?? item.oid ?? null,
-    }))
-  return { sha, files }
-}
-
 async function freeSpace(target: string): Promise<number> {
   try {
     const info = await statfs(target)
@@ -395,187 +429,188 @@ async function freeSpace(target: string): Promise<number> {
     return 0
   }
 }
+const repoRequests = new Map<string, Promise<Snapshot>>()
+async function resolveRepo(repo: string, revision: string, settings: Settings): Promise<Snapshot> {
+  const key = `${endpoint(settings)}/${repo}@${revision}`
+  let request = repoRequests.get(key)
+  if (!request) {
+    request = resolveFiles(endpoint(settings), repo, revision)
+    repoRequests.set(key, request)
+    void request.finally(() => repoRequests.delete(key)).catch(() => undefined)
+  }
+  return request
+}
 
-async function downloadFile(
-  url: string,
-  destination: string,
-  expectedSize: number,
+async function runModelDownload(
   task: DownloadTask,
+  entry: ModelEntry,
+  settings: Settings,
   signal: AbortSignal,
-  onBytes: (bytes: number) => void,
 ): Promise<void> {
-  await mkdir(dirname(destination), { recursive: true })
-  if (existsSync(destination)) {
-    const info = await stat(destination)
-    if (!expectedSize || info.size === expectedSize) {
-      onBytes(info.size)
-      return
-    }
-  }
-  const part = `${destination}.part`
-  let offset = 0
-  try {
-    offset = (await stat(part)).size
-  } catch {
-    offset = 0
-  }
-  if (expectedSize && offset >= expectedSize) {
-    onBytes(offset)
-    await rename(part, destination)
-    return
-  }
-
-  const headers: Record<string, string> = { 'user-agent': 'CloverMoss-Launcher/0.1' }
-  if (offset > 0) headers['range'] = `bytes=${offset}-`
-  const response = await fetch(url, { headers, signal, redirect: 'follow' })
-  if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status}`)
-  if (!response.body) throw new Error('响应为空')
-
-  const { open } = await import('node:fs/promises')
-  const handle = await open(part, offset > 0 ? 'a' : 'w')
-  let written = offset
-  try {
-    const reader = response.body.getReader()
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) {
-        await handle.write(value)
-        written += value.byteLength
-        onBytes(written)
-      }
-    }
-  } finally {
-    await handle.close()
-  }
-  onBytes(written)
-  await rename(part, destination)
-}
-
-function hashFile(file: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha256')
-    const stream = createReadStream(file)
-    stream.on('data', (chunk) => hash.update(chunk))
-    stream.on('end', () => resolve(hash.digest('hex')))
-    stream.on('error', reject)
-  })
-}
-
-async function runModelDownload(task: DownloadTask, entry: ModelEntry, settings: Settings): Promise<void> {
   const { sha, files } = await resolveRepo(entry.repo, entry.revision, settings)
-  const selected = selectModelFiles(files, entry.files)
+  signal.throwIfAborted()
+  const selected = selectFiles(files, entry.files)
   if (!selected.length) throw new Error('模型文件不在仓库中')
-  const cacheDir = join(paths.hub(settings.modelsRoot), `models--${entry.repo.replace('/', '--')}`)
-  const blobs = join(cacheDir, 'blobs')
-  const snapshots = join(cacheDir, 'snapshots', sha)
-  const total = selected.reduce((sum, file) => sum + file.size, 0)
-
-  const free = await freeSpace(paths.models(settings.modelsRoot))
-  if (free > 0 && free < total * 1.05 + 1024 ** 3) {
-    throw new Error(`磁盘空间不足：需要约 ${(total / 1024 ** 3).toFixed(1)} GB，剩余 ${(free / 1024 ** 3).toFixed(1)} GB`)
+  const dir = cacheDir(settings, entry.repo)
+  const root = join(dir, 'snapshots', sha)
+  const total = selected.reduce((n, file) => n + file.size, 0)
+  const oldRecord = await readInstall(settings, entry)
+  let pendingOwned: string[] = []
+  const pendingFile = `${marker(settings, entry.id, entry.repo)}.pending`
+  try {
+    pendingOwned = JSON.parse(await readFile(pendingFile, 'utf8')).owned ?? []
+  } catch {
+    /* No partial installation. */
   }
-
-  touch(task, { filesTotal: selected.length, totalBytes: total, state: 'running' })
-
-  let doneBytes = 0
-  let lastEmit = 0
-  const base = endpoint(settings)
-  for (let index = 0; index < selected.length; index += 1) {
-    const file = selected[index]!
-    if (task.state === 'paused') return
-    const blobName = file.oid ?? createHash('sha1').update(`${entry.repo}/${file.path}`).digest('hex')
-    const blobPath = join(blobs, blobName)
-    const target = join(snapshots, file.path)
-    const url = `${base}/${entry.repo}/resolve/${sha}/${file.path}`
-
-    touch(task, { currentFile: file.path, filesDone: index })
-    await downloadFile(url, blobPath, file.size, task, controllers.get(task.id)!.signal, (bytes) => {
-      const now = Date.now()
-      if (now - lastEmit > 300) {
-        lastEmit = now
-        touch(task, { bytes: doneBytes + bytes, speedBps: 0 })
-      }
-    })
-
-    if (file.oid && file.oid.length === 64) {
-      const digest = await hashFile(blobPath)
-      if (digest !== file.oid) {
-        await unlink(blobPath).catch(() => undefined)
-        throw new Error(`校验失败：${file.path}`)
-      }
+  const owned = new Set([...(oldRecord?.owned ?? []), ...pendingOwned])
+  const repos = await readdir(paths.hub(settings.modelsRoot)).catch(() => [] as string[])
+  // Reuse matching HF blobs from older full Base/SFT installations before requesting bytes.
+  for (const file of selected) {
+    const blob = join(dir, 'blobs', blobKey(file))
+    if ((await fileSize(blob)) >= 0 || !file.oid) continue
+    for (const repo of repos.filter((name) => name.startsWith('models--'))) {
+      const candidate = join(paths.hub(settings.modelsRoot), repo, 'blobs', file.oid)
+      if (candidate === blob || (await fileSize(candidate)) !== file.size) continue
+      if (file.oid.length === 64 && (await hashFile(candidate)) !== file.oid) continue
+      await materialize(candidate, blob)
+      owned.add(file.path)
+      break
     }
-
-    await mkdir(dirname(target), { recursive: true })
-    if (existsSync(target)) await unlink(target).catch(() => undefined)
-    await symlink(relative(dirname(target), blobPath), target)
-
-    doneBytes += file.size
-    touch(task, { bytes: doneBytes, filesDone: index + 1 })
   }
-
-  await mkdir(join(cacheDir, 'refs'), { recursive: true })
-  await writeFile(join(cacheDir, 'refs', 'main'), sha, 'utf8')
-  if (entry.files?.length) {
-    await writeFile(
-      modelSentinel(settings, entry),
-      JSON.stringify(
-        {
-          id: entry.id,
-          repo: entry.repo,
-          sha,
-          files: selected.map((file) => file.path),
-          totalBytes: total,
-          completedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      ),
-      'utf8',
+  let missing = 0
+  for (const file of selected) {
+    const blob = join(dir, 'blobs', blobKey(file))
+    if ((await fileSize(blob)) !== file.size)
+      missing += Math.max(0, file.size - Math.max(0, await fileSize(`${blob}.part`)))
+  }
+  const free = await freeSpace(paths.models(settings.modelsRoot))
+  if (missing > 0 && free > 0 && free < missing * 1.05 + 1024 ** 3)
+    throw new Error(
+      `磁盘空间不足：还需约 ${(missing / 1024 ** 3).toFixed(1)} GB，剩余 ${(free / 1024 ** 3).toFixed(1)} GB`,
     )
-  }
-  invalidateCatalog()
-  touch(task, { state: 'done', bytes: total, speedBps: 0, currentFile: undefined })
-}
-
-async function runAdapterDownload(task: DownloadTask, entry: AdapterEntry, settings: Settings): Promise<void> {
-  const { sha, files } = await resolveRepo(entry.repo, entry.revision, settings)
-  const wanted = new Set(entry.files)
-  const selected = files.filter((file) => wanted.has(file.path))
-  if (!selected.length) throw new Error('适配器文件不在仓库中')
-  const total = selected.reduce((sum, file) => sum + file.size, 0)
-  const dir = join(paths.adapters(settings.modelsRoot), entry.id)
   touch(task, { filesTotal: selected.length, totalBytes: total, state: 'running' })
-
-  let doneBytes = 0
-  const base = endpoint(settings)
+  let done = 0
+  let last = Date.now()
+  let lastBytes = 0
   for (let index = 0; index < selected.length; index += 1) {
+    signal.throwIfAborted()
     const file = selected[index]!
-    if (task.state === 'paused') return
-    const target = join(dir, file.path)
+    const blob = join(dir, 'blobs', blobKey(file))
+    if ((await fileSize(blob)) < 0) {
+      owned.add(file.path)
+      await mkdir(join(dir, '.clover-owned'), { recursive: true })
+      await writeFile(join(dir, '.clover-owned', basename(blob)), '')
+    }
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      pendingFile,
+      JSON.stringify({
+        version: 2,
+        id: entry.id,
+        repo: entry.repo,
+        revision: entry.revision,
+        sha,
+        entries: selected,
+        owned: [...owned],
+      }),
+    )
     touch(task, { currentFile: file.path, filesDone: index })
     await downloadFile(
-      `${base}/${entry.repo}/resolve/${sha}/${file.path}`,
-      target,
-      file.size,
-      task,
-      controllers.get(task.id)!.signal,
-      (bytes) => touch(task, { bytes: doneBytes + bytes }),
+      `${endpoint(settings)}/${entry.repo}/resolve/${sha}/${file.path.split('/').map(encodeURIComponent).join('/')}`,
+      blob,
+      file,
+      signal,
+      (bytes, verifying) => {
+        const now = Date.now()
+        if (now - last > 300 || verifying !== (task.state === 'verifying')) {
+          const value = done + bytes
+          touch(task, {
+            state: verifying ? 'verifying' : 'running',
+            bytes: value,
+            speedBps: verifying
+              ? 0
+              : Math.max(0, ((value - lastBytes) * 1000) / Math.max(1, now - last)),
+          })
+          last = now
+          lastBytes = value
+        }
+      },
     )
-    if (file.oid && file.oid.length === 64) {
-      const digest = await hashFile(target)
-      if (digest !== file.oid) {
-        await unlink(target).catch(() => undefined)
-        throw new Error(`校验失败：${file.path}`)
-      }
-    }
-    doneBytes += file.size
-    touch(task, { bytes: doneBytes, filesDone: index + 1 })
+    signal.throwIfAborted()
+    const target = safePath(root, file.path)
+    if ((await fileSize(target)) >= 0) await unlink(target)
+    await materialize(blob, target)
+    done += file.size
+    touch(task, { state: 'running', bytes: done, filesDone: index + 1 })
   }
+  if (
+    !(await validateSnapshot(
+      root,
+      selected,
+      entry.format === 'comfyui' ? 'comfyui' : entry.role,
+      entry.subfolder,
+    ))
+  )
+    throw new Error('组件配置或权重分片不完整')
+  if (entry.role === 'full') {
+    for (const [role, folder] of [
+      ['dit', 'transformer'],
+      ['text_encoder', 'text_encoder'],
+      ['vae', 'vae'],
+      ['support', ''],
+    ]) {
+      if (!(await validateSnapshot(root, selected, role!, folder)))
+        throw new Error(`完整模型缺少 ${role}`)
+    }
+  }
+  signal.throwIfAborted()
+  await mkdir(join(dir, 'refs'), { recursive: true })
+  // Do not overwrite refs/main when installing a different pinned revision.
+  await mkdir(dirname(safePath(join(dir, 'refs'), entry.revision)), { recursive: true })
+  await writeFile(safePath(join(dir, 'refs'), entry.revision), sha, 'utf8')
+  const record: InstallRecord = {
+    version: 2,
+    id: entry.id,
+    repo: entry.repo,
+    revision: entry.revision,
+    sha,
+    entries: selected,
+    owned: [...owned],
+  }
+  const dest = marker(settings, entry.id, entry.repo)
+  await writeFile(`${dest}.tmp`, JSON.stringify(record, null, 2))
+  await rename(`${dest}.tmp`, dest)
+  await unlink(pendingFile).catch(() => undefined)
+}
 
-  await writeFile(join(dir, 'adapter.json'), JSON.stringify(entry, null, 2), 'utf8')
-  invalidateCatalog()
-  touch(task, { state: 'done', bytes: total, speedBps: 0, currentFile: undefined })
+async function runAdapterDownload(
+  task: DownloadTask,
+  entry: AdapterEntry,
+  settings: Settings,
+  signal: AbortSignal,
+): Promise<void> {
+  const { sha, files } = await resolveRepo(entry.repo, entry.revision, settings)
+  const selected = selectFiles(files, entry.files)
+  const total = selected.reduce((n, file) => n + file.size, 0)
+  const dir = join(paths.adapters(settings.modelsRoot), entry.id)
+  touch(task, { filesTotal: selected.length, totalBytes: total, state: 'running' })
+  let done = 0
+  for (const [index, file] of selected.entries()) {
+    signal.throwIfAborted()
+    touch(task, { currentFile: file.path })
+    await downloadFile(
+      `${endpoint(settings)}/${entry.repo}/resolve/${sha}/${file.path}`,
+      safePath(dir, file.path),
+      file,
+      signal,
+      (bytes, verifying) =>
+        touch(task, { state: verifying ? 'verifying' : 'running', bytes: done + bytes }),
+    )
+    done += file.size
+    touch(task, { filesDone: index + 1 })
+  }
+  signal.throwIfAborted()
+  await writeFile(join(dir, 'adapter.json'), JSON.stringify(entry, null, 2))
 }
 
 async function beginDownload(
@@ -584,9 +619,13 @@ async function beginDownload(
   settings: Settings,
 ): Promise<DownloadTask> {
   const id = `${kind}:${entry.id}`
+  if (deleting.size > 0) throw new Error('组件正在删除，请稍后重试')
   const existing = tasks.get(id)
-  if (existing && (existing.state === 'running' || existing.state === 'queued')) return existing
-
+  if (existing && ['running', 'verifying', 'queued'].includes(existing.state)) return existing
+  // Let the old writer close its file before a paused task is resumed.
+  await completions.get(id)?.catch(() => undefined)
+  const current = tasks.get(id)
+  if (current && ['running', 'verifying', 'queued'].includes(current.state)) return current
   const task: DownloadTask = {
     id,
     kind,
@@ -595,90 +634,217 @@ async function beginDownload(
     state: 'queued',
     filesTotal: 0,
     filesDone: 0,
-    bytes: existing?.state === 'paused' ? existing.bytes : 0,
-    totalBytes: 0,
+    bytes: 0,
+    totalBytes: entry.sizeBytes,
     speedBps: 0,
     updatedAt: new Date().toISOString(),
   }
+  const controller = new AbortController()
   tasks.set(id, task)
-  controllers.set(id, new AbortController())
+  controllers.set(id, controller)
+  installing.add(entry.id)
   touch(task, {})
-
-  void (async () => {
+  const completion = (async () => {
     try {
-      if (kind === 'model') await runModelDownload(task, entry as ModelEntry, settings)
-      else await runAdapterDownload(task, entry as AdapterEntry, settings)
+      if (kind === 'model')
+        await runModelDownload(task, entry as ModelEntry, settings, controller.signal)
+      else await runAdapterDownload(task, entry as AdapterEntry, settings, controller.signal)
+      touch(task, { state: 'done', bytes: task.totalBytes, speedBps: 0, currentFile: undefined })
     } catch (error) {
-      if (task.state === 'paused') return
-      touch(task, { state: 'error', error: error instanceof Error ? error.message : String(error) })
+      if (task.state !== 'paused')
+        touch(task, {
+          state: 'error',
+          speedBps: 0,
+          error: error instanceof Error ? error.message : String(error),
+        })
     } finally {
-      controllers.delete(id)
+      if (controllers.get(id) === controller) controllers.delete(id)
+      installing.delete(entry.id)
     }
   })()
-
+  completions.set(id, completion)
+  void completion.finally(() => {
+    if (completions.get(id) === completion) completions.delete(id)
+  })
   return task
 }
 
 export async function startDownload(
   kind: 'model' | 'adapter',
-  targetId: string,
+  id: string,
   settings: Settings,
 ): Promise<DownloadTask> {
   const catalog = await getCatalog(settings)
   const entry =
     kind === 'model'
-      ? catalog.models.find((model) => model.id === targetId)
-      : catalog.adapters.find((adapter) => adapter.id === targetId)
+      ? catalog.models.find((m) => m.id === id)
+      : catalog.adapters.find((m) => m.id === id)
   if (!entry) throw new Error('目录中没有该条目')
   return beginDownload(kind, entry, settings)
 }
-
-/** Used by the "add from Hugging Face repo" flow and by the download self-test. */
-export async function downloadCustomModel(repo: string, settings: Settings): Promise<DownloadTask> {
-  const entry: ModelEntry = {
-    id: repo.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase(),
-    name: repo,
-    provider: 'hf',
-    repo,
-    revision: 'main',
-    role: 'full',
-    precision: 'unknown',
-    sizeBytes: 0,
-    license: 'unknown',
-    tags: ['custom'],
-    installed: false,
-    installedBytes: 0,
+export async function installBundle(id: string, settings: Settings): Promise<DownloadTask[]> {
+  const catalog = await getCatalog(settings, true)
+  const bundle = catalog.bundles.find((b) => b.id === id)
+  if (!bundle) throw new Error('模型组合不存在')
+  const ids = [...Object.values(bundle.components), bundle.support]
+  const result: DownloadTask[] = []
+  for (const componentId of ids) {
+    const model = catalog.models.find((m) => m.id === componentId)
+    if (!model) throw new Error(`组合缺少组件：${componentId}`)
+    if (!model.installed) result.push(await beginDownload('model', model, settings))
   }
-  return beginDownload('model', entry, settings)
+  return result
+}
+export async function downloadCustomModel(repo: string, settings: Settings): Promise<DownloadTask> {
+  return beginDownload(
+    'model',
+    {
+      id: repo.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase(),
+      name: repo,
+      provider: 'hf',
+      repo,
+      revision: 'main',
+      role: 'full',
+      precision: 'bf16',
+      format: 'diffusers',
+      family: 'moss-image',
+      sizeBytes: 0,
+      license: 'unknown',
+      tags: ['custom'],
+      installed: false,
+      installedBytes: 0,
+    },
+    settings,
+  )
+}
+export function pauseDownload(id: string): void {
+  const task = tasks.get(id)
+  if (!task || !['queued', 'running', 'verifying'].includes(task.state)) return
+  touch(task, { state: 'paused', speedBps: 0 })
+  controllers.get(id)?.abort()
 }
 
-export function pauseDownload(taskId: string): void {
-  const task = tasks.get(taskId)
-  if (!task) return
-  controllers.get(taskId)?.abort()
-  controllers.delete(taskId)
-  touch(task, { state: 'paused' })
+export async function componentSnapshot(
+  id: string,
+  settings: Settings,
+): Promise<{ model: ModelEntry; record: InstallRecord; root: string }> {
+  const model = (await getCatalog(settings)).models.find((m) => m.id === id)
+  if (!model) throw new Error(`组件不存在：${id}`)
+  const record = await readInstall(settings, model)
+  if (!record) throw new Error(`组件未就绪：${model.name}。请在模型库补齐组件。`)
+  return { model, record, root: join(cacheDir(settings, model.repo), 'snapshots', record.sha) }
 }
 
-export async function deleteModel(kind: 'model' | 'adapter', targetId: string, settings: Settings): Promise<void> {
-  const catalog = await getCatalog(settings)
-  const entry = kind === 'model' ? catalog.models.find((m) => m.id === targetId) : catalog.adapters.find((a) => a.id === targetId)
-  if (!entry) return
-  if (kind === 'model') {
-    const model = entry as ModelEntry
-    if (model.files?.length) {
-      // Variant downloads share an HF repo cache with sibling entries. Remove
-      // only this variant's completion marker; files stay for the other variant.
-      await unlink(modelSentinel(settings, model)).catch(() => undefined)
+export async function deleteModel(
+  kind: 'model' | 'adapter',
+  id: string,
+  settings: Settings,
+): Promise<void> {
+  if (installing.size > 0) throw new Error('有组件正在下载或校验，请先暂停并稍后重试')
+  deleting.add(id)
+  try {
+    const catalog = await getCatalog(settings)
+    const entry =
+      kind === 'model'
+        ? catalog.models.find((m) => m.id === id)
+        : catalog.adapters.find((m) => m.id === id)
+    if (!entry) return
+    const users = (await listInstances()).filter((instance) =>
+      kind === 'model'
+        ? instance.models.includes(id) || Object.values(instance.modelBinding ?? {}).includes(id)
+        : instance.adapters.includes(id),
+    )
+    if (users.length) throw new Error(`请先解除实例绑定：${users.map((i) => i.name).join('、')}`)
+    if ((await listJobs()).some((job) => ['starting', 'running', 'canceling'].includes(job.state)))
+      throw new Error('有任务正在运行，请结束任务后再删除模型文件')
+    if (kind === 'adapter') {
+      await rm(join(paths.adapters(settings.modelsRoot), id), { recursive: true, force: true })
+      const adapters = (await readLocalAdapters(settings)).filter((a) => a.id !== id)
+      await writeFile(
+        localAdapterFile(settings),
+        JSON.stringify({ schema_version: 1, adapters }, null, 2),
+      )
       invalidateCatalog()
       return
     }
-    await rm(join(paths.hub(settings.modelsRoot), `models--${model.repo.replace('/', '--')}`), {
-      recursive: true,
-      force: true,
-    })
-  } else {
-    await rm(join(paths.adapters(settings.modelsRoot), targetId), { recursive: true, force: true })
+    const model = entry as ModelEntry
+    let record: InstallRecord
+    try {
+      record = JSON.parse(await readFile(marker(settings, id, model.repo), 'utf8')) as InstallRecord
+    } catch {
+      try {
+        record = JSON.parse(
+          await readFile(`${marker(settings, id, model.repo)}.pending`, 'utf8'),
+        ) as InstallRecord
+      } catch {
+        throw new Error('此缓存没有受管安装记录，未删除外部文件')
+      }
+    }
+    if (
+      record.version !== 2 ||
+      record.id !== id ||
+      record.repo !== model.repo ||
+      !/^[a-f0-9]{40,64}$/.test(record.sha) ||
+      !Array.isArray(record.entries) ||
+      !Array.isArray(record.owned)
+    )
+      throw new Error('缓存安装记录不完整，请先点击修复组件以校验文件')
+    const bundlesRoot = join(paths.models(settings.modelsRoot), 'bundles')
+    for (const name of await readdir(bundlesRoot).catch(() => [] as string[])) {
+      if (!/^[a-f0-9]{24}(?:-[a-f0-9-]{8})?$/.test(name)) continue
+      const view = safePath(bundlesRoot, name)
+      try {
+        const meta = JSON.parse(await readFile(join(view, 'clover_model.json'), 'utf8')) as {
+          version: number
+          components: Array<{ id: string }>
+        }
+        if (meta.version === 1 && meta.components.some((c) => c.id === id))
+          await rm(view, { recursive: true, force: true })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    }
+    const dir = cacheDir(settings, model.repo)
+    const otherRecords: InstallRecord[] = []
+    for (const name of await readdir(dir)) {
+      if (
+        !name.startsWith('.clover-') ||
+        (!name.endsWith('.json') && !name.endsWith('.json.pending')) ||
+        name === basename(marker(settings, id, model.repo)) ||
+        name === `${basename(marker(settings, id, model.repo))}.pending`
+      )
+        continue
+      try {
+        otherRecords.push(JSON.parse(await readFile(join(dir, name), 'utf8')) as InstallRecord)
+      } catch {
+        throw new Error('共享组件记录损坏，未删除文件')
+      }
+    }
+    // Unknown/legacy markers are conservative roots; never remove their shared files.
+    const unknown = otherRecords.some((r) => r.version !== 2)
+    for (const file of record.entries) {
+      const blobName = blobKey(file)
+      const ownership = join(dir, '.clover-owned', blobName)
+      if (unknown || (!record.owned.includes(file.path) && !existsSync(ownership))) continue
+      const shared = otherRecords.some((r) =>
+        r.entries?.some(
+          (f) => f.oid === file.oid || (r.sha === record.sha && f.path === file.path),
+        ),
+      )
+      if (shared) continue
+      // Only remove a snapshot link if no other snapshot can reference this blob.
+      const snapshots = await readdir(join(dir, 'snapshots')).catch(() => [] as string[])
+      if (snapshots.some((sha) => sha !== record.sha)) continue
+      await unlink(safePath(join(dir, 'snapshots', record.sha), file.path)).catch(() => undefined)
+      const blob = join(dir, 'blobs', blobKey(file))
+      await unlink(blob).catch(() => undefined)
+      await unlink(`${blob}.part`).catch(() => undefined)
+      await unlink(ownership).catch(() => undefined)
+    }
+    await unlink(marker(settings, id, model.repo)).catch(() => undefined)
+    await unlink(`${marker(settings, id, model.repo)}.pending`).catch(() => undefined)
+    invalidateCatalog()
+  } finally {
+    deleting.delete(id)
   }
-  invalidateCatalog()
 }

@@ -3,6 +3,9 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { runModelManagementTests } from './modelManagement.test'
+import { runModelManagementUi } from './modelManagementUi.test'
 import { ensureDirs, paths } from './lib/paths'
 import { getBackendInfo, startBackend, stopBackend } from './services/backend'
 import type { JobRecord } from '@shared/types'
@@ -51,6 +54,7 @@ if (isDev) {
   // Keep dev data inside the checkout: easier to inspect, reset and sandbox-friendly.
   app.setPath('userData', join(app.getAppPath(), '..', '..', '.dev-data'))
 }
+if (scenario?.startsWith('model-management')) app.setPath('userData', join(tmpdir(), `clover-model-management-${process.pid}`))
 app.setName('CloverMoss')
 if (process.platform === 'win32') app.setAppUserModelId('com.clovermoss.launcher')
 nativeTheme.themeSource = 'dark'
@@ -116,7 +120,17 @@ app.whenReady().then(async () => {
   })
   registerGalleryProtocol()
   registerIpc()
+  if (scenario === 'model-management') {
+    try { await runModelManagementTests(); app.exit(0) }
+    catch (error) { console.error(error); app.exit(1) }
+    return
+  }
   await startBackend()
+  if (scenario === 'model-management-ui') {
+    try { await runModelManagementUi(); app.exit(0) }
+    catch (error) { console.error(error); app.exit(1) }
+    return
+  }
 
   if (smoke) {
     await runSmoke().catch((error) => {

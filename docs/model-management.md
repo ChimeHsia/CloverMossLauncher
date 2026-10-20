@@ -1,0 +1,38 @@
+# 模型组件管理
+
+模型库使用 `release/models.json` 的 v2 目录。`models` 描述独立下载组件，`bundles` 描述推荐组合。一个本地组合引用 DiT、文本编码器、VAE 和隐藏的 pipeline/scheduler 配置组件；Qwen 组件同时包含 tokenizer。
+
+默认组合为官方 SFT。Base、SFT 和 Diffusers FP16-fixed 复用官方 Qwen3.5 编码器与 FLUX.2 small VAE。ComfyUI 单文件按精确路径下载，界面标明仅供 ComfyUI 使用，不参与本地 Gradio 绑定。
+
+## 安装与缓存
+
+- 保留 HF `blobs` / `snapshots` / `refs` 布局，指定 revision 先解析到实际提交，文件树支持分页。
+- 最多同时传输三个文件；相同 blob 串行校验及写入。续传必须收到匹配的 Content-Range；服务器返回 200 时重新写入。
+- 下载先写 `.part`，长度及 LFS SHA256 校验成功后才提交。`.clover-<id>.json` 记录完整清单，`.pending` 保留未完成安装的所有权记录。
+- 安装新组合前，在已有 HF 仓库缓存中查找相同 hash 的 blob，校验后复用。旧完整缓存无需移动；点击“补齐组件”即可登记与补齐，避免重新传输已有权重。
+- Windows 使用文件硬链接，不依赖符号链接权限；不能硬链接时复制，并检查额外磁盘空间。
+- “已就绪”取决于安装记录、文件大小、配置及索引分片，不以仓库目录存在作为依据。
+- 删除阻止实例绑定和运行任务中的组件。先移除受影响的受管组合目录，再清理无共享引用的受管文件。外部缓存、未知旧记录以及其他 revision 的快照会保守保留。
+
+## 绑定与加载
+
+`models:install-bundle` 接收 `{id}`，返回本次所需的组件下载任务；`instances:model-binding` 接收 `{id, binding}`，其中 binding 为 `{bundleId, dit, textEncoder, vae}` 或 null。旧下载与暂停接口保持可用。
+
+新本地实例默认绑定 SFT；旧实例没有绑定时继续沿用原配置。实例详情可以保存未下载的兼容组件，但启动前必须补齐。显式选择“自定义 HF ID 或本地目录”优先于实例绑定。SSH 仍走原启动流程，不接受本地组件绑定。
+
+组合在 `models/bundles/<content-key>/` 原子生成标准本地目录；`clover_model.json` 固定实际组件提交及精度。Gradio 通过启动器自有脚本运行原始 `gradio_app.py`，与 runner 共用 `model_runtime.py`。不修改上游实例源码。
+
+官方 DiT/Qwen 使用 BF16，FP16-fixed DiT 使用 FP16，VAE 使用 FP32。受管组合强制本地加载，缺失文件在启动前报错；不会后台补下整仓。
+
+## 验证
+
+```powershell
+node --test tests/model-files.test.mjs
+python -m unittest discover -s runner/tests
+```
+
+构建后，从 `apps/desktop` 运行 `electron . --scenario=model-management`，使用轻量本地 HTTP 夹具检查组合安装、共享、损坏修复、旧 blob 复用及删除保护，不下载真实权重。
+
+`electron . --scenario=model-management-ui --screenshot` 使用隔离的临时数据目录，检查三种窗口尺寸、125%/150% 缩放、组件分类、删除保护、实例绑定和下载状态。可通过 `CLOVER_MODEL_TEST_OUTPUT` 指定截图目录。
+
+真实模型及 CUDA 出图需要另行验收；模拟加载测试不能替代生成质量与显存验证。
