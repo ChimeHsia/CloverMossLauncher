@@ -70,8 +70,9 @@ function App(): React.JSX.Element {
     try {
       setError('')
       const data = await api<Bootstrap>(nextToken, '/api/studio/bootstrap')
+      const assigned = new URL(window.location.href).searchParams.get('instance')
       setBootstrap(data)
-      setInstanceId((current) => current || data.instances[0]?.id || '')
+      setInstanceId((current) => assigned || current || data.instances[0]?.id || '')
     } catch (cause) {
       setBootstrap(null)
       setError(cause instanceof Error ? cause.message : String(cause))

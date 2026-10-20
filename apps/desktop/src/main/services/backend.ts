@@ -72,6 +72,7 @@ export async function startBackend(): Promise<BackendInfo> {
           CLOVER_BACKEND_TOKEN: token,
           CLOVER_BACKEND_HOST: getSettings().lanWebEnabled ? '0.0.0.0' : '127.0.0.1',
           CLOVER_WEB_ROOT: join(app.getAppPath(), 'out', 'renderer'),
+          CLOVER_BACKEND_PORT: String(getSettings().lanWebPort ?? 0),
         },
         stdio: 'pipe',
       })
@@ -136,18 +137,30 @@ export function stopBackend(): void {
 
 export function getWebAccessInfo(): WebAccessInfo {
   if (!info.ready || !info.url || !info.token) {
-    return { ready: false, urls: [], error: info.error ?? '后端尚未就绪' }
+    return { ready: false, urls: [], token: null, port: null, instanceId: null, error: info.error ?? '后端尚未就绪' }
   }
-  const port = new URL(info.url).port
+  const port = Number(new URL(info.url).port)
   const token = encodeURIComponent(info.token)
-  const hosts = new Set<string>(['127.0.0.1'])
-  for (const addresses of Object.values(networkInterfaces())) {
+  const instanceId = getSettings().lanWebInstanceId
+  const suffix = instanceId ? `&instance=${encodeURIComponent(instanceId)}` : ''
+  const hosts: Array<{ host: string; score: number }> = [{ host: '127.0.0.1', score: 100 }]
+  for (const [name, addresses] of Object.entries(networkInterfaces())) {
     for (const address of addresses ?? []) {
-      if (address.family === 'IPv4' && !address.internal) hosts.add(address.address)
+      if (address.family !== 'IPv4' || address.internal) continue
+      if (address.address.startsWith('169.254.')) continue
+      const virtual = /^(bridge|utun|docker|vbox|vmnet|veth|virbr|vEthernet|VirtualBox|VMware|Tailscale|ZeroTier)/i.test(name)
+      const wired = /^(en0|en1|eth0|wlan|wi-?fi|ethernet)/i.test(name)
+      hosts.push({ host: address.address, score: virtual ? 50 : wired ? 10 : 20 })
     }
   }
+  const unique = [...new Map(hosts.map((item) => [item.host, item])).values()]
+    .sort((a, b) => a.score - b.score)
+    .map((item) => item.host)
   return {
     ready: true,
-    urls: [...hosts].map((host) => `http://${host}:${port}/?token=${token}`),
+    token: info.token,
+    port,
+    instanceId,
+    urls: unique.map((host) => `http://${host}:${port}/?token=${token}${suffix}`),
   }
 }

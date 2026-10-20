@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoCheckUpdates: true,
   desktopNotifications: true,
   lanWebEnabled: false,
+  lanWebPort: null,
+  lanWebInstanceId: null,
   updateChannel: 'stable',
   dismissedAnnouncements: [],
   dismissedUpdateVersion: null,

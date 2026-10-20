@@ -12,6 +12,7 @@ const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPor
 const token = process.env['CLOVER_BACKEND_TOKEN'] ?? ''
 const host = process.env['CLOVER_BACKEND_HOST'] ?? '127.0.0.1'
 const webRoot = process.env['CLOVER_WEB_ROOT'] ?? ''
+const requestedPort = Number(process.env['CLOVER_BACKEND_PORT'] ?? 0) || 0
 const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
 let nextId = 0
 
@@ -217,7 +218,7 @@ parentPort?.on('message', (event) => {
   }
 })
 
-server.listen(0, host, () => {
+server.listen(requestedPort, host, () => {
   const address = server.address()
   const port = typeof address === 'object' && address ? address.port : 0
   parentPort?.postMessage({ type: 'ready', port })

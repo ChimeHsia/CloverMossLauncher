@@ -15,5 +15,8 @@ export interface BackendRpc {
 export interface WebAccessInfo {
   ready: boolean
   urls: string[]
+  token: string | null
+  port: number | null
+  instanceId: string | null
   error?: string
 }

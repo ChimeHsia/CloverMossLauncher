@@ -858,7 +858,12 @@ exit 0
   if (scenario === 'web-access') {
     const access = getWebAccessInfo()
     const remote = access.urls.find((url) => !url.includes('127.0.0.1')) ?? null
-    const page = access.ready ? await fetch(remote ?? access.urls[0]!).then(async (res) => ({ status: res.status, html: (await res.text()).includes('MossStudio') })).catch(() => null) : null
+    const page = access.ready ? await fetch(remote ?? access.urls[0]!).then(async (res) => {
+      const html = await res.text()
+      const asset = html.match(/src="([^"]+\.js)"/)?.[1]
+      const assetStatus = asset ? await fetch(new URL(asset, remote ?? access.urls[0]!).toString()).then((r) => r.status).catch(() => 0) : 0
+      return { status: res.status, html: html.includes('MossStudio'), assetStatus }
+    }).catch(() => null) : null
     console.log(JSON.stringify({ scenario: 'web-access', ready: access.ready, urls: access.urls.length, remote: Boolean(remote), page }, null, 2))
     app.exit(access.ready && remote && page?.status === 200 && page.html ? 0 : 1)
     return

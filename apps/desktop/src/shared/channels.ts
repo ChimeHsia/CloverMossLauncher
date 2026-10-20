@@ -48,6 +48,7 @@ export const Ipc = {
   updatesCancel: 'updates:cancel',
   notificationTest: 'notification:test',
   webAccessInfo: 'web:access-info',
+  webAccessRestart: 'web:access-restart',
   announcementsDismiss: 'announcements:dismiss',
   gitBranches: 'git:branches',
   gitCommits: 'git:commits',

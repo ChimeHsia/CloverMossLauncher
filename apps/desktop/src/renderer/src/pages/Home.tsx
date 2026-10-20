@@ -1,6 +1,7 @@
 import {
   Cpu,
   FolderCog,
+  Globe2,
   Play,
   Settings2,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ import { call, onEvent } from '../lib/api'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
 import { Presence } from '../components/motion'
+import { WebUiSettingsSheet } from '../components/WebUiSettingsSheet'
 import { Button, Field, IconButton, Input, Select, cn, useToast } from '../components/ui'
 
 export function HomePage(): React.JSX.Element {
@@ -24,6 +26,7 @@ export function HomePage(): React.JSX.Element {
   const allDevices = useApp((state) => state.devices)
   const cases = useApp((state) => state.cases)
   const env = useApp((state) => state.env)
+  const settings = useApp((state) => state.settings)
   const homeCopy = useApp((state) => state.updates?.home)
   const refreshCases = useApp((state) => state.refreshCases)
 
@@ -35,6 +38,7 @@ export function HomePage(): React.JSX.Element {
     env?.recommendation.profile === 'base' ? 'base' : 'dmd8',
   )
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [webUiOpen, setWebUiOpen] = useState(false)
   const [caseName, setCaseName] = useState('')
 
   const selectedCase = cases.find((item) => item.id === caseId)
@@ -212,6 +216,19 @@ export function HomePage(): React.JSX.Element {
               }
             />
           </Field>
+          <Field label="外部 UI" className="w-[100px]">
+            <button
+              type="button"
+              onClick={() => setWebUiOpen(true)}
+              className="app-input flex w-full items-center gap-1.5"
+              title="配置局域网 MossStudio WebUI"
+            >
+              <Globe2 className="size-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
+              <span className="truncate text-[10.5px]">
+                {settings?.lanWebEnabled ? '已开启' : '未开启'}
+              </span>
+            </button>
+          </Field>
           <Field label="档位" className="w-[88px]">
             <Select
               value={profile}
@@ -255,6 +272,12 @@ export function HomePage(): React.JSX.Element {
           </div>
         </div>
       </div>
+
+      <WebUiSettingsSheet
+        open={webUiOpen}
+        onClose={() => setWebUiOpen(false)}
+        initialInstanceId={instanceId}
+      />
 
       {instances.length === 0 ? (
         <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-tertiary)]">

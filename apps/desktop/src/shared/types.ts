@@ -123,6 +123,8 @@ export interface Settings {
   autoCheckUpdates: boolean
   desktopNotifications: boolean
   lanWebEnabled: boolean
+  lanWebPort: number | null
+  lanWebInstanceId: string | null
   updateChannel: 'stable' | 'beta'
   dismissedAnnouncements: string[]
   dismissedUpdateVersion: string | null

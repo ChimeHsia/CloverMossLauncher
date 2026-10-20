@@ -119,6 +119,12 @@ export function registerIpc(): void {
 
   handle(Ipc.webAccessInfo, null, () => getWebAccessInfo())
 
+  handle(Ipc.webAccessRestart, null, async () => {
+    stopBackend()
+    await startBackend()
+    return getWebAccessInfo()
+  })
+
   handle(Ipc.windowOpen, schemas.windowOpen, ({ kind, route }) => {
     openWindow(kind, route)
     return true
@@ -239,7 +245,7 @@ export function registerIpc(): void {
     const before = getSettings()
     const settings = updateSettings(patch)
     ensureDirs(settings.modelsRoot)
-    if (before.lanWebEnabled !== settings.lanWebEnabled) {
+    if (before.lanWebEnabled !== settings.lanWebEnabled || before.lanWebPort !== settings.lanWebPort) {
       stopBackend()
       await startBackend()
     }

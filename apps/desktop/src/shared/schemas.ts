@@ -33,6 +33,8 @@ export const schemas = {
       autoCheckUpdates: z.boolean(),
       desktopNotifications: z.boolean(),
       lanWebEnabled: z.boolean(),
+      lanWebPort: z.number().int().min(1024).max(65535).nullable(),
+      lanWebInstanceId: z.string().max(120).nullable(),
       updateChannel: z.enum(['stable', 'beta']),
       dismissedUpdateVersion: z.string().max(80).nullable(),
       sidebarCollapsed: z.boolean(),
