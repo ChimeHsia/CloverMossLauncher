@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Catalog, InstanceInfo, JobRecord, ProjectSummary } from '@shared/types'
+import { clampBox, createDraft, exampleDraft, type LayoutDraft } from '../lib/layout'
+import { LayoutEditor } from './LayoutEditor'
 import '../styles.css'
 
 const TOKEN_KEY = 'mossstudio.web.token'
@@ -54,8 +56,7 @@ function App(): React.JSX.Element {
   const [instanceId, setInstanceId] = useState('')
   const [prompt, setPrompt] = useState('')
   const [negative, setNegative] = useState('')
-  const [width, setWidth] = useState(1024)
-  const [height, setHeight] = useState(1024)
+  const [draft, setDraft] = useState<LayoutDraft>(() => exampleDraft())
   const [steps, setSteps] = useState(8)
   const [cfg, setCfg] = useState(1)
   const [seed, setSeed] = useState(42)
@@ -106,8 +107,8 @@ function App(): React.JSX.Element {
           instanceId,
           prompt,
           negativePrompt: negative,
-          width,
-          height,
+          width: draft.width,
+          height: draft.height,
           steps,
           cfg,
           seed,
@@ -130,10 +131,19 @@ function App(): React.JSX.Element {
         method: 'POST',
         body: JSON.stringify({
           name: projectName,
-          width,
-          height,
-          summary: { caption: prompt.slice(0, 300), meta: ['web'], canvas: 'single' },
-          layers: [],
+          width: draft.width,
+          height: draft.height,
+          summary: draft.summary,
+          layers: draft.items.map((item) => ({
+            id: item.id,
+            kind: item.label,
+            caption: item.caption,
+            text: item.text,
+            bbox: item.bbox,
+            visible: item.visible !== false,
+            locked: item.locked === true,
+            opacity: item.opacity ?? 1,
+          })),
           prompt,
           negative,
           seed,
@@ -206,14 +216,26 @@ function App(): React.JSX.Element {
           <input value={negative} onChange={(event) => setNegative(event.target.value)} className="app-input w-full" placeholder="可选" />
         </label>
 
+        <LayoutEditor
+          draft={draft}
+          onChange={setDraft}
+          onInsertPrompt={(layout) => setPrompt((previous) => previous.trim() ? `${previous.trim()}\n\n${layout}` : layout)}
+          onSaveProject={() => void saveProject()}
+        />
+
         <div className="grid grid-cols-2 gap-2">
           <label className="space-y-1">
             <span className="text-[10px] text-[var(--color-text-tertiary)]">尺寸</span>
             <select
-              value={`${width}x${height}`}
+              value={`${draft.width}x${draft.height}`}
               onChange={(event) => {
                 const [w, h] = event.target.value.split('x').map(Number)
-                setWidth(w); setHeight(h)
+                setDraft((previous) => ({
+                  ...previous,
+                  width: w,
+                  height: h,
+                  items: previous.items.map((item) => ({ ...item, bbox: clampBox(item.bbox, w, h) })),
+                }))
               }}
               className="app-input w-full"
             >
@@ -238,7 +260,7 @@ function App(): React.JSX.Element {
           {busy || active ? '生成中…' : '开始生成'}
         </button>
         <p className="text-[9.5px] leading-4 text-[var(--color-text-tertiary)]">
-          画布编辑与 Project 全量同步在桌面版完成；手机端先覆盖提示词、生成与任务状态。
+          画布/布局 JSON 已可在手机端编辑；Project 全量同步与画廊仍在桌面版。
         </p>
       </section>
 
