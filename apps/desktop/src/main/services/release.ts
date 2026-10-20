@@ -8,13 +8,13 @@ import { paths } from '../lib/paths'
 import { getLastNetwork } from './network'
 
 const LATEST_RELEASE_URL =
-  'https://github.com/CloverIris/CloverMossLauncher/releases/latest/download/release.md'
+  'https://github.com/CloverIris/MossDesktop/releases/latest/download/release.md'
 const BETA_RELEASE_URL =
-  'https://github.com/CloverIris/CloverMossLauncher/releases/download/beta/release.md'
+  'https://github.com/CloverIris/MossDesktop/releases/download/beta/release.md'
 const RAW_RELEASE_URL =
-  'https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/release.md'
+  'https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/release.md'
 const JSDELIVR_RELEASE_URL =
-  'https://cdn.jsdelivr.net/gh/CloverIris/CloverMossLauncher@main/release/release.md'
+  'https://cdn.jsdelivr.net/gh/CloverIris/MossDesktop@main/release/release.md'
 
 export type ReleaseSource = 'local' | 'remote' | 'cache'
 export type UpdateChannel = 'stable' | 'beta'

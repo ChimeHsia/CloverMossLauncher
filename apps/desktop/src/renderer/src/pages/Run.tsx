@@ -1,4 +1,4 @@
-import { Ban, FolderOpen, Image as ImageIcon, Play, RefreshCw, Send, Square, Terminal, ExternalLink } from 'lucide-react'
+import { Ban, FolderOpen, Image as ImageIcon, Play, RefreshCw, Send, Square, Terminal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ipc } from '@shared/channels'
@@ -231,17 +231,6 @@ export function RunPage(): React.JSX.Element {
               <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-[11px] text-red-600 dark:text-red-300">
                 {active.error.code} · {active.error.message}
               </p>
-            ) : null}
-            {active.url ? (
-              <Button
-                tone="secondary"
-                className="mt-3"
-                onClick={() => void call(Ipc.openExternal, { url: active.url! })}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <ExternalLink className="size-3.5" /> 打开 Gradio
-                </span>
-              </Button>
             ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">
               <span>开始于 {dateTime(active.startedAt)}</span>

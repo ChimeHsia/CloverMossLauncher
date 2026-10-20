@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { GradioLaunchConfig, LaunchCase } from '@shared/types'
-import { normalizeGradioConfig, normalizeWorkspace } from '@shared/launch'
+import type { LaunchCase } from '@shared/types'
+import { normalizeWorkspace } from '@shared/launch'
 import { paths } from '../lib/paths'
 import { getInstance } from './instances'
 
@@ -18,13 +18,8 @@ interface StoredCase extends Partial<LaunchCase> {
 function migrate(stored: StoredCase): LaunchCase | null {
   if (!stored.id || !stored.instanceId) return null
   const workspace = normalizeWorkspace(stored.workspace ?? stored.backend)
-  const legacyPort = typeof stored.port === 'number' ? stored.port : null
-  const legacyArgs = typeof stored.extraArgs === 'string' ? stored.extraArgs : undefined
-  const gradioInput =
-    stored.gradio ??
-    (legacyPort !== null || legacyArgs ? { port: legacyPort, extraArgs: legacyArgs } : undefined)
-  const gradio: GradioLaunchConfig | undefined =
-    workspace === 'official' || gradioInput ? normalizeGradioConfig(gradioInput) : undefined
+  // Gradio launch config is retired; drop it without losing the Case's
+  // instance/device/profile. Kept fields are read for migration only.
   const now = new Date().toISOString()
   return {
     id: stored.id,
@@ -33,7 +28,6 @@ function migrate(stored: StoredCase): LaunchCase | null {
     workspace,
     deviceId: typeof stored.deviceId === 'string' ? stored.deviceId : 'mps',
     profile: stored.profile === 'dmd8' ? 'dmd8' : 'base',
-    gradio,
     createdAt: typeof stored.createdAt === 'string' ? stored.createdAt : now,
     lastUsedAt: typeof stored.lastUsedAt === 'string' ? stored.lastUsedAt : undefined,
   }
@@ -52,7 +46,7 @@ function ensure(): LaunchCase[] {
       : []
     cases = migrated
     // Rewrite once so old `backend`/`port`/`extraArgs` fields do not linger.
-    if (Array.isArray(parsed) && parsed.some((item) => 'backend' in item || 'port' in item || 'extraArgs' in item)) {
+    if (Array.isArray(parsed) && parsed.some((item) => 'backend' in item || 'port' in item || 'extraArgs' in item || 'gradio' in item || item.workspace === 'official')) {
       persist()
     }
   } catch {
@@ -83,17 +77,13 @@ export async function saveCase(
   const current = ensure()
   const existing = input.id ? current.find((item) => item.id === input.id) : undefined
   const now = new Date().toISOString()
-  const gradio = input.workspace === 'official' || input.gradio
-    ? normalizeGradioConfig(input.gradio)
-    : undefined
   if (existing) {
     Object.assign(existing, {
       name: input.name?.trim() || existing.name,
       instanceId: input.instanceId,
-      workspace: input.workspace,
+      workspace: 'clover',
       deviceId: input.deviceId,
       profile: input.profile,
-      gradio,
       lastUsedAt: now,
     })
     persist()
@@ -101,12 +91,11 @@ export async function saveCase(
   }
   const created: LaunchCase = {
     id: `case-${randomUUID().slice(0, 8)}`,
-    name: input.name?.trim() || `${instance.name} · ${input.workspace === 'official' ? '官方' : 'Clover'}`,
+    name: input.name?.trim() || `${instance.name} · MossStudio`,
     instanceId: input.instanceId,
-    workspace: input.workspace,
+    workspace: 'clover',
     deviceId: input.deviceId,
     profile: input.profile,
-    gradio,
     createdAt: now,
     lastUsedAt: now,
   }

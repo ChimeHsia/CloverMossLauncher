@@ -145,7 +145,7 @@ const machine = {
     updated_at: catalog.updated_at ?? manifest.app?.published_at,
     models_url:
       manifest.catalog?.models_url ??
-      'https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json',
+      'https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/models.json',
     models_sha256: catalogSha,
   },
   announcements,

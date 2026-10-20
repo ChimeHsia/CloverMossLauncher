@@ -7,7 +7,7 @@
 - 通道：**stable**
 - 发布：2026-10-19T02:00:00Z
 - 最低版本：0.1.0
-- 模型目录：2026-10-19T09:48:26Z · `sha256:64e4f5552209…`
+- 模型目录：2026-10-19T09:48:26Z · `sha256:73ecc164131b…`
 
 ## 安装包
 
@@ -128,7 +128,7 @@ _当前发布未附带安装包。_
 
 1. 先看「诊断」页与实例详情里的运行时日志；
 2. 在诊断页导出诊断信息；
-3. 反馈：[GitHub Issues](https://github.com/CloverIris/CloverMossLauncher/issues)。
+3. 反馈：[GitHub Issues](https://github.com/CloverIris/MossDesktop/issues)。
 
 ---
 
@@ -143,7 +143,7 @@ _当前发布未附带安装包。_
     "version": "0.1.0",
     "min_supported": "0.1.0",
     "published_at": "2026-10-19T02:00:00Z",
-    "notes_url": "https://github.com/CloverIris/CloverMossLauncher/releases"
+    "notes_url": "https://github.com/CloverIris/MossDesktop/releases"
   },
   "installers": [],
   "home": {
@@ -153,15 +153,15 @@ _当前发布未附带安装包。_
   },
   "catalog": {
     "updated_at": "2026-10-19T09:48:26Z",
-    "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
-    "models_sha256": "64e4f555220903f6e967053087cd62735d8b87b9b86e6e1ab1ee3e326cbd9706"
+    "models_url": "https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/models.json",
+    "models_sha256": "73ecc164131b30dda905be527af483735342d7677d8724b8e65e4b9419dc3941"
   },
   "announcements": [
     {
       "id": "2026-10-launch",
       "level": "info",
       "title": "CloverMoss Launcher 内测开始",
-      "body_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/README.md",
+      "body_url": "https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/README.md",
       "starts_at": "2026-10-19T02:00:00Z",
       "ends_at": null,
       "dismissible": true,

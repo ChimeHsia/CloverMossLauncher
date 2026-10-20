@@ -19,7 +19,7 @@ export function ModelBindingEditor({ instance }: { instance: InstanceInfo }): Re
   if (instance.placement.kind === 'ssh')
     return (
       <p className="mt-3 text-[12px] leading-5 text-[var(--color-text-secondary)]">
-        远端实例继续使用 Gradio 启动参数中的模型配置。本次组件绑定仅适用于本地实例。
+        远端实例使用远端模型缓存；组件绑定仅适用于本地实例。
       </p>
     )
   const bundle = catalog?.bundles?.find((b) => b.id === draft?.bundleId)
@@ -134,7 +134,7 @@ export function ModelBindingEditor({ instance }: { instance: InstanceInfo }): Re
             ? missing.length
               ? `还缺 ${missing.length} 项组件，补齐后可启动。`
               : '组件已就绪，将按各组件的精度加载。'
-            : '自定义 Gradio 模型配置优先于实例绑定。'}
+            : '实例绑定优先；自定义模型目录用于高级场景。'}
         </p>
         <div className="flex gap-2">
           {draft && missing.length ? (

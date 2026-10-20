@@ -37,9 +37,9 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 
 | 文档 | 作用 | 当前性 |
 | --- | --- | --- |
-| [../README.md](../README.md) | 项目总览、五窗口、快速开始、能力矩阵 | 当前 |
-| [product-design.md](product-design.md) | 产品定位、五窗口、启动模型、视觉规范、边界 | 当前 |
-| [architecture.md](architecture.md) | 当前代码结构、数据模型、持久化、IPC、训练/推理链路 | 当前 |
+| [../README.md](../README.md) | 项目总览、MossStudio、快速开始、能力矩阵 | 当前 |
+| [product-design.md](product-design.md) | 产品定位、MossStudio、桌面/Web 两种呈现、边界 | 当前（2026-10 方向变更） |
+| [architecture.md](architecture.md) | 当前代码结构、数据模型、持久化、IPC、训练/推理链路 | 当前（含目标架构） |
 | [status.md](status.md) | 完成度、证据、未做事项、下一轮入口 | **事实来源** |
 | [roadmap.md](roadmap.md) | 下一阶段工作流、优先级、验收条件 | 当前计划 |
 | [layout-schema.md](layout-schema.md) | 官方 layout JSON 与编辑器字段规范 | 稳定契约 |
@@ -48,9 +48,10 @@ README、公告（`release/README.md`）是面向用户的摘要，不替代 sta
 | [toolchain-and-onboarding.md](toolchain-and-onboarding.md) | 系统 Git/Python 扫描、安装引导、OOBE 工具链准备 | 设计已确认，未实现 |
 | [model-notes.md](model-notes.md) | MOSS-Image 模型结构、预算、采样约定 | 参考资料 |
 | [research/upstream-survey.md](research/upstream-survey.md) | 上游项目调研 | 立项参考 |
+| [research/upstream-2026-10-20.md](research/upstream-2026-10-20.md) | 2026-10-20 上游 MOSS/Trainer 复查与兼容结论 | 当前研究 |
 | [future-inference-engine.md](future-inference-engine.md) | V2 自研推理引擎设想 | **未排期** |
 | [benchmarks/v2-mnn-spike.md](benchmarks/v2-mnn-spike.md) | V2 MNN spike | **未排期** |
-| [decisions/](decisions/) | ADR：为什么这样选；发布/更新 ADR-0005、工具链 ADR-0006 | 历史依据 |
+| [decisions/](decisions/) | ADR：为什么这样选；发布/更新 ADR-0005、工具链 ADR-0006、MossStudio ADR-0007 | 历史依据 |
 | [../apps/README.md](../apps/README.md) | 开发者手册：目录、窗口、自检命令 | 当前 |
 | [windows-validation-guide.md](windows-validation-guide.md) | Windows 开发环境、场景测试与人工验收记录 | 当前验收手册 |
 | [../runner/README.md](../runner/README.md) | 薄 runner 协议与模拟模式 | 当前 |

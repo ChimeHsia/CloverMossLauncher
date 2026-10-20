@@ -226,7 +226,7 @@ export function ModelsPage(): React.JSX.Element {
             <div className="min-w-0">
               <div className="mb-2 flex items-center gap-2 text-[11px] text-[var(--color-text-secondary)]">
                 <Layers className="size-3.5 text-accent-400" /> 推荐组合{' '}
-                <span className="text-[var(--color-text-tertiary)]">· 本地 Gradio / Diffusers</span>
+                <span className="text-[var(--color-text-tertiary)]">· 本地 Diffusers / ComfyUI</span>
               </div>
               <select
                 aria-label="推荐模型组合"
@@ -432,7 +432,7 @@ export function ModelsPage(): React.JSX.Element {
         </div>
         {format === 'comfyui' && category !== 'adapter' ? (
           <p className="text-[11px] leading-5 text-[var(--color-text-secondary)]">
-            供 ComfyUI 使用；单文件和量化组件不能绑定到本地官方 Gradio。
+            供 ComfyUI 使用；单文件和量化组件不能绑定到本地 Diffusers 运行时。
           </p>
         ) : null}
         <MotionPanel transitionKey={`${category}:${format}:${installedOnly}`}>
@@ -587,7 +587,7 @@ export function ModelsPage(): React.JSX.Element {
           </div>
           <p>已缓存的文件会复用；中断后可以继续，完整校验通过后才标记为可用。</p>
           {pending?.kind === 'model' && pending.value.format === 'comfyui' ? (
-            <p className="text-amber-300">此文件供 ComfyUI 使用，不能绑定到官方 Gradio。</p>
+            <p className="text-amber-300">此文件供 ComfyUI 使用，不能作为 Diffusers 组件绑定。</p>
           ) : null}
         </div>
       </Modal>

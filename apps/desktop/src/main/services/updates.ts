@@ -28,7 +28,7 @@ async function resolveBody(
 ): Promise<string> {
   if (raw.body_markdown) return raw.body_markdown
   if (!raw.body_url) return ''
-  if (localDir && raw.body_url.includes('CloverIris/CloverMossLauncher')) {
+  if (localDir && raw.body_url.includes('CloverIris/MossDesktop')) {
     const readme = join(localDir, 'README.md')
     if (existsSync(readme)) return readFileSync(readme, 'utf8')
   }

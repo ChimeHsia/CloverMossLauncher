@@ -5,8 +5,9 @@
 - 完成度与验证边界：[status.md](status.md)
 - 产品形态与交互：[product-design.md](product-design.md)
 
-> 本文只描述**当前代码实际怎么工作**。最后一节单列“未实现/计划架构”，
-> 不把 Creator 浏览器版、签名、受管 Python 等未落地设计写成现状。
+> 本文只描述**当前代码实际怎么工作**。最后一节单列“未实现/计划架构”。
+> 2026-10 方向变更：MossStudio 单一 UI + 局域网 WebUI（ADR-0007）；
+> 在实现完成前，现状仍是 Electron-only + 官方 Gradio 入口。
 
 ---
 
@@ -56,8 +57,28 @@ UtilityProcess
   Windows：`hidden` + `titleBarOverlay` + acrylic；Linux 默认；
 - 截图模式使用不透明 `#191b1f`；普通桌面窗口启用亚克力。
 
-**没有** served WebUI；Clover Creator 保持 Electron-only（ADR-0004）。
-utilityProcess HTTP/WS 只作为 Job/API 层，不承载 Creator UI。
+**当前没有** served WebUI；MossStudio 仍为 Electron-only。
+utilityProcess HTTP/WS 只作为 Job/API 层，不承载 Studio UI。
+
+### 2.1 目标架构（ADR-0007，未实现）
+
+```
+MossStudio feature layer（Project / Layout / Prompt / Job / Gallery）
+        │ StudioClient
+   ┌────┴─────────────────────┐
+   ▼                          ▼
+Electron IPC             HTTP/WS (LAN)
+   ▼                          ▼
+Electron renderer        浏览器 / 手机（响应式）
+   └────────────┬─────────────┘
+                ▼
+        main + backend（唯一状态/文件/进程所有者）
+```
+
+- 桌面与 Web 共用 Studio feature，不复制页面；
+- Web 只拿到 Studio 安全子集，不暴露终端/训练/设置写操作；
+- 局域网服务由桌面主机显式开启，token/PIN，应用退出即停止；
+- 详细决策见 [ADR-0007](decisions/0007-mossstudio-single-ui-and-web.md)。
 
 ## 3. 代码结构
 
@@ -452,6 +473,16 @@ env -u ELECTRON_RUN_AS_NODE \
 scenario 和截图为主。parser 的单元测试/契约测试是后续计划。
 
 ## 16. 未实现 / 计划架构
+
+| 计划 | 说明 |
+| --- | --- |
+| MossStudio 改名 | creator 窗口/标题/路由入口统一为 MossStudio |
+| Gradio 退役 | 删除 Gradio UI/启动参数/独立窗口/SSH 隧道；旧 Case 迁移 |
+| StudioClient | IPC 与 HTTP/WS 双传输，共享 Studio feature |
+| LAN WebUI | 静态资源 + Studio API + token/PIN + QR |
+| 移动布局 | 响应式、触控画布、手机任务/画廊 |
+| 训练器增量 | ComfyUI 权重入口、vram/precision 字段 |
+
 
 以下**都不是现状**：
 

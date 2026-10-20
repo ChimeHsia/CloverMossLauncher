@@ -30,13 +30,15 @@ export const GRADIO_OPEN_LABELS: Record<GradioOpenMode, string> = {
 }
 
 export const WORKSPACE_LABELS: Record<WorkspaceKind, string> = {
-  official: '官方 Gradio',
-  clover: 'Clover',
+  official: '官方 Gradio（已退役）',
+  clover: 'MossStudio',
 }
 
 /** Normalizes the legacy `backend` field and the current `workspace` field. */
-export function normalizeWorkspace(value: unknown): WorkspaceKind {
-  return value === 'clover' ? 'clover' : 'official'
+export function normalizeWorkspace(_value: unknown): WorkspaceKind {
+  // ADR-0007: official Gradio is retired. Reading an old Case always migrates
+  // it to MossStudio instead of preserving a launch path we no longer support.
+  return 'clover'
 }
 
 export function createDefaultGradioConfig(): GradioLaunchConfig {

@@ -60,6 +60,7 @@ interface AppStore {
   notifications: AppNotification[]
   notificationsOpen: boolean
   studioPrompt: string
+  studioInstanceId: string | null
   studioDraft: LayoutDraft | null
   studioBackground: GalleryItem | null
   scanning: boolean
@@ -83,6 +84,7 @@ interface AppStore {
   pushNotification: (input: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void
   markAllNotificationsRead: () => void
   setStudioPrompt: (prompt: string) => void
+  setStudioInstanceId: (instanceId: string | null) => void
   setStudioDraft: (draft: LayoutDraft | null) => void
   setStudioBackground: (item: GalleryItem | null) => void
   dismissAnnouncement: (id: string) => Promise<void>
@@ -307,6 +309,7 @@ export const useApp = create<AppStore>((set, get) => {
     notifications: [],
     notificationsOpen: true,
     studioPrompt: '',
+    studioInstanceId: null,
     studioDraft: null,
     studioBackground: null,
     scanning: false,
@@ -499,6 +502,9 @@ export const useApp = create<AppStore>((set, get) => {
     setStudioPrompt(prompt) {
       set({ studioPrompt: prompt })
     },
+    setStudioInstanceId(instanceId) {
+      set({ studioInstanceId: instanceId })
+    },
 
     setStudioDraft(draft) {
       set({ studioDraft: draft })
@@ -620,7 +626,7 @@ export const useApp = create<AppStore>((set, get) => {
 
     async startLaunch(input) {
       if (input.workspace === 'clover') {
-        throw new Error('Clover 常驻后端下一轮接入；这轮先启动官方 Gradio，或打开创作窗口。')
+        throw new Error('请在 MossStudio 中开始生成；旧的 Gradio 启动路径已退役。')
       }
       const instance = get().instances.find((item) => item.id === input.instanceId)
       if (!instance) throw new Error('实例不存在')
@@ -706,7 +712,7 @@ export const useApp = create<AppStore>((set, get) => {
         return
       }
       const next = rows
-        .filter((row) => row.deviceId === deviceId && row.state === 'queued')
+        .filter((row) => row.deviceId === deviceId && row.state === 'queued' && row.workspace !== 'official')
         .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))[0]
       if (!next) return
       const starting: LaunchRow = { ...next, state: 'starting', startedAt: new Date().toISOString() }

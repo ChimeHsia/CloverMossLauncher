@@ -39,6 +39,7 @@ runs/
 !.env.example
 
 # tooling
+.upstream/
 .DS_Store
 .idea/
 .vscode/

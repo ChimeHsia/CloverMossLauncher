@@ -6,7 +6,7 @@
 
 **面向 MOSS-Image 的桌面管理与创作工作台**
 
-MOSS-Image 的桌面启动器与工作台：管理实例、运行时、模型和任务，并为创作、终端、训练与设备提供独立窗口。
+MOSS-Image 的桌面启动器与工作台：管理实例、运行时、模型和任务；MossStudio 是最终用户创作 UI，规划桌面与局域网/移动 WebUI 两种形态。
 交流QQ群：782833642
 
 **开发版 0.1.0** · 设计文档 v0.4 · 当前重点：功能持续实现，真实模型、CUDA 与发布环境验收进行中
@@ -17,7 +17,7 @@ MOSS-Image 的桌面启动器与工作台：管理实例、运行时、模型和
 
 ## 项目简介
 
-Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可以管理代码版本和 Python 环境、选择设备与工作台、启动任务并查看日志，而不必把日常操作都放在终端里。它本身不是推理引擎，也不重写训练器：推理由上游 Python / Gradio 或项目 runner 执行，训练通过外部 KohakuMossTrainer 接入。
+Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可以管理代码版本和 Python 环境、选择设备与工作台、启动任务并查看日志，而不必把日常操作都放在终端里。它本身不是推理引擎，也不重写训练器：推理由项目 runner / Clover 后端执行，训练通过外部 KohakuMossTrainer 接入。官方 Gradio 正从正式产品入口退役。
 
 项目仍处于开发阶段。功能状态和可重复验证证据以[实现状态](docs/status.md)为准；表格中的“部分 / 待验收”表示代码路径存在，但尚未在真实权重、NVIDIA CUDA、SSH 主机或正式安装包上完整验证。
 
@@ -27,11 +27,11 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | --- | --- | --- |
 | 启动器与环境检查 | 系统、GPU、内存、磁盘、Python、网络检查；MOSS 实例、共享/独立运行时与推荐档位 | 已实现 |
 | 模型与下载 | 组件分类、共享 HF 缓存、推荐组合与本地实例模型绑定；真实出图待验收 | 部分 |
-| 启动与任务 | Case、官方 Gradio 启动参数、设备选择、任务队列、Supervisor 与共享终端 | 已实现 / 部分验收 |
-| 创作台 | Prompt、画布区域标注、官方 Layout JSON 编译；Project 自动保存和基础图层 | 部分，完整 UI 与真实生成待验收 |
+| 启动与任务 | Case、设备选择、任务队列、Supervisor 与共享终端 | 已实现 / 部分验收；Gradio 入口退役中 |
+| MossStudio | Prompt、画布区域标注、官方 Layout JSON 编译；Project 自动保存和基础图层；局域网/移动 WebUI 规划中 | 部分，完整 UI 与真实生成待验收 |
 | 画廊与诊断 | 输出浏览、元数据、布局底图交接；错误识别、去重与处理建议 | 已实现 |
 | 训练与设备 | 外部 Trainer 版本/环境管理、训练窗口、本机与 SSH host 管理 | 代码已接，真实 CUDA/SSH 待验收 |
-| 远端实例与 Gradio | SSH mirror/worktree/venv、placement、设备过滤、SSH 端口转发与输出回传 | fake ssh 端到端，真实 host 待验收 |
+| 远端实例 | SSH mirror/worktree/venv、placement、设备过滤、输出回传 | fake ssh 端到端，真实 host 待验收；Gradio 隧道退役 |
 | 公告与更新 | Release 文档解析、更新提示、下载和 SHA-256 校验 | 代码已接，真实发布包/签名待验收 |
 | 桌面通知 | 任务完成/失败、发现新版本的 Electron 系统通知；设置开关与测试入口 | 已接，macOS 测试通知通过；任务触发/Windows 待验收 |
 | 工具链与首次运行 | 系统 Git/Python 扫描、官方安装引导、OOBE 运行环境、缺工具诊断（ADR-0006） | 设计已确认，未实现 |
@@ -40,7 +40,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 
 - 本机验证环境为 Apple M3 / 16 GB；没有下载约 27 GB 的 SFT 权重，真实生成尚未验收。
 - 当前没有 NVIDIA CUDA 环境；真实训练、Trainer 环境与远端训练尚未验收。SSH 流程目前以 fake ssh 测试为主。
-- 远端 Instance 与官方 Gradio 隧道已在 fake ssh 下端到端验证（部署/切版本/输出回传/取消/删除）；真实 host、远端模型下载未验收。
+- 远端 Instance 已在 fake ssh 下端到端验证（部署/切版本/输出回传/取消/删除）；真实 host、远端模型下载未验收。Gradio 隧道随 ADR-0007 退役。
 - Clover 创作生成链路已接入后端，但缺少权重与运行时验证；Project 的完整 UI 和资产回链仍在完善。
 - DMD 8 步档位当前只是参数透传，实际仍走官方 pipeline；真正的 DMD 采样器未实现。
 - 更新流程是“用户批准后下载、校验并打开安装包”，不是静默自动安装；签名、公证和 Windows 实机验证未完成。
@@ -56,7 +56,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | 窗口 | 职责 |
 | --- | --- |
 | 启动器 | 首页启动条与运行栈、实例、模型、画廊、训练、诊断、设置与首次启动检查 |
-| 创作 | Prompt、画布与 Layout 编译、Project 和画廊 |
+| MossStudio | Prompt、画布与 Layout 编译、Project 和画廊；桌面版为独立窗口 |
 | 终端 | 集中查看推理与训练任务的日志、进度和控制 |
 | Kohaku Trainer | 管理外部 Trainer 版本、环境、训练参数与命令 |
 | 设备管理器 | 管理本机/SSH 主机、设备库存、连接测试与路径 |
@@ -70,7 +70,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | 层 | 技术 | 用途 |
 | --- | --- | --- |
 | 桌面应用 | Electron 44、electron-vite | 主进程、窗口、preload 与桌面能力 |
-| 前端 | React 19、TypeScript、React Router | 五窗口共用的 renderer 与交互界面 |
+| 前端 | React 19、TypeScript、React Router | 桌面窗口共用的 renderer；Studio WebUI 规划中 |
 | UI | Tailwind CSS 4、`@openai/apps-sdk-ui`、Lucide | 样式、控件与图标 |
 | 状态与校验 | Zustand、Zod | 前端状态、IPC 输入校验与共享 schema |
 | 后端服务 | Node.js / TypeScript | Electron 主进程领域服务及本机 HTTP/WS utility process |
@@ -134,7 +134,7 @@ tools/        仓库维护脚本
 | 入口 | 内容 |
 | --- | --- |
 | [文档索引](docs/README.md) | 文档地图、状态标记和维护规则 |
-| [产品设计](docs/product-design.md) | 产品定位、五窗口、交互模型、设计约束与非目标 |
+| [产品设计](docs/product-design.md) | 产品定位、MossStudio、桌面/Web 形态、设计约束与非目标 |
 | [实现状态](docs/status.md) | 当前完成度、验证证据、已知限制；功能状态的事实来源 |
 | [架构说明](docs/architecture.md) | 进程、窗口、IPC、领域服务、数据模型与任务链路 |
 | [路线图](docs/roadmap.md) | 下一阶段优先级与验收条件 |

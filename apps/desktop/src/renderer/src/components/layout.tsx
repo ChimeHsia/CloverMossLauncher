@@ -133,7 +133,7 @@ export function CreatorSidebar(): React.JSX.Element {
         ))}
       </nav>
       <div className="mt-auto px-2.5 pb-1 text-[9.5px] leading-4 text-[var(--color-text-tertiary)]">
-        创作窗口
+        MossStudio
       </div>
     </aside>
   )

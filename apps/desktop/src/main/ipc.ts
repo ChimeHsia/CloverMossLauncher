@@ -34,7 +34,7 @@ import { checkUpdates, dismissAnnouncement } from './services/updates'
 import { cancelUpdateDownload, downloadUpdate } from './services/updateDownload'
 import { pushTestNotification } from './services/desktopNotifications'
 import { isInside } from './lib/paths'
-import { openGradioWindow, openWindow } from './windows'
+import { openWindow } from './windows'
 import { listDevices } from './services/devices'
 import { listCases, removeCase, saveCase } from './services/cases'
 import { getOnboardingStatus } from './services/onboarding'
@@ -118,11 +118,6 @@ export function registerIpc(): void {
 
   handle(Ipc.windowOpen, schemas.windowOpen, ({ kind, route }) => {
     openWindow(kind, route)
-    return true
-  })
-
-  handle(Ipc.gradioOpen, schemas.gradioOpen, ({ url, title }) => {
-    openGradioWindow(url, title)
     return true
   })
 
@@ -270,6 +265,17 @@ export function registerIpc(): void {
   handle(Ipc.gitCommits, schemas.gitCommits, ({ branch, limit, source }) =>
     listCommits(branch, limit, source),
   )
+
+  handle(Ipc.projectsList, null, () => listProjects())
+
+  handle(Ipc.projectGet, schemas.projectId, ({ id }) => getProject(id))
+
+  handle(Ipc.projectSave, schemas.projectSave, (input) => saveProject(input))
+
+  handle(Ipc.projectDelete, schemas.projectId, ({ id }) => {
+    deleteProject(id)
+    return true
+  })
 
   handle(Ipc.instancesList, null, () => listInstances())
 

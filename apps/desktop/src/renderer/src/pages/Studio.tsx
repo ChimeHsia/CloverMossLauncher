@@ -20,8 +20,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GalleryItem, InstanceInfo, JobRecord, ProjectDocument, ProjectSummary } from '@shared/types'
 import type { BackendInfo } from '@shared/backend'
-import { Ipc } from '@shared/channels'
-import { call } from '../lib/api'
+import { electronStudioClient } from '../lib/studioClient'
 import { openWindow } from '../lib/windows'
 import { cloverUrl } from '../lib/clover'
 import {
@@ -89,6 +88,7 @@ function projectSnapshot(input: {
 export function StudioPage(): React.JSX.Element {
   const toast = useToast()
   const storedPrompt = useApp((state) => state.studioPrompt)
+  const studioInstanceId = useApp((state) => state.studioInstanceId)
   const storedDraft = useApp((state) => state.studioDraft)
   const background = useApp((state) => state.studioBackground)
   const setStudioPrompt = useApp((state) => state.setStudioPrompt)
@@ -142,12 +142,16 @@ export function StudioPage(): React.JSX.Element {
   }, [storedPrompt])
 
   useEffect(() => {
+    if (studioInstanceId) setInstanceId(studioInstanceId)
+  }, [studioInstanceId])
+
+  useEffect(() => {
     if (storedDraft) setDraft(storedDraft)
   }, [storedDraft])
 
   useEffect(() => {
-    void call<ProjectSummary[]>(Ipc.projectsList).then(setProjects).catch(() => undefined)
-    void call<BackendInfo>(Ipc.backendInfo).then(setBackend).catch(() => setBackend(null))
+    void electronStudioClient.listProjects().then(setProjects).catch(() => undefined)
+    void electronStudioClient.backendInfo().then(setBackend).catch(() => setBackend(null))
   }, [])
 
   useEffect(() => {
@@ -303,7 +307,7 @@ export function StudioPage(): React.JSX.Element {
     if (projectSaving) return
     setProjectSaving(true)
     try {
-      const saved = await call<ProjectDocument>(Ipc.projectSave, {
+      const saved = await electronStudioClient.saveProject({
         id: projectId ?? undefined,
         name: projectName.trim() || '未命名 Project',
         width: draft.width,
@@ -333,7 +337,7 @@ export function StudioPage(): React.JSX.Element {
         name: saved.name, draft, prompt, negative, seed, steps, cfg, instanceId,
         backgroundPath: background?.path,
       })
-      setProjects(await call<ProjectSummary[]>(Ipc.projectsList))
+      setProjects(await electronStudioClient.listProjects())
       if (!auto) toast.push('Project 已保存', 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
@@ -344,7 +348,7 @@ export function StudioPage(): React.JSX.Element {
 
   async function openProject(id: string): Promise<void> {
     try {
-      const project = await call<ProjectDocument | null>(Ipc.projectGet, { id })
+      const project = await electronStudioClient.getProject(id)
       if (!project) return
       const nextDraft = draftFromProject(project)
       skipAutosave.current = true
@@ -400,7 +404,7 @@ export function StudioPage(): React.JSX.Element {
     }
     let info = backend
     if (!info?.ready) {
-      info = await call<BackendInfo>(Ipc.backendInfo).catch(() => null)
+      info = await electronStudioClient.backendInfo().catch(() => null)
       setBackend(info)
     }
     if (!info?.ready || !info.url || !info.token) {
@@ -441,7 +445,7 @@ export function StudioPage(): React.JSX.Element {
     <div className="space-y-4 pb-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">创作</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight">MossStudio</h1>
           <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
             写提示词、框选布局，再编译成 MOSS 的 layout JSON。独立 HTTP/WS 后端已接：开始生成会提交到共享 Supervisor/终端；Project 自动保存。
           </p>

@@ -135,11 +135,6 @@ export const schemas = {
     route: z.string().regex(/^\/[a-z0-9/_-]*$/i).max(120).optional(),
   }),
 
-  gradioOpen: z.object({
-    url: urlLike,
-    title: z.string().max(200).optional(),
-  }),
-
   copyText: z.object({ text: z.string().max(4096) }),
 
   updatesDownload: z.object({

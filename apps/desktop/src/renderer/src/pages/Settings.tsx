@@ -583,7 +583,7 @@ export function SettingsPage(): React.JSX.Element {
             <button
               type="button"
               onClick={() =>
-                void call(Ipc.openExternal, { url: 'https://github.com/CloverIris/CloverMossLauncher' })
+                void call(Ipc.openExternal, { url: 'https://github.com/CloverIris/MossDesktop' })
               }
               className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-accent-600 hover:underline dark:text-accent-300"
             >

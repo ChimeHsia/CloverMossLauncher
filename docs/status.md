@@ -1,6 +1,6 @@
 # 实现状态
 
-- 快照日期：2026-10-19
+- 快照日期：2026-10-20
 - 应用版本：`0.1.0`（开发版）
 - 设计与文档修订：v0.4
 - 验证机器：Apple M3 / 16 GB / macOS 15.7.7
@@ -31,7 +31,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
-| Electron 应用壳 | ✅ | 五窗口（每 kind 单例）、居中标题栏、深色/亚克力 |
+| Electron 应用壳 | ✅ | 五窗口（每 kind 单例）、居中标题栏、深色/亚克力；MossStudio 改名/WebUI 未实现 |
 | IPC + zod | ✅ | preload 白名单、主进程校验、统一错误 |
 | 环境报告 | ✅ | 系统/GPU/内存/磁盘/Python/git/uv/网络/端口 + 推荐档位 |
 | 公告/更新检查 | ✅ | release.md/公告/缓存与版本比较；下载/安装见下方更新行 |
@@ -42,8 +42,10 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 画廊 | ✅ | 全局入口、自定义根、分页、元数据、`clover://` |
 | 通知 | 🟡 | 应用内单矩形；桌面通知（任务完成/失败、发现更新）与测试入口已接；真实任务触发/Windows 未验收 |
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |
-| 启动条/运行栈 | ✅ | Case/工作台/实例/设备/Gradio 参数或档位/Case 设置；运行态锁定 |
-| Gradio 启动参数 | 🟡 | 侧滑面板、命令预览、打开方式/监听/端口、旧数据迁移；真实 Gradio 启动未验收 |
+| 启动条/运行栈 | 🟡 | Case/实例/设备/档位/Case 设置；旧 Gradio 工作台退役中 |
+| Gradio 启动参数 | ⛔ | UI/侧滑面板/独立窗口/IPC 已删除；旧 Case 读取时迁移到 MossStudio；supervisor/backend 残留清理中 |
+| MossStudio 桌面 | 🟡 | 改名/Home 启动入口/旧 Case 迁移已完成；Project IPC 已补；生成与真实权重待验收 |
+| MossStudio WebUI | ⬜ | 局域网/移动 WebUI、StudioClient、token/PIN、响应式布局均未实现（ADR-0007） |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
 | 设备管理器 | 🟡 | 第五窗口；本机/SSH host、GPU 库存、测试、路径；fake ssh 验证，真实 host 未验收 |
 | 设备维护 | 🟡 | 设置内启用/禁用/重命名，启动条过滤；未做完整验收 |
@@ -51,14 +53,14 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | Case 配置 | 🟡 | `cases.json` 持久化；`backend→workspace`、`port/extraArgs→gradio` 迁移；未单独做保存/重载端到端验收 |
 | 队列落盘 | 🟡 | `launch-queue.json`；queued 保留、starting/running 重启标 failed；未做完整重启验收 |
 | 队列运行 | 🟡 | 同设备默认 1 个；持久化行已接；强制并发未做 |
-| 官方 Gradio | 🟡 | 本机启动/readiness/预检；远端 SSH 隧道/fake 端到端；缺 27 GB 权重，未真机验收 |
-| 远端 Gradio 隧道 | 🟡 | `ssh -N -L`、远端 PID/取消、本地 URL、输出目录观察器/scp 回传；fake ssh 验证，真实 host 未验收 |
+| 官方 Gradio | ⛔ | 正式产品入口退役；仅保留历史代码/迁移参考，不再验收 |
+| 远端 Gradio 隧道 | ⛔ | 随 Gradio 退役；远端生成改走 Clover runner，真实 host 未验收 |
 | xterm 终端 | ✅ | 推理/训练共用，stdout/stderr/stdin、停止/重启 |
 | Supervisor | ✅ | spawn、readiness、取消、进程组、失败分类、日志 |
 | runner | ✅ | NDJSON + `--simulate`；真实权重未验收 |
 | 解析/诊断 | ✅ | tqdm/ANSI/下载条/规则/去重/toast 预算 |
 | 创作台 | ✅ | Studio、画布、layout 编译、插入 Prompt |
-| Clover 后端 | 🟡 | 独立 utilityProcess HTTP/WS、token、RPC；health/WS/job simulate 验证；真实生成未 |
+| Clover 后端 | 🟡 | 独立 utilityProcess HTTP/WS、token、RPC；health/WS/job simulate 验证；真实生成未验收；将作为 Studio Web transport 基础 |
 | 创作生成 | 🟡 | 已通过 backend `/api/jobs` 提交 Supervisor；缺权重/运行时预检仍拦截 |
 | Project/图层 | 🟡 | `projects/<id>/project.json` + assets、自动保存、图层 visible/lock/opacity；未做完整 UI 验收 |
 | 四窗口 UI v0.4 | ✅ | 启动器/创作/终端/训练；全局背景（历史阶段） |
@@ -140,7 +142,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 
 ## 4. 已确认的边界
 
-1. **真实生成未验收**：本机没有 27 GB SFT 权重；官方 Gradio 只有代码路径和
+1. **真实生成未验收**：本机没有 27 GB SFT 权重；MossStudio 只有代码路径和
    缺权重预检。真实 runner 生成也未跑过。
 2. **真实 CUDA 训练未验收**：训练 Job/loss 是用 fake ssh/模拟 Python 输出验证的；
    `startTrainerRun` 的 CUDA/`kogine` 路径没有在 NVIDIA 机器执行。

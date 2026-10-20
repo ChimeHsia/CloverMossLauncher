@@ -32,7 +32,7 @@ export function TerminalPage(): React.JSX.Element {
   const loadJobLogs = useApp((state) => state.loadJobLogs)
   const sendJobInput = useApp((state) => state.sendJobInput)
   const cancelJob = useApp((state) => state.cancelJob)
-  const startLaunch = useApp((state) => state.startLaunch)
+  const startJob = useApp((state) => state.startJob)
   const toast = useToast()
 
   const ordered = useMemo(
@@ -157,18 +157,29 @@ export function TerminalPage(): React.JSX.Element {
   }, [active, logs])
 
   async function restart(job: typeof jobs[number]): Promise<void> {
+    if (!job.params.prompt.trim()) {
+      toast.push('这条旧任务没有提示词，请在 MossStudio 中重新生成', 'info')
+      return
+    }
     try {
-      const row = await startLaunch({
+      const next = await startJob({
         instanceId: job.instanceId,
         caseId: job.caseId,
         caseName: job.caseName,
-        workspace: job.workspace ?? (job.mode === 'gradio' ? 'official' : 'clover'),
-        deviceId: job.deviceId ?? 'mps',
+        workspace: 'clover',
+        deviceId: job.deviceId,
+        prompt: job.params.prompt,
+        negativePrompt: job.params.negativePrompt,
+        width: job.params.width,
+        height: job.params.height,
+        steps: job.params.steps,
+        cfg: job.params.cfg,
+        seed: job.params.seed,
         profile: job.params.profile,
-        gradio: job.gradio,
+        mode: 'runner',
       })
-      if (row.jobId) setActiveJob(row.jobId)
-      toast.push(row.state === 'queued' ? '设备占用，已排队' : '已重新启动', 'success')
+      setActiveJob(next.id)
+      toast.push('已重新启动', 'success')
     } catch (error) {
       toast.push(error instanceof Error ? error.message : String(error), 'error')
     }

@@ -9,7 +9,7 @@ interface ProbeTarget {
 }
 
 const GITHUB = 'https://github.com'
-const RAW_BASE = 'https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main'
+const RAW_BASE = 'https://raw.githubusercontent.com/CloverIris/MossDesktop/main'
 const MANIFEST_PATH = '/release/manifest.json'
 
 const TARGETS: ProbeTarget[] = [
@@ -67,9 +67,9 @@ const TARGETS: ProbeTarget[] = [
   {
     id: 'jsdelivr',
     label: 'jsDelivr',
-    url: `https://cdn.jsdelivr.net/gh/CloverIris/CloverMossLauncher@main${MANIFEST_PATH}`,
+    url: `https://cdn.jsdelivr.net/gh/CloverIris/MossDesktop@main${MANIFEST_PATH}`,
     category: 'manifest',
-    value: 'https://cdn.jsdelivr.net/gh/CloverIris/CloverMossLauncher@main',
+    value: 'https://cdn.jsdelivr.net/gh/CloverIris/MossDesktop@main',
   },
 ]
 

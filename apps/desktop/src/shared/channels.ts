@@ -2,7 +2,6 @@ export const Ipc = {
   appInfo: 'app:info',
   backendInfo: 'backend:info',
   windowOpen: 'window:open',
-  gradioOpen: 'gradio:open',
   copyText: 'app:copy',
   devicesList: 'devices:list',
   hostsList: 'hosts:list',

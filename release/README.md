@@ -92,7 +92,7 @@
 
 1. 先看「诊断」页与实例详情里的运行时日志；
 2. 在诊断页导出诊断信息；
-3. 反馈：[GitHub Issues](https://github.com/CloverIris/CloverMossLauncher/issues)。
+3. 反馈：[GitHub Issues](https://github.com/CloverIris/MossDesktop/issues)。
 
 ---
 

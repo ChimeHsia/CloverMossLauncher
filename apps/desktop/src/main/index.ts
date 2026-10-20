@@ -43,7 +43,7 @@ import { collectTrainerArtifact } from './services/trainerArtifacts'
 import { checkUpdates } from './services/updates'
 import { downloadCustomModel, getCatalog, listDownloads } from './services/models'
 import { registerGalleryProtocol } from './services/gallery'
-import { createAppWindow, getWindow, openGradioWindow, openWindow } from './windows'
+import { createAppWindow, getWindow, openWindow } from './windows'
 
 const isDev = !app.isPackaged
 const smoke = process.argv.includes('--smoke')
@@ -169,27 +169,7 @@ app.whenReady().then(async () => {
     return
   }
 
-  if (scenario === 'gradio-window') {
-    const backend = getBackendInfo()
-    if (!backend.url) {
-      console.error('backend not ready')
-      app.exit(1)
-      return
-    }
-    const win = openGradioWindow(`${backend.url}/health`, 'Gradio window test')
-    await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
-    const loadedUrl = win.webContents.getURL()
-    console.log(
-      JSON.stringify(
-        { scenario: 'gradio-window', url: loadedUrl, title: win.getTitle() },
-        null,
-        2,
-      ),
-    )
-    win.destroy()
-    app.exit(loadedUrl.endsWith('/health') ? 0 : 1)
-    return
-  }
+
 
   if (scenario === 'mirror-health') {
     const base = join(app.getPath('temp'), `clover-mirror-health-${process.pid}`)
@@ -1514,7 +1494,7 @@ exit 0
         version: '9.9.9',
         min_supported: '0.1.0',
         published_at: new Date().toISOString(),
-        notes_url: 'https://github.com/CloverIris/CloverMossLauncher/releases',
+        notes_url: 'https://github.com/CloverIris/MossDesktop/releases',
       },
       installers: [
         {

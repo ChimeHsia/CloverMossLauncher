@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import defaultHomeBackground from './assets/home-background.png'
 import { Events } from '@shared/channels'
 import type { Diagnostic } from '@shared/types'
 import { onEvent } from './lib/api'
-import { openGradioUi } from './lib/openGradio'
 import { useToast } from './components/ui'
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { CreatorSidebar, Sidebar } from './components/layout'
@@ -50,9 +49,7 @@ function LauncherShell(): React.JSX.Element {
   const toggleSidebar = useApp((state) => state.toggleSidebar)
   const setNotificationsOpen = useApp((state) => state.setNotificationsOpen)
   const onboarding = useApp((state) => state.onboarding)
-  const jobs = useApp((state) => state.jobs)
   const [oobeDismissed, setOobeDismissed] = useState(false)
-  const openedGradioJobs = useRef<Set<string>>(new Set())
   const backgroundStyle = useAppBackground()
 
   useEffect(() => {
@@ -68,23 +65,6 @@ function LauncherShell(): React.JSX.Element {
       }),
     [toast],
   )
-
-  // Auto-open belongs to the launcher shell, not the Home page: navigating away
-  // while a Gradio job is loading must not lose the ready/open behavior.
-  useEffect(() => {
-    for (const job of jobs) {
-      if (job.workspace !== 'official' || job.state !== 'running' || !job.url) continue
-      if (openedGradioJobs.current.has(job.id)) continue
-      openedGradioJobs.current.add(job.id)
-      void openGradioUi(job.url, job.gradio?.openMode ?? 'browser', job.caseName)
-        .then((result) => {
-          if (result === 'copied') toast.push('Gradio 地址已复制', 'success')
-        })
-        .catch((error: unknown) =>
-          toast.push(error instanceof Error ? error.message : String(error), 'error'),
-        )
-    }
-  }, [jobs, toast])
 
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
@@ -137,7 +117,7 @@ function CreatorShell(): React.JSX.Element {
   const backgroundStyle = useAppBackground()
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
-      <AppTitlebar kind="creator" />
+      <AppTitlebar kind="creator" appName="MossStudio" appTag="studio" />
       <div className="flex min-h-0 flex-1">
         <CreatorSidebar />
         <main className="content-surface min-w-0 flex-1 overflow-y-auto" style={backgroundStyle}>

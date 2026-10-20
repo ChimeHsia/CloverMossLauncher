@@ -14,7 +14,7 @@
 稳定版默认读取 GitHub Release 的 latest 资产：
 
 ```
-https://github.com/CloverIris/CloverMossLauncher/releases/latest/download/release.md
+https://github.com/CloverIris/MossDesktop/releases/latest/download/release.md
 ```
 
 读取顺序：
@@ -60,7 +60,7 @@ pnpm release:md:check
     "version": "0.2.0",
     "min_supported": "0.1.0",
     "published_at": "2026-10-20T00:00:00Z",
-    "notes_url": "https://github.com/CloverIris/CloverMossLauncher/releases/tag/v0.2.0"
+    "notes_url": "https://github.com/CloverIris/MossDesktop/releases/tag/v0.2.0"
   },
   "home": {
     "chapter": "万象初绘",
@@ -79,7 +79,7 @@ pnpm release:md:check
   ],
   "catalog": {
     "updated_at": "2026-10-20T00:00:00Z",
-    "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
+    "models_url": "https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/models.json",
     "models_sha256": "…64 hex…"
   },
   "announcements": [

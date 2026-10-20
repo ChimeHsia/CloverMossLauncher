@@ -1,12 +1,10 @@
 import {
   ChevronDown,
   Cpu,
-  ExternalLink,
   FolderCog,
   ListChecks,
   Play,
   Settings2,
-  SlidersHorizontal,
   Square,
   SquareTerminal,
 } from 'lucide-react'
@@ -14,28 +12,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Events, Ipc } from '@shared/channels'
 import type {
-  GradioLaunchConfig,
   JobRecord,
   LaunchCase,
   LaunchRow,
-  LaunchStartInput,
   ManagedHost,
-  WorkspaceKind,
 } from '@shared/types'
-import {
-  GRADIO_LISTEN_LABELS,
-  GRADIO_OPEN_LABELS,
-  createDefaultGradioConfig,
-  gradioSummary,
-  normalizeGradioConfig,
-} from '@shared/launch'
 import { call, onEvent } from '../lib/api'
-import { openGradioUi } from '../lib/openGradio'
 import { openWindow } from '../lib/windows'
 import { useApp } from '../store'
-import { GradioSettingsSheet } from '../components/GradioSettingsSheet'
 import { Collapse, Presence } from '../components/motion'
-import { Button, Field, IconButton, Input, Pill, Select, Spinner, cn, useToast } from '../components/ui'
+import { Button, Field, IconButton, Input, Select, cn, useToast } from '../components/ui'
 
 const stateLabel: Record<LaunchRow['state'], string> = {
   queued: '排队中',
@@ -43,14 +29,6 @@ const stateLabel: Record<LaunchRow['state'], string> = {
   running: '运行中',
   stopped: '已停止',
   failed: '失败',
-}
-
-const stateTone: Record<LaunchRow['state'], 'neutral' | 'amber' | 'accent' | 'red'> = {
-  queued: 'neutral',
-  starting: 'amber',
-  running: 'accent',
-  stopped: 'neutral',
-  failed: 'red',
 }
 
 export function HomePage(): React.JSX.Element {
@@ -63,13 +41,11 @@ export function HomePage(): React.JSX.Element {
   const jobs = useApp((state) => state.jobs)
   const env = useApp((state) => state.env)
   const homeCopy = useApp((state) => state.updates?.home)
-  const startLaunch = useApp((state) => state.startLaunch)
   const stopLaunch = useApp((state) => state.stopLaunch)
   const setActiveJob = useApp((state) => state.setActiveJob)
   const refreshCases = useApp((state) => state.refreshCases)
 
   const [caseId, setCaseId] = useState('new')
-  const [workspace, setWorkspace] = useState<WorkspaceKind>('official')
   const [instanceId, setInstanceId] = useState('')
   const [deviceId, setDeviceId] = useState('')
   const [remoteHosts, setRemoteHosts] = useState<ManagedHost[]>([])
@@ -77,10 +53,7 @@ export function HomePage(): React.JSX.Element {
     env?.recommendation.profile === 'base' ? 'base' : 'dmd8',
   )
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [gradioOpen, setGradioOpen] = useState(false)
-  const [gradio, setGradio] = useState<GradioLaunchConfig>(() => createDefaultGradioConfig())
   const [caseName, setCaseName] = useState('')
-  const [launching, setLaunching] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [sort, setSort] = useState<'started' | 'name'>('started')
 
@@ -121,13 +94,10 @@ export function HomePage(): React.JSX.Element {
 
   useEffect(() => {
     if (!selectedCase) return
-    setWorkspace(selectedCase.workspace)
     setInstanceId(selectedCase.instanceId)
     setDeviceId(selectedCase.deviceId)
     setProfile(selectedCase.profile)
     setCaseName(selectedCase.name)
-    setGradio(normalizeGradioConfig(selectedCase.gradio))
-    setGradioOpen(false)
   }, [selectedCase])
 
   const activeRows = useMemo(() => {
@@ -142,12 +112,6 @@ export function HomePage(): React.JSX.Element {
 
   const runningCount = activeRows.filter((row) => row.state === 'running' || row.state === 'starting').length
   const queuedCount = activeRows.filter((row) => row.state === 'queued').length
-  const gradioSummaryText = useMemo(() => gradioSummary(gradio), [gradio])
-  const gradioOpenText = useMemo(
-    () =>
-      `${GRADIO_OPEN_LABELS[gradio.openMode]}${gradio.listen === 'lan' ? ` · ${GRADIO_LISTEN_LABELS.lan}` : ''}`,
-    [gradio],
-  )
 
   async function launch(): Promise<void> {
     if (!instanceId) {
@@ -158,29 +122,9 @@ export function HomePage(): React.JSX.Element {
       toast.push('没有可用设备', 'error')
       return
     }
-    if (workspace === 'clover') {
-      toast.push('Clover 创作工作台暂未开放，请改用官方 Gradio。', 'info')
-      return
-    }
-    setLaunching(true)
-    try {
-      const input: LaunchStartInput = {
-        instanceId,
-        caseId: selectedCase?.id,
-        caseName: caseName || selectedCase?.name,
-        workspace,
-        deviceId,
-        profile,
-        gradio: workspace === 'official' ? normalizeGradioConfig(gradio) : undefined,
-      }
-      const row = await startLaunch(input)
-      setGradioOpen(false)
-      toast.push(row.state === 'queued' ? '设备被占用，已排队' : '已启动', 'success')
-    } catch (error) {
-      toast.push(error instanceof Error ? error.message : String(error), 'error')
-    } finally {
-      setLaunching(false)
-    }
+    useApp.getState().setStudioInstanceId(instanceId)
+    openWindow('creator')
+    toast.push('MossStudio 已打开', 'success')
   }
 
   async function saveCase(): Promise<void> {
@@ -190,12 +134,11 @@ export function HomePage(): React.JSX.Element {
         id: selectedCase?.id,
         name:
           caseName.trim() ||
-          `${instance?.name ?? 'MOSS'} · ${workspace === 'official' ? '官方' : 'Clover'}`,
+          `${instance?.name ?? 'MOSS'} · MossStudio`,
         instanceId,
-        workspace,
+        workspace: 'clover',
         deviceId,
         profile,
-        gradio: workspace === 'official' ? normalizeGradioConfig(gradio) : undefined,
       })
       await refreshCases()
       setCaseId(saved.id)
@@ -210,27 +153,10 @@ export function HomePage(): React.JSX.Element {
     setCaseId(value)
     if (value !== 'new') return
     setCaseName('')
-    setWorkspace('official')
-    setGradio(createDefaultGradioConfig())
     setAdvancedOpen(false)
-    setGradioOpen(false)
     setInstanceId(instances[0]?.id ?? '')
     setDeviceId(devices[0]?.id ?? '')
     setProfile(env?.recommendation.profile === 'base' ? 'base' : 'dmd8')
-  }
-
-  function openGradioInterface(
-    url: string,
-    mode: GradioLaunchConfig['openMode'] = 'browser',
-    title?: string,
-  ): void {
-    void openGradioUi(url, mode, title)
-      .then((result) => {
-        if (result === 'copied') toast.push('Gradio 地址已复制', 'success')
-      })
-      .catch((error: unknown) =>
-        toast.push(error instanceof Error ? error.message : String(error), 'error'),
-      )
   }
 
   function openTerminal(row: LaunchRow): void {
@@ -257,7 +183,7 @@ export function HomePage(): React.JSX.Element {
           {homeCopy?.title ?? '一念落纸上，万象入画来。'}
         </h1>
         <p className="mt-1 max-w-[560px] text-[11.5px] leading-5 text-[var(--color-text-secondary)]">
-          {homeCopy?.subtitle ?? '选好工作台、实例与设备，开始今天的创作。'}
+          {homeCopy?.subtitle ?? '选好实例与设备，打开 MossStudio 开始创作。'}
         </p>
       </header>
 
@@ -328,21 +254,6 @@ export function HomePage(): React.JSX.Element {
                     </div>
                   ) : null}
                   <div className="flex shrink-0 items-center gap-0.5">
-                    {job?.url ? (
-                      <IconButton
-                        label="打开界面"
-                        className="size-6"
-                        onClick={() =>
-                          openGradioInterface(
-                            job.url!,
-                            job.gradio?.openMode ?? 'browser',
-                            job.caseName,
-                          )
-                        }
-                      >
-                        <ExternalLink className="size-3" />
-                      </IconButton>
-                    ) : null}
                     <IconButton
                       label="终端"
                       className="size-6"
@@ -373,7 +284,7 @@ export function HomePage(): React.JSX.Element {
               <Input
                 value={caseName}
                 onChange={(event) => setCaseName(event.target.value)}
-                placeholder="例如：日常 1024 / 官方 Gradio"
+                placeholder="例如：日常 1024 / MossStudio"
                 className="w-[240px]"
               />
             </Field>
@@ -381,7 +292,7 @@ export function HomePage(): React.JSX.Element {
               {selectedCase ? '保存 Case' : '保存为 Case'}
             </Button>
             <p className="w-full text-[9px] leading-4 text-[var(--color-text-tertiary)]">
-              Gradio 的启动参数在启动条上的「Gradio」按钮里配置；这里只管理 Case 本身。
+              MossStudio 是唯一创作入口；Case 只保存实例、设备和档位。
             </p>
           </div>
         </Presence>
@@ -394,16 +305,6 @@ export function HomePage(): React.JSX.Element {
               options={[
                 { value: 'new', label: '新建配置' },
                 ...cases.map((item) => ({ value: item.id, label: item.name })),
-              ]}
-            />
-          </Field>
-          <Field label="工作台" className="w-[112px]">
-            <Select
-              value={workspace}
-              onValueChange={(value) => setWorkspace(value as WorkspaceKind)}
-              options={[
-                { value: 'official', label: '官方 Gradio' },
-                { value: 'clover', label: 'Clover（暂未开放）', disabled: true },
               ]}
             />
           </Field>
@@ -445,40 +346,16 @@ export function HomePage(): React.JSX.Element {
               }
             />
           </Field>
-          {workspace === 'official' ? (
-            <Field id="gradio-launch-settings" label="Gradio">
-              <button
-                id="gradio-launch-settings"
-                type="button"
-                aria-label="Gradio 启动参数"
-                onClick={() => setGradioOpen(true)}
-                title={`${gradioSummaryText} · ${gradioOpenText}`}
-                className={cn(
-                  'app-input',
-                  'flex w-full min-w-[178px] max-w-[224px] items-center gap-1.5',
-                )}
-              >
-                <SlidersHorizontal className="size-3.5 shrink-0 text-[var(--color-text-tertiary)]" />
-                <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
-                  <span className="truncate text-[10.5px] leading-[13px]">{gradioSummaryText}</span>
-                  <span className="truncate text-[8px] leading-[10px] text-[var(--color-text-tertiary)]">
-                    {gradioOpenText}
-                  </span>
-                </span>
-              </button>
-            </Field>
-          ) : (
-            <Field label="档位" className="w-[88px]">
-              <Select
-                value={profile}
-                onValueChange={(value) => setProfile(value as 'base' | 'dmd8')}
-                options={[
-                  { value: 'dmd8', label: '8 步 DMD' },
-                  { value: 'base', label: '50 步质量' },
-                ]}
-              />
-            </Field>
-          )}
+          <Field label="档位" className="w-[88px]">
+            <Select
+              value={profile}
+              onValueChange={(value) => setProfile(value as 'base' | 'dmd8')}
+              options={[
+                { value: 'dmd8', label: '8 步 DMD' },
+                { value: 'base', label: '50 步质量' },
+              ]}
+            />
+          </Field>
 
           <div className="ml-auto flex items-center gap-1">
             <IconButton
@@ -503,26 +380,15 @@ export function HomePage(): React.JSX.Element {
             >
               <FolderCog className="size-3.5" />
             </IconButton>
-            <Button tone="primary" onClick={() => void launch()} disabled={launching || !instanceId || !deviceId}>
+            <Button tone="primary" onClick={() => void launch()} disabled={!instanceId || !deviceId}>
               <span className="inline-flex items-center gap-1.5">
-                {launching ? <Spinner className="size-3" /> : <Play className="size-3" />}
-                {launching ? '启动中' : '启动'}
+                <Play className="size-3" />
+                打开 MossStudio
               </span>
             </Button>
           </div>
         </div>
       </div>
-
-      <GradioSettingsSheet
-        open={gradioOpen}
-        value={gradio}
-        remote={instance?.placement.kind === 'ssh'}
-        onClose={() => setGradioOpen(false)}
-        onApply={(next) => {
-          setGradio(next)
-          toast.push('Gradio 参数已应用到当前启动条', 'success')
-        }}
-      />
 
       {instances.length === 0 ? (
         <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-tertiary)]">

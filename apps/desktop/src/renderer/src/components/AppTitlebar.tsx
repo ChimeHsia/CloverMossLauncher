@@ -78,7 +78,7 @@ export function AppTitlebar({
             <IconButton label="打开设备管理器" className="size-7" onClick={() => openWindow('devices')}>
               <Cpu className="size-3.5" />
             </IconButton>
-            <IconButton label="打开创作窗口" className="size-7" onClick={() => openWindow('creator')}>
+            <IconButton label="打开 MossStudio" className="size-7" onClick={() => openWindow('creator')}>
               <Wand2 className="size-3.5" />
             </IconButton>
             <IconButton label="打开终端" className="size-7" onClick={() => openWindow('terminal')}>

@@ -10,12 +10,29 @@
 
 ---
 
+## 0. 2026-10 方向变更（已确认，实施中）
+
+- **官方 Gradio 退役**：正式产品不再启动/打包官方 Gradio，也不再做远端 Gradio SSH 隧道。
+  旧 Case 的 `workspace: official` 在读取时迁移到 MossStudio，不丢实例/设备/参数。
+- **MossStudio 成为唯一最终用户 UI**：现有创作窗口更名为 MossStudio；Project、画布、
+  Layout、提示词、生成、画廊都在这里完成。
+- **两种呈现**：桌面 Electron 窗口，以及由主机显式开启的局域网 WebUI；手机通过
+  响应式 Web 版访问同一套 Studio 能力。两者共用业务层，不维护两份 UI。
+- **启动器/训练/终端/设备管理器降级为管理面**：保留给装机、诊断、训练和高级用户，
+  不作为最终用户主流程；WebUI 只暴露 Studio 安全子集。
+- **上游基线**：MOSS-Image 推荐 commit 前移到 `95559c93`；训练器稳定基线 `v0.1.0`，
+  `main` 的新特性按可选/实验处理。详见
+  [ADR-0007](decisions/0007-mossstudio-single-ui-and-web.md) 与
+  [上游复查](research/upstream-2026-10-20.md)。
+
+> 下文标题为“官方 Gradio”的章节是退役前历史；实现删除前保留作迁移参考。
+
 ## 1. 一句话
 
-**像 Minecraft 启动器一样管理 MOSS-Image，并给创作、终端和训练各一个独立窗口。**
+**MossStudio 是 MOSS-Image 的唯一最终用户创作界面：桌面上是一个窗口，局域网里是一个适配手机的 WebUI。**
 
-启动器负责“装得上、分得清、跑得起来、出错能修”；它本身不是推理引擎，
-也不是训练内核。推理通过官方 Python runtime / 薄 runner 执行，
+启动器负责“装得上、分得清、跑得起来、出错能修”；MossStudio 负责创作。
+它本身不是推理引擎，也不是训练内核；推理由薄 runner/Clover 后端执行，
 训练通过外部的 KohakuMossTrainer 执行。
 
 ## 2. 定位
@@ -26,6 +43,7 @@
 - MOSS-Image 实例（git commit + 运行时 + 模型/适配器）管理；
 - 共享/独立 Python 运行时与依赖安装；
 - 模型/适配器目录、HF 兼容下载、断点续传；
+- MossStudio 桌面窗口与局域网/移动 WebUI；
 - 启动栈、Case、设备、队列与运行监督；
 - 日志解析、错误诊断、通知；
 - 画廊与背景；
@@ -36,6 +54,7 @@
 ### 2.2 不做什么
 
 - 不做自研推理引擎（V1）；模型图/量化/kernel 不在本仓库；
+- 不再把官方 Gradio 作为产品入口；
 - 不 vendor、不 submodule、不打包 KohakuMossTrainer 代码；
 - 不重新实现训练器；训练窗口只管理外部 trainer 与命令；
 - 不做账号、云同步、模型市场后端、遥测；
@@ -46,9 +65,10 @@
 | 术语 | 定义 | 不是什么 |
 | --- | --- | --- |
 | **Instance 实例** | 绑定到某个 MOSS-Image git commit 的 worktree + 运行时 + 模型选择；placement 可以是本机或 SSH host | 不是一次生成任务 |
-| **Workspace 工作台** | 官方 Gradio 或 Clover 创作窗口；决定用哪套 UI 与合法运行链 | 不是可自由拼接的“引擎 × 界面” |
-| **Case** | 一次可复用的启动配方：实例 + 工作台 + 设备 + 档位 + 工作台参数 | 不是 Project，也不是 Job |
-| **GradioLaunchConfig** | 官方 `gradio_app.py` 的启动级参数：model/profile/host/port/output/prompt defaults/open mode | 不是 steps/CFG/尺寸等页面内生成参数 |
+| **MossStudio** | 唯一最终用户创作 UI；桌面窗口与局域网 WebUI 共用业务层 | 不是官方 Gradio 的皮肤，也不是第二套后端 |
+| **WebUI** | 主机显式开启的局域网 Studio 页面；移动端响应式 | 不是公网服务，不暴露训练/终端/设置写操作 |
+| **Case** | 一次可复用的启动配方：实例 + 设备 + 档位；旧 Case 的 Gradio 参数只用于迁移 | 不是 Project，也不是 Job |
+| **GradioLaunchConfig（退役）** | 旧 Case 的启动参数；读取时迁移，不再新增/启动 | 不是 MossStudio 的生成参数 |
 | **Project** | 创作文档：画布、图层、资产、提示词（JSON+assets 基础实现） | 不是 Case |
 | **Job** | 一次进程运行：推理或训练；有 state/progress/log | 不是 Case |
 | **Runtime** | Python 解释器 + 依赖集合；按 Python 版本 + 依赖锁 + 平台/加速器共享 | 不是模型 |
@@ -62,19 +82,21 @@
 | **Announcement** | `release.md` 中的公告条目（正文内联或链接） | 不是应用内错误通知 |
 | **稳定版** | `main` 分支 HEAD 或 manifest 的 `recommended_commit` | 不是上游 tag（MOSS-Image 没有 tag） |
 
-## 4. 五窗口
+## 4. 桌面窗口与 MossStudio
 
 | 窗口 | 路由 | 尺寸 | 内容 |
 | --- | --- | --- | --- |
 | 启动器 | `/` | 1180×760（最小 960×640） | 首页、实例、模型、训练、画廊、诊断、设置、OOBE |
-| 创作 | `/studio` | 1320×860 | Studio、画布、layout JSON、画廊 |
+| **MossStudio** | `/studio` | 1320×860 | 提示词、画布、layout JSON、生成、画廊；桌面版即此窗口 |
+| MossStudio Web | 局域网 URL | 响应式 | 同一套 Studio 能力；手机/平板浏览器访问 |
 | 终端 | `/terminal` | 1120×720 | Cases 列表 + xterm |
 | Kohaku Trainer | `/trainer` | 1280×840 | 训练配置、命令预览、doctor、训练状态 |
 | 设备管理器 | `/devices` | 1180×780 | 本机/SSH host、GPU 库存、测试连接、训练/推理/终端入口 |
 
 窗口关系：
 
-- 启动器是主窗口；关闭启动器不强制关闭创作/终端/训练/设备管理器窗口；
+- 启动器是管理主窗口；MossStudio 是最终用户窗口；关闭启动器不强制关闭
+  MossStudio/终端/训练/设备管理器；
 - 所有窗口共用同一份 renderer bundle，preload 通过
   `--clover-window=<kind>` 暴露 `windowKind`；
 - `window:open` 支持指定 kind 与 route；重复打开会聚焦已有窗口；
@@ -93,9 +115,11 @@
 ├── 诊断 Diagnostics   错误卡片 · 解决方案 · 清空
 ├── 设置 Settings      外观 · 网络/镜像 · 存储 · 画廊/背景 · 更新
 └── OOBE               覆盖层：实例 / 运行时 / 模型
-创作
-├── Studio             提示词 · 画布 · 区域 · layout 编译
+MossStudio
+├── Studio             提示词 · 画布 · 区域 · layout 编译 · 生成
 └── Gallery            与启动器同一套画廊
+MossStudio Web（局域网）
+└── 同一套 Studio 能力（响应式，移动优先）
 终端
 └── Cases              推理 + 训练；xterm
 Kohaku Trainer
@@ -120,8 +144,10 @@ Kohaku Trainer
 ### 5.2 启动条
 
 ```text
-[Case] [工作台] [实例] [设备] [Gradio 参数 / 档位] [Case 设置] [启动]
+[Case] [实例] [设备] [档位] [Case 设置] [打开 MossStudio / 启动]
 ```
+
+> 官方 Gradio 工作台与启动参数已退役；旧 Case 读取时迁移到 MossStudio。
 
 - **Case**：选择已保存的启动配置；保存时写入 `cases.json`；
 - **工作台**：`官方 Gradio` 当前可启动；`Clover` 暂未开放，UI 保留禁用选项以说明产品方向并兼容旧 Case；两者共享同一实例/设备，但不是可自由拼接的引擎与界面；
@@ -177,22 +203,22 @@ steps、CFG、尺寸、生成数量、显存模式和 SLG 仍由官方 Gradio �
 - 错误先进入诊断列表；只有需要用户决策的错误才 toast；
 - 每条诊断包含：发生了什么、为什么、可执行动作、原始日志入口。
 
-### 5.6 远端 Instance 与官方 Gradio
+### 5.6 远端 Instance（Gradio 隧道退役）
 
 - 新建实例时选择「本机」或设备管理器里的 SSH host；
 - 远端实例固定同一个 commit，远端创建 bare mirror + per-instance worktree + 独立 venv；
 - 远端模型只检查缓存，不自动上传本机 27 GB；缺模型时启动预检给诊断；
 - 启动条设备列表按 `Instance.placement` 过滤：本机实例只列本机设备，远端实例只列同 host 的 GPU；
-- 官方 Gradio 远端启动：远端 `gradio_app.py --host 127.0.0.1 --port <remote>`，本地
-  `ssh -N -L <local>:127.0.0.1:<remote>` 回传；本地 URL 仍按 Gradio 的打开方式打开；
-- 停止/取消同时关闭 SSH 隧道与远端进程；
-- 运行中每 5 秒用远端 `find` + `scp` 把新的 Gradio 输出拉回本地实例 `outputs/`，画廊可见；
-  远端 runner 结果回传与真实 host 大文件同步未验收；
+- 官方 Gradio 远端启动/SSH 隧道退役；远端生成统一走 Clover runner/后端，输出由
+  远端任务回传，不再开 Gradio 端口；
+- 停止/取消关闭远端 runner 进程；
+- 远端输出回传/真实 host 大文件同步未验收；
 - 远端实例删除与版本切换已接（fake ssh；删除会先备份 outputs）；远端模型下载/安装 UI 仍是后续项。
 
-## 6. 创作窗口
+## 6. MossStudio
 
-- 路由 `/studio`；独立窗口；
+- 路由 `/studio`；桌面版是独立 Electron 窗口，WebUI 是同一套 Studio 的局域网/移动端外壳；
+- 桌面与 Web 共用 Project/画廊/任务业务层；WebUI 不暴露训练/终端/设置写操作；
 - Studio：Prompt、负向 Prompt、尺寸、步数、CFG、Seed；
 - 画布：框选/移动/缩放区域，支持人物、物体、文字区域；
 - 编译：按 [layout-schema.md](layout-schema.md) 转成官方
@@ -385,20 +411,20 @@ Modal/Sheet 共用原生 `dialog` 顶层容器，管理背景隔离、键盘焦�
 - 训练导出/采样真实 CUDA 验收；
 - SSH 远端真实 host 验收；
 - 远端模型下载/安装 UI；
-- Clover Creator 浏览器版（不做，ADR-0004）、真实签名安装/electron-updater、打包/公证；
+- MossStudio 局域网 WebUI（规划中，ADR-0007）、真实签名安装/electron-updater、打包/公证；
 - Windows 实机验证。
 
 > 逐项证据与限制以 [status.md](status.md) 为准。
 
 ## 13. 后续设计（未实现）
 
-1. **Clover 真实生成**：真实权重/运行时验收、后端重连/局域网；
+1. **MossStudio 真实生成**：真实权重/运行时验收、后端重连/局域网 WebUI；
 2. **Project 收尾**：资产重链、完整图层 UI/回放、导入导出；
 3. **SSH 真实 host 验收**：host key/权限、远端 mirror/worktree/venv、远端 Job/日志；
 4. **训练收尾**：真实 CUDA 验收、导出/采样真实执行、loss 曲线；
-5. **启动器加固**：队列完整重启验收、设备维护验收、Gradio 真机、27 GB 权重；
+5. **MossStudio/启动器加固**：队列完整重启验收、设备维护验收、27 GB 权重；
 6. **更新收尾**：真实 GitHub Release 资产、签名/公证安装包、electron-updater
-   静默安装/重启；Clover Creator 保持 Electron-only，不做浏览器 WebUI（ADR-0004）；
+   静默安装/重启；
 7. **M6 打包**：macOS 签名/公证、Windows NSIS、设备矩阵；
 8. **V2 推理引擎**：见 [future-inference-engine.md](future-inference-engine.md)，未排期；
 9. **系统 Git/Python 工具链与 OOBE 运行环境**：见 [ADR-0006](decisions/0006-system-toolchain.md)
@@ -417,8 +443,8 @@ Modal/Sheet 共用原生 `dialog` 顶层容器，管理背景隔离、键盘焦�
 
 - 自研推理/训练内核（V1）；
 - 云端账号、模型市场后端、遥测；
-- 移动端原生应用；
+- 移动端原生 App；移动端通过 MossStudio WebUI 响应式访问；
 - 自动上传数据集到远端；
-- Clover Creator 浏览器版（ADR-0004）；
+- 公网托管的 MossStudio/账号云同步；WebUI 只做局域网、由桌面主机显式开启（ADR-0007）；
 - V1 静默后台更新；只做用户批准的下载/打开安装包；
 - 在 macOS 上跑 KohakuMossTrainer（上游不支持 MPS）。

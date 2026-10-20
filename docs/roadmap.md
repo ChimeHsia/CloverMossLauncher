@@ -15,13 +15,14 @@
 
 已具备：
 
-- 五窗口：启动器 / 创作 / 终端 / Kohaku Trainer / 设备管理器；
+- 五窗口：启动器 / MossStudio（原创作）/ 终端 / Kohaku Trainer / 设备管理器；
 - 环境、实例、运行时、模型、下载、画廊、诊断；
 - Supervisor + runner + 终端；推理/训练共用 Job 表；
 - Trainer 仓库/版本/环境/训练窗口/本机训练 Job；
 - SSH host 探测、远端 mirror/worktree/venv/train/export 代码路径（fake ssh）；
 - 队列落盘、实例 pin 切换、适配器绑定、设备启用/禁用；
 - 独立 HTTP/WS Clover 后端（health/WS/RPC/simulate）；
+- 远端 Instance 部署、旧 Gradio 隧道（将退役）；
 - Project JSON+assets、自动保存、基础图层；
 - GitHub Release `release.md`、公告/模型镜像、更新弹窗、sha256 下载/打开安装包。
 
@@ -33,7 +34,33 @@
 - 真实 GitHub Release 资产、签名/公证安装包、electron-updater、打包；
 - 系统 Git/Python 工具链检测、安装引导与 OOBE 运行环境（ADR-0006）。
 
-> Clover Creator 浏览器版不做（ADR-0004），不列为待办；这里只保留 Electron 创作窗口。
+> 官方 Gradio 退役、MossStudio 增加局域网/移动 WebUI（ADR-0007）；
+> 旧 ADR-0004 的“不做浏览器 WebUI”已被取代。
+
+## 0.4 P0 · MossStudio 单一 UI 与局域网 WebUI
+
+**目标**：官方 Gradio 退出正式产品；MossStudio 成为唯一最终用户创作 UI，
+同一套 Studio 能力提供桌面 Electron 窗口与局域网/移动 WebUI。
+
+范围：
+
+1. 旧 Case `workspace: official` 迁移到 MossStudio；删除 Gradio UI/启动参数/独立窗口；
+2. 抽出 `StudioClient`，桌面走 IPC，Web 走 HTTP/WS；
+3. backend 扩展 Project/Gallery/Instance/Model/Job 的 Studio 安全子集；
+4. 局域网服务：显式开关、token/PIN、二维码、连接数、停止/轮换；
+5. Web 构建与响应式/触控移动布局；
+6. 桌面 MossStudio 回归，确保不依赖 Gradio 也能生成。
+
+验收：
+
+- 正式构建中不存在 Gradio 入口/窗口/启动参数；
+- 旧 Case 打开后仍能用，不丢实例/设备/档位；
+- 桌面 MossStudio 完成 Project→生成→画廊闭环；
+- 同一 Wi-Fi 手机通过局域网 URL 打开 MossStudio，完成提示词/生成/看结果；
+- WebUI 不能访问训练/终端/设置写操作/任意文件路径；
+- 断网、token 失效、主机关闭时页面有明确错误。
+
+> 决策：[ADR-0007](decisions/0007-mossstudio-single-ui-and-web.md)。
 
 ## 0.5 P0 · 系统工具链与首次运行
 
@@ -86,10 +113,11 @@
 - 停止/取消可用，JS 进程退出后远端无孤儿进程；
 - 本地/远端训练 Job 在终端可区分 host。
 
-## 1.1 P0 · 远端 Instance 与官方 Gradio 隧道
+## 1.1 P0（Gradio 部分已退役）· 远端 Instance
 
 **当前进度**：设备管理器、Instance placement、远端 mirror/worktree/venv/删除/切版本、
-官方 Gradio SSH 隧道、取消生命周期与输出回传已落地，并用 fake ssh 做端到端验证；
+远端 Instance 部署与旧 Gradio SSH 隧道已验证；Gradio 部分随 ADR-0007 退役，
+远端生成改走 Clover runner；
 远端模型下载、远端 runner、真实 host 未实现/未验收。
 
 范围：
@@ -97,18 +125,16 @@
 1. Instance placement：`local | { kind: 'ssh', hostId, root }`；远端实例只能选同 host 设备；
 2. 远端部署：复用设备管理器的 host，按 commit 建 mirror/worktree，建 venv，
    检查/下载远端模型缓存（不自动上传本机 27 GB）；
-3. 官方 Gradio：远端启动 `gradio_app.py --host 127.0.0.1 --port <remote>`，本地
-   `ssh -N -L <local>:127.0.0.1:<remote>` 回传；启动器同时管理隧道与远端进程；
+3. 远端生成走 Clover runner；不再启动 Gradio/SSH 隧道；
 4. 结果回传：不修改上游；远端输出目录观察器 + scp/rsync 拉回本地画廊；
 5. 诊断：host key、权限、端口占用、CUDA/磁盘/模型缺失都进入现有诊断；
 6. Home 设备选择只显示与实例 placement 兼容的设备。
 
 验收：
 
-- fake ssh 下完成远端 Instance 部署 + Gradio 隧道，本地 URL 可打开（已通过）；
+- fake ssh 下完成远端 Instance 部署（历史 Gradio 隧道验证保留，不再作为目标）；
 - 停止时隧道和远端进程一起结束，无孤儿（fake ssh 已验证 Job=canceled、隧道关闭）；
-- 远端结果出现在本地画廊/终端，远端文件不被静默删除（官方 Gradio 输出目录 `find + scp`
-  已 fake 验证；远端 runner 与真实 host 大文件同步未验收）；
+- 远端结果出现在本地画廊/终端，远端文件不被静默删除（runner 输出同步；真实 host 未验收）；
 - 真实 host 验收前保持 🟡，不写成 ✅。
 
 ## 2. P0 · 真实 CUDA 训练与训练收尾
@@ -181,7 +207,7 @@
 1. 队列落盘完整验收：queued/running 跨重启行为、渲染层自动重排；
 2. 设备维护验收：启用/禁用/重命名/显存预算；
 3. 强制并发/显存配额（显式高级选项）；
-4. 官方 Gradio 真机验收（27 GB 权重）；
+4. MossStudio 真实权重生成验收（27 GB 权重）；
 5. 实例更新/回滚 UI；
 6. 大文件下载中断/镜像切换压测；
 7. Windows 实机验证：按 [Windows 开发与验收手册](windows-validation-guide.md) 记录环境、scenario 和真实硬件证据。
@@ -189,7 +215,7 @@
 验收：
 
 - 重启后队列不静默丢任务；
-- 真实权重启动 Gradio 成功；
+- 真实权重启动 MossStudio runner 成功；
 - 队列/设备行为有测试或可重复脚本。
 
 ## 6. P2 · 更新收尾
@@ -235,7 +261,7 @@ SSH 远端执行 ──> 远端真实 CUDA 验收 ──> 导出/采样执行
 Clover 常驻后端 ──> Project/图层
 release.md/下载校验 ──> 签名安装/electron-updater
 队列落盘/设备维护 ──> 打包/设备矩阵
-Gradio 真机 + 27 GB 验收 ──> Beta
+MossStudio 真机 + 27 GB 验收 ──> Beta
 ```
 
 ## 10. 明确不做

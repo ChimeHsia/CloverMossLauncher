@@ -7,7 +7,7 @@
 ## 0. 已确认（2026-10-19）
 
 1. **发布源**：GitHub Release 的 latest 资产
-   `https://github.com/CloverIris/CloverMossLauncher/releases/latest/download/release.md`；
+   `https://github.com/CloverIris/MossDesktop/releases/latest/download/release.md`；
    开发/离线回退本地 `release/release.md`、raw、缓存；beta 使用 pinned prerelease。
 2. **文档格式**：人可读正文 + 固定的 `json clover-release` fenced block。
 3. **更新执行**：分阶段。本轮做检测 → 弹窗 → 用户批准 → 下载 → sha256 校验 →
@@ -57,11 +57,11 @@
 
 ### 3.1 发布源
 
-- 仓库：`CloverIris/CloverMossLauncher`。
+- 仓库：`CloverIris/MossDesktop`。
 - 稳定版使用 GitHub Release 的 latest 资产：
 
   ```
-  https://github.com/CloverIris/CloverMossLauncher/releases/latest/download/release.md
+  https://github.com/CloverIris/MossDesktop/releases/latest/download/release.md
   ```
 
 - 开发/离线回退：
@@ -95,7 +95,7 @@
     "version": "0.2.0",
     "min_supported": "0.1.0",
     "published_at": "2026-10-20T00:00:00Z",
-    "notes_url": "https://github.com/CloverIris/CloverMossLauncher/releases/tag/v0.2.0"
+    "notes_url": "https://github.com/CloverIris/MossDesktop/releases/tag/v0.2.0"
   },
   "installers": [
     {
@@ -109,7 +109,7 @@
   ],
   "catalog": {
     "updated_at": "2026-10-20T00:00:00Z",
-    "models_url": "https://raw.githubusercontent.com/CloverIris/CloverMossLauncher/main/release/models.json",
+    "models_url": "https://raw.githubusercontent.com/CloverIris/MossDesktop/main/release/models.json",
     "models_sha256": "…"
   },
   "announcements": [
