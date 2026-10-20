@@ -7,7 +7,7 @@ import type { JobRecord } from '@shared/types'
 import { onEmit } from '../lib/events'
 import { cancelJob, getJob, listJobs, startJob } from './supervisor'
 import { getCatalog } from './models'
-import { listGallery } from './gallery'
+import { listGallery, readGalleryFile } from './gallery'
 import { listInstances } from './instances'
 import { deleteProject, getProject, listProjects, saveProject } from './projects'
 import { getSettings } from './settings'
@@ -52,6 +52,8 @@ function handleRpc(message: Record<string, unknown>): void {
         respond(await getCatalog(getSettings()))
       } else if (method === 'listGallery') {
         respond(await listGallery(getSettings(), params as never))
+      } else if (method === 'galleryFile') {
+        respond(await readGalleryFile(String(params['path'] ?? '')))
       } else {
         respond(null, `unknown backend method: ${method}`)
       }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { Catalog, InstanceInfo, JobRecord, ProjectSummary } from '@shared/types'
+import type { Catalog, GalleryItem, GalleryPage, InstanceInfo, JobRecord, ProjectDocument, ProjectSummary } from '@shared/types'
 import { clampBox, createDraft, exampleDraft, type LayoutDraft } from '../lib/layout'
 import { LayoutEditor } from './LayoutEditor'
 import '../styles.css'
@@ -39,6 +39,7 @@ interface Bootstrap {
   projects: ProjectSummary[]
   instances: InstanceInfo[]
   models: Catalog
+  gallery: GalleryPage
 }
 
 const SIZES: Array<[string, number, number]> = [
@@ -63,6 +64,8 @@ function App(): React.JSX.Element {
   const [job, setJob] = useState<JobRecord | null>(null)
   const [busy, setBusy] = useState(false)
   const [projectName, setProjectName] = useState('MossStudio Project')
+  const [projectId, setProjectId] = useState('')
+  const [gallery, setGallery] = useState<GalleryItem[]>([])
 
   const loaded = useMemo(() => Boolean(bootstrap), [bootstrap])
 
@@ -73,6 +76,7 @@ function App(): React.JSX.Element {
       const data = await api<Bootstrap>(nextToken, '/api/studio/bootstrap')
       const assigned = new URL(window.location.href).searchParams.get('instance')
       setBootstrap(data)
+      setGallery(data.gallery?.items ?? [])
       setInstanceId((current) => assigned || current || data.instances[0]?.id || '')
     } catch (cause) {
       setBootstrap(null)
@@ -84,9 +88,57 @@ function App(): React.JSX.Element {
     void load()
   }, [token])
 
+  async function refreshGallery(): Promise<void> {
+    try {
+      const page = await api<GalleryPage>(token, '/api/gallery?limit=12')
+      setGallery(page.items)
+    } catch {
+      // keep previous
+    }
+  }
+
+  async function openProject(id: string): Promise<void> {
+    if (!id) {
+      setProjectId('')
+      return
+    }
+    try {
+      const project = await api<ProjectDocument | null>(token, `/api/projects/${encodeURIComponent(id)}`)
+      if (!project) return
+      setProjectId(project.id)
+      setProjectName(project.name)
+      setPrompt(project.prompt)
+      setNegative(project.negative)
+      setSeed(project.seed)
+      setSteps(project.steps)
+      setCfg(project.cfg)
+      if (project.instanceId) setInstanceId(project.instanceId)
+      setDraft({
+        width: project.width,
+        height: project.height,
+        summary: project.summary,
+        items: project.layers.map((layer) => ({
+          id: layer.id,
+          label: layer.kind,
+          caption: layer.caption,
+          text: layer.text,
+          bbox: layer.bbox,
+          visible: layer.visible,
+          locked: layer.locked,
+          opacity: layer.opacity,
+        })),
+      })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
   useEffect(() => {
     if (!job || !token) return
-    if (job.state === 'succeeded' || job.state === 'failed' || job.state === 'canceled') return
+    if (job.state === 'succeeded' || job.state === 'failed' || job.state === 'canceled') {
+      if (job.state === 'succeeded') void refreshGallery()
+      return
+    }
     const timer = setInterval(() => {
       void api<JobRecord>(token, `/api/jobs/${encodeURIComponent(job.id)}`).then(setJob).catch(() => undefined)
     }, 1800)
@@ -127,9 +179,10 @@ function App(): React.JSX.Element {
 
   async function saveProject(): Promise<void> {
     try {
-      await api(token, '/api/projects', {
+      const saved = await api<ProjectDocument>(token, '/api/projects', {
         method: 'POST',
         body: JSON.stringify({
+          id: projectId || undefined,
           name: projectName,
           width: draft.width,
           height: draft.height,
@@ -152,6 +205,7 @@ function App(): React.JSX.Element {
           instanceId: instanceId || undefined,
         }),
       })
+      setProjectId(saved.id)
       setError('')
       await load()
     } catch (cause) {
@@ -195,6 +249,30 @@ function App(): React.JSX.Element {
       </header>
 
       {error ? <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[11px] leading-5 text-red-300">{error}</div> : null}
+
+      <section className="mt-4 flex items-end gap-2 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3">
+        <label className="min-w-0 flex-1 space-y-1">
+          <span className="text-[10px] text-[var(--color-text-tertiary)]">Project</span>
+          <select
+            value={projectId}
+            onChange={(event) => { setProjectId(event.target.value); void openProject(event.target.value) }}
+            className="app-input w-full"
+          >
+            <option value="">新草稿</option>
+            {bootstrap?.projects.map((project) => (
+              <option key={project.id} value={project.id}>{project.name} · {project.layerCount} 层</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => { setProjectId(''); setProjectName('MossStudio Project'); setPrompt(''); setNegative(''); setDraft(exampleDraft()) }}
+          className="rounded border border-[var(--color-border-subtle)] px-2.5 py-2 text-[10px] text-[var(--color-text-secondary)]"
+        >
+          新建
+        </button>
+        <button type="button" onClick={() => void saveProject()} className="app-button-primary px-3">保存</button>
+      </section>
 
       <section className="mt-4 space-y-3 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3.5">
         <label className="block space-y-1">
@@ -279,6 +357,28 @@ function App(): React.JSX.Element {
           </div>
         </section>
       ) : null}
+
+      <section className="mt-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium">最近结果</span>
+          <button type="button" onClick={() => void refreshGallery()} className="text-[10px] text-accent-300">刷新</button>
+        </div>
+        {gallery.length === 0 ? (
+          <p className="mt-2 text-[10px] text-[var(--color-text-tertiary)]">还没有输出；真实生成后会出现在这里。</p>
+        ) : (
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {gallery.map((item) => {
+              const src = `/api/gallery/file?path=${encodeURIComponent(item.path)}&token=${encodeURIComponent(token)}`
+              return (
+                <a key={item.id} href={src} target="_blank" rel="noreferrer" className="group relative overflow-hidden rounded-md border border-[var(--color-border-subtle)] bg-black/20" style={{ aspectRatio: '1 / 1' }}>
+                  <img src={src} alt={item.name} loading="lazy" className="size-full object-cover transition group-hover:scale-[1.02]" />
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-[8px] text-white/80">{item.name}</span>
+                </a>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="mt-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface)] p-3.5">
         <div className="flex items-center justify-between gap-2">

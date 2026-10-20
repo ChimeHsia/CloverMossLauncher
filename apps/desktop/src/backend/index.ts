@@ -92,6 +92,16 @@ async function serveStatic(pathname: string, res: ServerResponse): Promise<boole
   }
 }
 
+function sendBinary(res: ServerResponse, mime: string, base64: string): void {
+  const data = Buffer.from(base64, 'base64')
+  res.writeHead(200, {
+    'content-type': mime,
+    'content-length': data.byteLength,
+    'cache-control': 'private, max-age=60',
+  })
+  res.end(data)
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') {
@@ -115,12 +125,13 @@ const server = createServer(async (req, res) => {
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/studio/bootstrap') {
-      const [projects, instances, models] = await Promise.all([
+      const [projects, instances, models, gallery] = await Promise.all([
         rpc('listProjects'),
         rpc('listInstances'),
         rpc('listModels'),
+        rpc('listGallery', { limit: 12 }),
       ])
-      send(res, 200, { projects, instances, models })
+      send(res, 200, { projects, instances, models, gallery })
       return
     }
     if (req.method === 'GET' && url.pathname === '/api/projects') {
@@ -170,6 +181,12 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname.endsWith('/cancel') && url.pathname.startsWith('/api/jobs/')) {
       const id = decodeURIComponent(url.pathname.slice('/api/jobs/'.length, -'/cancel'.length))
       send(res, 200, await rpc('cancelJob', { id }))
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/api/gallery/file') {
+      const file = url.searchParams.get('path') ?? ''
+      const data = await rpc<{ base64: string; mime: string }>('galleryFile', { path: file })
+      sendBinary(res, data.mime, data.base64)
       return
     }
     send(res, 404, { error: 'not found' })

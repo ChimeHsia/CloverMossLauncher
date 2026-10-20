@@ -44,6 +44,7 @@ Authorization: Bearer <token>
 | GET | `/api/instances` | 实例列表 |
 | GET | `/api/models` | 模型目录 |
 | GET | `/api/gallery` | 画廊分页（cursor/limit/query/root） |
+| GET | `/api/gallery/file?path=...` | 画廊图片字节；token 校验，限制在画廊根内 |
 
 `POST /api/jobs` 的 body 与 `StartJobInput` 一致：
 

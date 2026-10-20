@@ -212,6 +212,20 @@ export async function galleryDetail(file: string): Promise<GalleryDetail> {
   }
 }
 
+export async function readGalleryFile(file: string): Promise<{ base64: string; mime: string }> {
+  const roots = await galleryRoots()
+  if (!roots.some((root) => isInside(root, file))) throw new Error('文件不在画廊目录中')
+  const info = await stat(file)
+  if (info.size > 32 * 1024 * 1024) throw new Error('图片超过 32 MB')
+  const mime =
+    extname(file).toLowerCase() === '.png'
+      ? 'image/png'
+      : extname(file).toLowerCase() === '.webp'
+        ? 'image/webp'
+        : 'image/jpeg'
+  return { base64: (await readFile(file)).toString('base64'), mime }
+}
+
 export async function revealInFolder(file: string): Promise<void> {
   const roots = await galleryRoots()
   if (!roots.some((root) => isInside(root, file))) throw new Error('文件不在画廊目录中')
