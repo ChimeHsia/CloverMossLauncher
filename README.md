@@ -34,6 +34,7 @@ Clover Moss Launcher 是 MOSS-Image 的桌面编排器，目标是让用户可�
 | 远端实例 | SSH mirror/worktree/venv、placement、设备过滤、输出回传 | fake ssh 端到端，真实 host 待验收；Gradio 隧道退役 |
 | 公告与更新 | Release 文档解析、更新提示、下载和 SHA-256 校验 | 代码已接，真实发布包/签名待验收 |
 | 桌面通知 | 任务完成/失败、发现新版本的 Electron 系统通知；设置开关与测试入口 | 已接，macOS 测试通知通过；任务触发/Windows 待验收 |
+| Agent | 右侧 Agent、AI Provider 管理、对话记录、写入 Prompt 前确认、提示词分段 | 基座，真实模型/Web Agent 待验收 |
 | 工具链与首次运行 | 系统 Git/Python 扫描、官方安装引导、OOBE 运行环境、缺工具诊断（ADR-0006） | 设计已确认，未实现 |
 
 ### 已知边界

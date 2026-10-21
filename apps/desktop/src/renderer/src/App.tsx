@@ -11,6 +11,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/ui'
 import { NotificationPanel } from './components/NotificationPanel'
 import { UpdateDialog } from './components/UpdateDialog'
+import { AgentSidebar } from './components/AgentSidebar'
 import { Oobe } from './components/Oobe'
 import { HomePage } from './pages/Home'
 import { GalleryPage } from './pages/Gallery'
@@ -131,6 +132,7 @@ function CreatorShell(): React.JSX.Element {
             </ErrorBoundary>
           </MotionPanel>
         </main>
+        <AgentSidebar />
       </div>
     </div>
   )

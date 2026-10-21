@@ -45,6 +45,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 启动条/运行栈 | 🟡 | Case/实例/设备/档位/Case 设置；旧 Gradio 工作台退役中 |
 | Gradio 启动参数 | ⛔ | UI/侧滑面板/独立窗口/IPC/类型/启动模式/runner launcher 已删除；旧 Case/队列读取时迁移 |
 | MossStudio 桌面 | 🟡 | 改名/Home 启动入口/旧 Case 迁移已完成；Project IPC 已补；生成与真实权重待验收 |
+| Agent / Provider | 🟡 | 右侧 Agent、OpenAI-compatible/Anthropic/Gemini/Ollama、密钥隔离、对话记录、写入 Prompt 前红绿确认已接；真实模型调用与 Web Agent 未验收 |
+| 提示词分段 | 🟡 | 拆分、着色、固定、排序、删除、合并已接；逐段 diff/标签库/翻译未做 |
 | MossStudio WebUI | 🟡 | 移动优先 Web shell、首页外部 UI 面板、实例绑定、端口/token、二维码、Layout 编辑器、Project layers/打开、画廊缩略图已接；PIN/真实手机/真实生成未验收 |
 | 设备枚举 | ✅ | MPS / CUDA / CPU |
 | 设备管理器 | 🟡 | 第五窗口；本机/SSH host、GPU 库存、测试、路径；fake ssh 验证，真实 host 未验收 |

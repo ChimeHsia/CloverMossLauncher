@@ -34,6 +34,7 @@ import {
 } from '../lib/layout'
 import { useApp } from '../store'
 import { Button, Card, IconButton, Input, Modal, Pill, Segmented, Select, Textarea, cn, useToast } from '../components/ui'
+import { PromptSegmentsModal } from '../components/PromptSegmentsModal'
 
 const SIZE_PRESETS: Array<[string, number, number]> = [
   ['512²', 512, 512],
@@ -120,6 +121,7 @@ export function StudioPage(): React.JSX.Element {
   const [drag, setDrag] = useState<DragState>(null)
   const [compiled, setCompiled] = useState<CompileResult | null>(null)
   const [jsonOpen, setJsonOpen] = useState(false)
+  const [segmentsOpen, setSegmentsOpen] = useState(false)
   const [steps, setSteps] = useState(env?.recommendation.steps ?? 8)
   const [cfg, setCfg] = useState(env?.recommendation.profile === 'dmd8' ? 1 : 3)
   const [seed, setSeed] = useState(42)
@@ -489,7 +491,10 @@ export function StudioPage(): React.JSX.Element {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[13px] font-semibold">提示词</h2>
-              <span className="text-[10px] text-[var(--color-text-tertiary)]">{prompt.length} 字符</span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setSegmentsOpen(true)} className="text-[9.5px] text-accent-300 hover:underline">分段</button>
+                <span className="text-[10px] text-[var(--color-text-tertiary)]">{prompt.length} 字符</span>
+              </div>
             </div>
             <Textarea
               value={prompt}
@@ -957,6 +962,16 @@ export function StudioPage(): React.JSX.Element {
           <div className="mt-2 text-[11px] text-red-500">{compiled.errors.join('；')}</div>
         ) : null}
       </Modal>
+
+      <PromptSegmentsModal
+        open={segmentsOpen}
+        value={prompt}
+        onClose={() => setSegmentsOpen(false)}
+        onApply={(next) => {
+          setPrompt(next)
+          setStudioPrompt(next)
+        }}
+      />
     </div>
   )
 }

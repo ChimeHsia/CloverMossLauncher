@@ -8,6 +8,7 @@ import { runModelManagementTests } from './modelManagement.test'
 import { runModelManagementUi } from './modelManagementUi.test'
 import { ensureDirs, paths } from './lib/paths'
 import { getBackendInfo, getWebAccessInfo, startBackend, stopBackend } from './services/backend'
+import { listProviders, removeProvider, saveProvider } from './services/ai'
 import type { JobRecord } from '@shared/types'
 import { compareSemver, findInstaller, parseReleaseMarkdown } from '@shared/release'
 import { downloadUpdate } from './services/updateDownload'
@@ -866,6 +867,16 @@ exit 0
     }).catch(() => null) : null
     console.log(JSON.stringify({ scenario: 'web-access', ready: access.ready, urls: access.urls.length, remote: Boolean(remote), page }, null, 2))
     app.exit(access.ready && remote && page?.status === 200 && page.html ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'ai-provider') {
+    const saved = saveProvider({ name: 'Scenario', kind: 'openai', baseUrl: 'https://example.com/v1', model: 'test-model', apiKey: 'secret-key' })
+    const listed = listProviders().find((provider) => provider.id === saved.id)
+    removeProvider(saved.id)
+    const after = listProviders().some((provider) => provider.id === saved.id)
+    console.log(JSON.stringify({ scenario: 'ai-provider', saved: { id: saved.id, hasKey: saved.hasKey }, listed: { hasKey: listed?.hasKey, leaked: Boolean((listed as unknown as { apiKey?: string })?.apiKey) }, after }, null, 2))
+    app.exit(saved.hasKey && listed?.hasKey && !after ? 0 : 1)
     return
   }
 

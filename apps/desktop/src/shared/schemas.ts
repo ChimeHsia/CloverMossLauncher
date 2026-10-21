@@ -214,6 +214,26 @@ export const schemas = {
 
   launchRowId: z.object({ id: z.string().min(1).max(120) }),
 
+  aiProviderSave: z.object({
+    id: z.string().max(120).optional(),
+    name: z.string().min(1).max(80),
+    kind: z.enum(['openai', 'anthropic', 'gemini', 'ollama']),
+    baseUrl: z.string().url().max(2048),
+    model: z.string().min(1).max(200),
+    apiKey: z.string().max(4096).optional(),
+    temperature: z.number().min(0).max(2).optional(),
+  }),
+
+  aiChat: z.object({
+    providerId: z.string().min(1).max(120),
+    conversationId: z.string().max(120).optional(),
+    messages: z.array(z.object({
+      role: z.enum(['system', 'user', 'assistant']),
+      content: z.string().min(1).max(32000),
+    })).min(1).max(40),
+    system: z.string().max(16000).optional(),
+  }),
+
   projectId: z.object({ id: z.string().min(1).max(120) }),
 
   projectLayer: z.object({

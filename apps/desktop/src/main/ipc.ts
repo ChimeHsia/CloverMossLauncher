@@ -33,6 +33,7 @@ import { getSettings, updateSettings } from './services/settings'
 import { checkUpdates, dismissAnnouncement } from './services/updates'
 import { cancelUpdateDownload, downloadUpdate } from './services/updateDownload'
 import { getWebAccessInfo, startBackend, stopBackend } from './services/backend'
+import { chat, listConversations, listProviders, removeConversation, removeProvider, saveProvider } from './services/ai'
 import { pushTestNotification } from './services/desktopNotifications'
 import { isInside } from './lib/paths'
 import { openWindow } from './windows'
@@ -116,6 +117,24 @@ export function registerIpc(): void {
   }))
 
   handle(Ipc.backendInfo, null, () => getBackendInfo())
+
+  handle(Ipc.aiProvidersList, null, () => listProviders())
+
+  handle(Ipc.aiProviderSave, schemas.aiProviderSave, (input) => saveProvider(input))
+
+  handle(Ipc.aiProviderRemove, schemas.projectId, ({ id }) => {
+    removeProvider(id)
+    return true
+  })
+
+  handle(Ipc.aiConversations, null, () => listConversations())
+
+  handle(Ipc.aiConversationRemove, schemas.projectId, ({ id }) => {
+    removeConversation(id)
+    return true
+  })
+
+  handle(Ipc.aiChat, schemas.aiChat, (input) => chat(input))
 
   handle(Ipc.webAccessInfo, null, () => getWebAccessInfo())
 
