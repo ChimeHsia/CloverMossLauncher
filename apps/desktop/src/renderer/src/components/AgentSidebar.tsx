@@ -25,6 +25,13 @@ interface Draft {
 
 const EMPTY: Draft = { name: '', kind: 'openai', baseUrl: '', model: '', apiKey: '' }
 
+function splitPrompt(value: string): string[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+  if (trimmed.includes('{') || trimmed.includes('[')) return [trimmed]
+  return trimmed.split(/\n+|\s*[,，]\s*/).map((item) => item.trim()).filter(Boolean)
+}
+
 export function AgentSidebar(): React.JSX.Element {
   const toast = useToast()
   const studioPrompt = useApp((state) => state.studioPrompt)
@@ -39,6 +46,7 @@ export function AgentSidebar(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+  const [accepted, setAccepted] = useState<Set<number>>(new Set())
   const endRef = useRef<HTMLDivElement>(null)
 
   async function refresh(): Promise<void> {
@@ -62,6 +70,11 @@ export function AgentSidebar(): React.JSX.Element {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, busy])
+
+  useEffect(() => {
+    if (!pendingPrompt) return
+    setAccepted(new Set(splitPrompt(pendingPrompt).map((_, index) => index)))
+  }, [pendingPrompt])
 
   async function send(): Promise<void> {
     if (!providerId) {
@@ -291,9 +304,16 @@ export function AgentSidebar(): React.JSX.Element {
               tone="primary"
               onClick={() => {
                 if (!pendingPrompt) return
-                setStudioPrompt(pendingPrompt)
+                const picked = splitPrompt(pendingPrompt)
+                  .filter((_, index) => accepted.has(index))
+                  .join(', ')
+                if (!picked) {
+                  toast.push('至少勾选一段再采纳', 'info')
+                  return
+                }
+                setStudioPrompt(picked)
                 setPendingPrompt(null)
-                toast.push('已采纳并写入当前 Prompt', 'success')
+                toast.push('已写入勾选的分段', 'success')
               }}
             >
               采纳
@@ -301,15 +321,42 @@ export function AgentSidebar(): React.JSX.Element {
           </>
         }
       >
-        <div className="grid gap-3 p-4 md:grid-cols-2">
-          <div>
-            <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">当前 Prompt</div>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3 text-[10.5px] leading-5 text-red-200">{studioPrompt || '（空）'}</pre>
+        <div className="space-y-3 p-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">当前 Prompt（红）</div>
+              <div className="space-y-1">
+                {splitPrompt(studioPrompt).map((segment, index) => (
+                  <div key={`old-${index}`} className="rounded border border-red-500/20 bg-red-500/[0.06] px-2 py-1.5 text-[10px] leading-4 text-red-200">{segment}</div>
+                ))}
+                {!studioPrompt.trim() ? <div className="text-[10px] text-[var(--color-text-tertiary)]">（空）</div> : null}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">Agent 建议（绿，逐段采纳）</div>
+              <div className="space-y-1">
+                {splitPrompt(pendingPrompt ?? '').map((segment, index) => (
+                  <label key={`new-${index}`} className="flex cursor-pointer items-start gap-2 rounded border border-emerald-500/20 bg-emerald-500/[0.06] px-2 py-1.5 text-[10px] leading-4 text-emerald-200">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={accepted.has(index)}
+                      onChange={(event) => {
+                        const next = new Set(accepted)
+                        if (event.target.checked) next.add(index)
+                        else next.delete(index)
+                        setAccepted(next)
+                      }}
+                    />
+                    <span>{segment}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="mb-1 text-[10px] text-[var(--color-text-tertiary)]">Agent 建议</div>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-[10.5px] leading-5 text-emerald-200">{pendingPrompt ?? ''}</pre>
-          </div>
+          <p className="text-[9px] leading-4 text-[var(--color-text-tertiary)]">
+            只会写入勾选的绿色段；未勾选的建议不会覆盖当前 Prompt。
+          </p>
         </div>
       </Modal>
     </aside>
