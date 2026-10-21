@@ -53,6 +53,11 @@ app.whenReady().then(async () => {
   try {
     await win.loadFile(join(output, 'index.html'))
     win.webContents.setZoomFactor(scale)
+    if (process.env.CLOVER_UI_STUDIO_ONLY === '1') {
+      await require('./ui-studio-checks.cjs')({ evaluate, waitFor })
+      app.exit(0)
+      return
+    }
     await waitFor('Boolean(document.querySelector("#open-modal"))')
     await checkMaterials({ evaluate, webContents: win.webContents })
     assert.equal(await evaluate('getComputedStyle(document.querySelector("#typography")).fontSize'), '10.5px')
@@ -144,6 +149,7 @@ app.whenReady().then(async () => {
     await waitFor('document.querySelector("[aria-controls=launch-stack]").getAttribute("aria-expanded") === "false"')
     await capture('home')
     await checkMotion({ evaluate, waitFor, webContents: win.webContents, capture })
+    await require('./ui-studio-checks.cjs')({ evaluate, waitFor })
     console.log(`UI checks passed at ${scale * 100}%: typography, shared controls, modal focus/top layer, nested Escape, backdrop gesture, settings draft/save, task sorting/disclosure, motion preferences, surface radii`)
     app.exit(0)
   } catch (error) {

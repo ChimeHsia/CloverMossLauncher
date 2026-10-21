@@ -94,8 +94,7 @@ export function HomePage(): React.JSX.Element {
       toast.push('没有可用设备', 'error')
       return
     }
-    useApp.getState().setStudioInstanceId(instanceId)
-    openWindow('creator')
+    openWindow('creator', `/studio?instanceId=${encodeURIComponent(instanceId)}`)
     toast.push('MossStudio 已打开', 'success')
   }
 

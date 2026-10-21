@@ -123,7 +123,7 @@ export const schemas = {
 
   windowOpen: z.object({
     kind: z.enum(['launcher', 'creator', 'terminal', 'trainer', 'devices']),
-    route: z.string().regex(/^\/[a-z0-9/_-]*$/i).max(120).optional(),
+    route: z.string().regex(/^\/[a-z0-9/_-]*(?:\?instanceId=[a-z0-9._%~-]+)?$/i).max(120).optional(),
   }),
 
   copyText: z.object({ text: z.string().max(4096) }),

@@ -18,6 +18,7 @@ import {
   Unlock,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { GalleryItem, InstanceInfo, JobRecord, ProjectDocument, ProjectSummary } from '@shared/types'
 import type { BackendInfo } from '@shared/backend'
 import { electronStudioClient } from '../lib/studioClient'
@@ -87,6 +88,8 @@ function projectSnapshot(input: {
 
 export function StudioPage(): React.JSX.Element {
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedInstanceId = searchParams.get('instanceId')
   const storedPrompt = useApp((state) => state.studioPrompt)
   const studioInstanceId = useApp((state) => state.studioInstanceId)
   const storedDraft = useApp((state) => state.studioDraft)
@@ -123,7 +126,8 @@ export function StudioPage(): React.JSX.Element {
   const [steps, setSteps] = useState(env?.recommendation.steps ?? 8)
   const [cfg, setCfg] = useState(env?.recommendation.profile === 'dmd8' ? 1 : 3)
   const [seed, setSeed] = useState(42)
-  const [instanceId, setInstanceId] = useState(instances[0]?.id ?? '')
+  const [selectedInstanceId, setInstanceId] = useState(studioInstanceId ?? '')
+  const instanceId = instances.find((item) => item.id === selectedInstanceId)?.id ?? instances[0]?.id ?? ''
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [projectId, setProjectId] = useState<string | null>(null)
   const [projectName, setProjectName] = useState('未命名 Project')
@@ -144,6 +148,17 @@ export function StudioPage(): React.JSX.Element {
   useEffect(() => {
     if (studioInstanceId) setInstanceId(studioInstanceId)
   }, [studioInstanceId])
+
+  useEffect(() => {
+    if (!requestedInstanceId || !instances.some((item) => item.id === requestedInstanceId)) return
+    setInstanceId(requestedInstanceId)
+    // Consume the request so reopening this window with the same instance applies it again.
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params)
+      next.delete('instanceId')
+      return next
+    }, { replace: true })
+  }, [requestedInstanceId, instances, setSearchParams])
 
   useEffect(() => {
     if (storedDraft) setDraft(storedDraft)
