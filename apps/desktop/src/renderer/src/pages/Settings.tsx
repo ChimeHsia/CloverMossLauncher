@@ -356,6 +356,30 @@ export function SettingsPage(): React.JSX.Element {
                 className="w-full font-mono"
               />
             </label>
+            <label className="block space-y-1">
+              <span className="text-[10.5px] text-[var(--color-text-tertiary)]">PyTorch 安装</span>
+              <Select
+                value={draft.torchBackend}
+                onChange={(event) => patch({ torchBackend: event.target.value as Settings['torchBackend'] })}
+                options={[
+                  { value: 'auto', label: '自动（有 NVIDIA 用 CUDA）' },
+                  { value: 'cpu', label: 'CPU' },
+                  { value: 'cuda', label: 'CUDA' },
+                ]}
+              />
+              <span className="block text-[9px] leading-4 text-[var(--color-text-tertiary)]">
+                Windows/Linux 自动选择 CUDA 轮子；macOS 使用 PyPI MPS 轮子。CUDA 默认 cu128。
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-[10.5px] text-[var(--color-text-tertiary)]">PyTorch 自定义索引（可选）</span>
+              <Input
+                value={draft.torchIndex ?? ''}
+                placeholder="https://download.pytorch.org/whl/cu128"
+                onChange={(event) => patch({ torchIndex: event.target.value || null })}
+                className="w-full font-mono text-[10px]"
+              />
+            </label>
             <div className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2">
               <div className="mb-1 text-[10.5px] text-[var(--color-text-tertiary)]">已发现</div>
               {env?.pythons.length ? (

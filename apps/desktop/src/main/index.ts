@@ -17,7 +17,7 @@ import { checkBareMirror } from './services/gitHealth'
 import WebSocket from 'ws'
 import { ensureMirror, listBranches, listCommits } from './services/git'
 import { createInstance, deleteInstance, listInstances, updateInstance } from './services/instances'
-import { installDeps, readRuntime, writeRemoteRuntime } from './services/runtimes'
+import { installDeps, readRuntime, resolveTorchIndex, writeRemoteRuntime } from './services/runtimes'
 import { cancelJob, getJob, getJobLogs, onJobCompleted, startJob, startTrainingJob } from './services/supervisor'
 import { createTrainerVersion, listTrainerVersions, startTrainerRun } from './services/trainers'
 import { listLaunchRows, removeLaunchRow, upsertLaunchRow } from './services/launchQueue'
@@ -877,6 +877,22 @@ exit 0
     const after = listProviders().some((provider) => provider.id === saved.id)
     console.log(JSON.stringify({ scenario: 'ai-provider', saved: { id: saved.id, hasKey: saved.hasKey }, listed: { hasKey: listed?.hasKey, leaked: Boolean((listed as unknown as { apiKey?: string })?.apiKey) }, after }, null, 2))
     app.exit(saved.hasKey && listed?.hasKey && !after ? 0 : 1)
+    return
+  }
+
+  if (scenario === 'torch-index') {
+    const settings = getSettings()
+    const auto = await resolveTorchIndex(settings)
+    const cpu = await resolveTorchIndex({ ...settings, torchBackend: 'cpu', torchIndex: null })
+    let cuda: string | null = null
+    let cudaError = ''
+    try {
+      cuda = await resolveTorchIndex({ ...settings, torchBackend: 'cuda', torchIndex: null })
+    } catch (error) {
+      cudaError = error instanceof Error ? error.message : String(error)
+    }
+    console.log(JSON.stringify({ scenario: 'torch-index', platform: process.platform, auto, cpu, cuda: cuda ? 'https://download.pytorch.org/whl/cu128' : null, cudaError: cudaError.slice(0, 80) }, null, 2))
+    app.exit(process.platform === 'darwin' ? (auto === null && cpu?.includes('/cpu') && Boolean(cudaError) ? 0 : 1) : (Boolean(auto) && Boolean(cpu) && Boolean(cuda) ? 0 : 1))
     return
   }
 

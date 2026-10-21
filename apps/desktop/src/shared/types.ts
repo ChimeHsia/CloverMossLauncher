@@ -120,6 +120,8 @@ export interface Settings {
   hfEndpoint: string | null
   modelsRoot: string | null
   pythonPath: string | null
+  torchBackend: 'auto' | 'cpu' | 'cuda'
+  torchIndex: string | null
   autoCheckUpdates: boolean
   desktopNotifications: boolean
   lanWebEnabled: boolean
@@ -226,6 +228,7 @@ export interface InstanceInfo {
 }
 
 export interface RuntimeInfo {
+  torchIndex?: string | null
   id: string
   instanceId: string
   instanceIds: string[]
@@ -308,7 +311,7 @@ export interface Catalog {
   source: 'local' | 'remote' | 'cache' | 'builtin'
 }
 
-export type DownloadState = 'queued' | 'running' | 'verifying' | 'paused' | 'done' | 'error'
+export type DownloadState = 'queued' | 'running' | 'verifying' | 'paused' | 'done' | 'error' | 'canceled'
 
 export interface DownloadTask {
   id: string

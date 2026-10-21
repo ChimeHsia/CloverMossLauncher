@@ -37,8 +37,8 @@ env -u ELECTRON_RUN_AS_NODE pnpm --filter @clover/desktop exec electron . --smok
 | 公告/更新检查 | ✅ | release.md/公告/缓存与版本比较；下载/安装见下方更新行 |
 | 实例 | 🟡 | 本机 mirror/worktree/固定 SHA/删除/隔离；远端 placement/mirror/worktree/venv/删除/切版本（fake ssh）；真实 host 未验收 |
 | 远端实例部署 | 🟡 | SSH mirror/worktree/venv、删除/切版本、远端模型缓存检查；fake ssh 验证，真实 host 未验收 |
-| 运行时 | ✅ | 共享/独立/远端 venv、lock hash、uv/pip、安装日志 |
-| 模型/适配器 | 🟡 | 目录/下载/HF 缓存；支持 `files` 子集下载组件（FP16-fixed Base/SFT）；适配器绑定/启用/强度 UI 已接；模型包绑定未做 |
+| 运行时 | 🟡 | 共享/独立/远端 venv、lock hash、uv/pip、安装日志；PyTorch auto/CPU/CUDA 选择已接，Windows CUDA 实机未验收 |
+| 模型/适配器 | 🟡 | 目录/下载/HF 缓存、Range 续传、暂停/继续/取消；支持 `files` 子集；适配器绑定已接；Windows 断点/重启恢复未验收 |
 | 画廊 | ✅ | 全局入口、自定义根、分页、元数据、`clover://` |
 | 通知 | 🟡 | 应用内单矩形；桌面通知（任务完成/失败、发现更新）与测试入口已接；真实任务触发/Windows 未验收 |
 | OOBE | ✅ | 单页三行、每次启动检查、可本次跳过 |

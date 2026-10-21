@@ -30,6 +30,8 @@ export const schemas = {
       hfEndpoint: z.string().max(2048).nullable(),
       modelsRoot: z.string().max(4096).nullable(),
       pythonPath: z.string().max(4096).nullable(),
+      torchBackend: z.enum(['auto', 'cpu', 'cuda']),
+      torchIndex: z.string().max(2048).nullable(),
       autoCheckUpdates: z.boolean(),
       desktopNotifications: z.boolean(),
       lanWebEnabled: z.boolean(),
