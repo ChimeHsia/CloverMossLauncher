@@ -43,6 +43,8 @@ export const schemas = {
       galleryRoots: z.array(z.string().max(4096)).max(20),
       homeBackground: z.string().max(4096).nullable(),
       trainerRoot: z.string().max(4096).nullable(),
+      disabledDevices: z.array(z.string().max(120)).max(50),
+      deviceLabels: z.record(z.string(), z.string().max(80)),
     })
     .partial(),
 

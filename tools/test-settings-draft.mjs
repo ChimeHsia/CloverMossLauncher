@@ -33,3 +33,46 @@ test('reverting a field while its save is in flight remains an unsaved edit', ()
   const remaining = clearSavedSettings({ pythonPath: null }, { pythonPath: 'python' })
   assert.deepEqual(pendingSettings({ pythonPath: 'python' }, remaining), { pythonPath: null })
 })
+
+// Exercise the same schemas used by settings:update, including its local release import.
+function loadSharedModule(name) {
+  const source = readFileSync(new URL('../apps/desktop/src/shared/' + name + '.ts', import.meta.url), 'utf8')
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } })
+  const exports = {}
+  new Function('require', 'exports', outputText)(
+    (id) => id.startsWith('./') ? loadSharedModule(id.slice(2)) : require(id),
+    exports,
+  )
+  return exports
+}
+
+const { settingsUpdate } = loadSharedModule('schemas').schemas
+
+test('settings IPC preserves device filtering and labels while stripping unknown fields', () => {
+  for (const patch of [
+    { disabledDevices: ['cuda:0', 'cpu'] },
+    { deviceLabels: { 'cuda:0': '主显卡', cpu: '' } },
+    { disabledDevices: ['cpu'], deviceLabels: { cpu: '处理器' } },
+  ]) {
+    assert.deepEqual(settingsUpdate.parse({ ...patch, unknownSetting: true }), patch)
+  }
+})
+
+test('settings IPC supports clearing device preferences and omitting unchanged fields', () => {
+  for (const patch of [{}, { disabledDevices: [] }, { deviceLabels: {} }]) {
+    assert.deepEqual(settingsUpdate.parse(patch), patch)
+  }
+})
+
+test('settings IPC rejects invalid or oversized device preferences', () => {
+  for (const patch of [
+    { disabledDevices: 'cpu' },
+    { disabledDevices: [1] },
+    { disabledDevices: ['x'.repeat(121)] },
+    { disabledDevices: Array(51).fill('cpu') },
+    { deviceLabels: { cpu: 1 } },
+    { deviceLabels: { cpu: 'x'.repeat(81) } },
+  ]) {
+    assert.equal(settingsUpdate.safeParse(patch).success, false)
+  }
+})
