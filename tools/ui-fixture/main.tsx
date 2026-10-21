@@ -1,12 +1,14 @@
 import './styles.css'
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { Ipc } from '../../apps/desktop/src/shared/channels'
-import type { Settings } from '../../apps/desktop/src/shared/types'
+import { schemas } from '../../apps/desktop/src/shared/schemas'
+import type { InstanceInfo, Settings } from '../../apps/desktop/src/shared/types'
 import { Field, Input, Modal, Select, Sheet, Spinner, Switch, Textarea, ToastProvider, useToast } from '../../apps/desktop/src/renderer/src/components/ui'
 import { SettingsPage } from '../../apps/desktop/src/renderer/src/pages/Settings'
 import { HomePage } from '../../apps/desktop/src/renderer/src/pages/Home'
+import { StudioPage } from '../../apps/desktop/src/renderer/src/pages/Studio'
 import { useApp } from '../../apps/desktop/src/renderer/src/store'
 import { Collapse, MotionPanel, Presence, useUiAnimationEnabled } from '../../apps/desktop/src/renderer/src/components/motion'
 import { NotificationPanel } from '../../apps/desktop/src/renderer/src/components/NotificationPanel'
@@ -23,6 +25,8 @@ window.clover = {
   on: () => () => undefined,
   async invoke<T>(channel: string, payload?: unknown): Promise<T> {
     if (channel === Ipc.settingsUpdate) savedSettings = { ...savedSettings, ...payload as Partial<Settings> }
+    if (channel === Ipc.backendInfo) return { ok: true, data: { ready: true, url: 'http://studio-fixture', token: 'fixture' } } as T
+    if (channel === Ipc.windowOpen) document.getElementById('window-request')!.textContent = JSON.stringify(schemas.windowOpen.parse(payload))
     const data = channel === Ipc.settingsUpdate ? savedSettings : channel === Ipc.appInfo || channel === Ipc.envScan ? null : []
     return { ok: true, data } as T
   },
@@ -34,7 +38,17 @@ function ToastProbe(): React.JSX.Element {
   return <button id="push-toast" onClick={() => toast.push('Fixture toast')}>Toast</button>
 }
 
+const fixtureInstances = ['instance-a', 'instance-b'].map((id) => ({
+  id, name: id, runtimeState: 'ready', placement: { kind: 'local' },
+})) as InstanceInfo[]
+
+window.fetch = async (_url, init) => {
+  document.getElementById('studio-job')!.textContent = String(init?.body)
+  return new Response(JSON.stringify({ id: 'fixture-job' }), { status: 200 })
+}
+
 function Fixture(): React.JSX.Element {
+  const navigate = useNavigate()
   const [modal, setModal] = useState(false)
   const [sheet, setSheet] = useState(false)
   const [value, setValue] = useState('a')
@@ -51,12 +65,23 @@ function Fixture(): React.JSX.Element {
         <button id="view-controls" onClick={() => setView('controls')}>Controls</button>
         <button id="view-settings" onClick={() => setView('settings')}>Settings</button>
         <button id="view-home" onClick={() => setView('home')}>Home</button>
+        <button id="view-studio" onClick={() => {
+          useApp.setState({ studioPrompt: 'Fixture prompt', instances: [] })
+          setView('studio')
+        }}>Studio</button>
+        <button id="load-instances" onClick={() => useApp.setState({ instances: [...fixtureInstances] })}>Load instances</button>
+        <button id="remove-instance-b" onClick={() => useApp.setState({ instances: fixtureInstances.slice(0, 1) })}>Remove B</button>
+        <button id="clear-instances" onClick={() => useApp.setState({ instances: [] })}>Clear instances</button>
+        <button id="request-instance-b" onClick={() => navigate('/studio?instanceId=instance-b')}>Open B</button>
+        <button id="load-devices" onClick={() => useApp.setState({ devices: [{ id: 'cpu', name: 'CPU', kind: 'cpu', detail: 'Fixture CPU', available: true }] })}>Load devices</button>
         <button id="toggle-sidebar" onClick={() => void useApp.getState().toggleSidebar()}>Sidebar</button>
       </nav>
+      <output id="studio-job" hidden />
+      <output id="window-request" hidden />
       <output id="saved-settings" hidden>{JSON.stringify(settings)}</output>
       <output id="motion-enabled" hidden>{animate ? 'on' : 'off'}</output>
       <MotionPanel transitionKey={view} data-testid="page-motion">
-        {view === 'settings' ? <SettingsPage /> : view === 'home' ? <HomePage /> : (
+        {view === 'settings' ? <SettingsPage /> : view === 'home' ? <HomePage /> : view === 'studio' ? <ToastProvider><StudioPage /></ToastProvider> : (
           <div style={{ transform: 'translateX(20px)', backdropFilter: 'blur(2px)', width: 400, overflow: 'hidden' }}>
             <input id="typography" className="text-[10.5px] font-mono leading-5" />
             <button id="button-typography" className="text-[11px] font-medium">Typography</button>

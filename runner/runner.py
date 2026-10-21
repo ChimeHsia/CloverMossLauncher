@@ -85,6 +85,7 @@ def write_png(path: Path, width: int = 64, height: int = 64):
 
 
 def simulate(job):
+    threading.Thread(target=read_commands, daemon=True).start()
     width = int(job.get("width", 64))
     height = int(job.get("height", 64))
     steps = max(1, int(job.get("steps", 8)))
@@ -141,6 +142,8 @@ def simulate(job):
 
 
 def real(job):
+    emit({"type": "hello", "protocol": 1, "runner_version": "0.1.0"})
+    log("初始化 PyTorch 与推理依赖")
     import torch
 
     if CANCEL.is_set():
@@ -154,7 +157,6 @@ def real(job):
     device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device in ("mps", "cuda") else torch.float32
 
-    emit({"type": "hello", "protocol": 1, "runner_version": "0.1.0"})
     emit({"type": "stage", "name": "load"})
     log(f"加载 pipeline：{model}（device={device}, dtype={dtype}）")
 
@@ -163,6 +165,9 @@ def real(job):
     from model_runtime import install_loader
     install_loader()
     from inference_runtime import generate_with_progress, load_pipeline
+
+    # On Windows, importing native libraries with a blocked stdin reader can hang.
+    threading.Thread(target=read_commands, daemon=True).start()
 
     pipe = load_pipeline(model, local_files_only=False)
     pipe.to(device)
@@ -249,7 +254,6 @@ def main():
     parser.add_argument("--simulate", action="store_true")
     args = parser.parse_args()
 
-    threading.Thread(target=read_commands, daemon=True).start()
     job = json.loads(Path(args.job).read_text(encoding="utf-8"))
     try:
         if args.simulate or job.get("mode") == "simulate":
