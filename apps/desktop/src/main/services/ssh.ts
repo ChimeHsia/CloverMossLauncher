@@ -69,7 +69,8 @@ export function scpArgs(host: TrainingHost, remotePath: string, localPath: strin
   ]
   if (host.port) args.push('-P', String(host.port))
   if (host.identityFile) args.push('-i', expandHome(host.identityFile))
-  args.push(`${targetOf(host)}:${remotePath}`, localPath)
+  // Legacy SCP runs the remote path through a shell; SFTP also accepts escaped spaces.
+  args.push(`${targetOf(host)}:${remotePath.replace(/ /g, '\\ ')}`, localPath)
   return args
 }
 
