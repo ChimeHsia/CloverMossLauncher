@@ -122,7 +122,7 @@ function CreatorShell(): React.JSX.Element {
       <div className="flex min-h-0 flex-1">
         <CreatorSidebar />
         <main className="content-surface min-w-0 flex-1 overflow-y-auto" style={backgroundStyle}>
-          <MotionPanel transitionKey={location.pathname} className="mx-auto w-full max-w-[1180px] px-6 py-5">
+          <MotionPanel transitionKey={location.pathname} className="mx-auto w-full max-w-[1500px] px-5 py-4">
             <ErrorBoundary>
               <Routes>
                 <Route path="/studio" element={<StudioPage />} />
