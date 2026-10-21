@@ -273,7 +273,7 @@ export async function getCatalog(settings: Settings, force = false): Promise<Cat
     } else {
       const base =
         getLastNetwork()?.selected.manifest ??
-        'https://raw.githubusercontent.com/CloverIris/MossDesktop/main'
+        'https://raw.githubusercontent.com/CloverIris/MossStudio/main'
       raw = JSON.parse(
         await fetchText(`${base.replace(/\/$/, '')}/release/models.json`),
       ) as RawCatalog

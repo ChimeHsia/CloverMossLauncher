@@ -284,7 +284,7 @@ export function SettingsPage(): React.JSX.Element {
               <span className="text-[10.5px] text-[var(--color-text-tertiary)]">自定义模型根目录（留空使用默认）</span>
               <Input
                 value={draft.modelsRoot ?? ''}
-                placeholder="例如 /Volumes/Data/CloverMoss/models"
+                placeholder="例如 /Volumes/Data/MossStudio/models"
                 onChange={(event) => patch({ modelsRoot: event.target.value || null })}
                 className="w-full font-mono"
               />
@@ -653,7 +653,7 @@ export function SettingsPage(): React.JSX.Element {
             <button
               type="button"
               onClick={() =>
-                void call(Ipc.openExternal, { url: 'https://github.com/CloverIris/MossDesktop' })
+                void call(Ipc.openExternal, { url: 'https://github.com/CloverIris/MossStudio' })
               }
               className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-accent-600 hover:underline dark:text-accent-300"
             >

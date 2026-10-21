@@ -234,7 +234,7 @@ export const useApp = create<AppStore>((set, get) => {
         get().pushNotification({
           tone: 'success',
           title: '更新已下载',
-          message: `CloverMoss ${state.version} 安装程序已打开`,
+          message: `MossStudio ${state.version} 安装程序已打开`,
         })
       } else if (state.phase === 'error') {
         get().pushNotification({
@@ -352,7 +352,7 @@ export const useApp = create<AppStore>((set, get) => {
           get().pushNotification({
             tone: 'info',
             title: '发现新版本',
-            message: `CloverMoss ${updates.value.latestVersion} 可用`,
+            message: `MossStudio ${updates.value.latestVersion} 可用`,
           })
           if (
             updates.value.latestVersion &&

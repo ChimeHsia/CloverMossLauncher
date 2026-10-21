@@ -168,7 +168,7 @@ function DevicesShell(): React.JSX.Element {
   const backgroundStyle = useAppBackground()
   return (
     <div className="app-shell flex h-full flex-col text-[var(--color-text)]">
-      <AppTitlebar kind="devices" appName="CloverMoss Devices" />
+      <AppTitlebar kind="devices" appName="MossStudio Devices" />
       <div className="min-h-0 flex-1 overflow-y-auto" style={backgroundStyle}>
         <MotionPanel transitionKey="devices" className="mx-auto w-full max-w-[1100px] px-6 py-5">
           <ErrorBoundary>

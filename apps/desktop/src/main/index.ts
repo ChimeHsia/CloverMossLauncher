@@ -55,8 +55,8 @@ if (isDev) {
   app.setPath('userData', join(app.getAppPath(), '..', '..', '.dev-data'))
 }
 if (scenario?.startsWith('model-management')) app.setPath('userData', join(tmpdir(), `clover-model-management-${process.pid}`))
-app.setName('CloverMoss')
-if (process.platform === 'win32') app.setAppUserModelId('com.clovermoss.launcher')
+app.setName('MossStudio')
+if (process.platform === 'win32') app.setAppUserModelId('com.mossstudio.app')
 nativeTheme.themeSource = 'dark'
 
 protocol.registerSchemesAsPrivileged([
@@ -257,7 +257,7 @@ app.whenReady().then(async () => {
     const machine = {
       schema_version: 2,
       app: {
-        name: 'CloverMoss Launcher',
+        name: 'MossStudio',
         channel: 'stable',
         version: '0.2.0',
         min_supported: '0.1.0',
@@ -274,7 +274,7 @@ app.whenReady().then(async () => {
           platform: 'darwin',
           arch: 'arm64',
           kind: 'dmg',
-          url: 'https://example.com/CloverMoss-0.2.0.dmg',
+          url: 'https://example.com/MossStudio-0.2.0.dmg',
           sha256: 'a'.repeat(64),
           size_bytes: 1234,
         },
@@ -293,14 +293,14 @@ app.whenReady().then(async () => {
         },
       ],
     }
-    const markdown = `# CloverMoss Launcher 0.2.0\n\nRelease notes.\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``
+    const markdown = `# MossStudio 0.2.0\n\nRelease notes.\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``
     try {
       const parsed = parseReleaseMarkdown(markdown)
       const legacyMachine = Object.fromEntries(
         Object.entries(machine).filter(([key]) => key !== 'home'),
       )
       const legacy = parseReleaseMarkdown(
-        `# CloverMoss Launcher 0.2.0\n\n\`\`\`json clover-release\n${JSON.stringify(legacyMachine, null, 2)}\n\`\`\``,
+        `# MossStudio 0.2.0\n\n\`\`\`json clover-release\n${JSON.stringify(legacyMachine, null, 2)}\n\`\`\``,
       )
       const installer = findInstaller(parsed.document.installers, 'darwin', 'arm64')
       const result = {
@@ -612,7 +612,7 @@ app.whenReady().then(async () => {
       if (!instance) throw new Error('没有实例，先运行 --scenario=create')
       const job = await startJob({
         instanceId: instance.id,
-        prompt: 'A quiet blue morning, simulated job for CloverMoss M4',
+        prompt: 'A quiet blue morning, simulated job for MossStudio M4',
         negativePrompt: '',
         width: 512,
         height: 512,
@@ -1202,7 +1202,7 @@ exit 0
       host: '192.0.2.10',
       user: 'trainer',
       port: 22,
-      trainerRoot: '~/CloverMossTrainer',
+      trainerRoot: '~/MossStudioTrainer',
     })
     const before = listTrainingHosts(getSettings())
     removeTrainingHost(host.id)
@@ -1281,19 +1281,19 @@ exit 0
     const machine = {
       schema_version: 2,
       app: {
-        name: 'CloverMoss Launcher',
+        name: 'MossStudio',
         channel: 'stable',
         version: '9.9.9',
         min_supported: '0.1.0',
         published_at: new Date().toISOString(),
-        notes_url: 'https://github.com/CloverIris/MossDesktop/releases',
+        notes_url: 'https://github.com/CloverIris/MossStudio/releases',
       },
       installers: [
         {
           platform: 'darwin',
           arch: 'arm64',
           kind: 'dmg',
-          url: 'https://example.com/CloverMoss-9.9.9-arm64.dmg',
+          url: 'https://example.com/MossStudio-9.9.9-arm64.dmg',
           sha256: 'c'.repeat(64),
           size_bytes: 123456789,
         },
@@ -1302,7 +1302,7 @@ exit 0
     }
     writeFileSync(
       file,
-      `# CloverMoss Launcher 9.9.9\n\n这是更新弹窗的预览数据，不会下载真实安装包。\n\n## 本次更新\n\n- 聚合 GitHub Release 发布源\n- 公告、模型表与版本文档\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``,
+      `# MossStudio 9.9.9\n\n这是更新弹窗的预览数据，不会下载真实安装包。\n\n## 本次更新\n\n- 聚合 GitHub Release 发布源\n- 公告、模型表与版本文档\n\n\`\`\`json clover-release\n${JSON.stringify(machine, null, 2)}\n\`\`\``,
       'utf8',
     )
     process.env['CLOVER_RELEASE_FILE'] = file

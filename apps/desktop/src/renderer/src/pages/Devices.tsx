@@ -38,9 +38,9 @@ const EMPTY_FORM: HostForm = {
   user: '',
   port: '22',
   identityFile: '',
-  trainerRoot: '~/CloverMossTrainer',
-  instanceRoot: '~/CloverMoss/instances',
-  modelsRoot: '~/CloverMoss/models',
+  trainerRoot: '~/MossStudioTrainer',
+  instanceRoot: '~/MossStudio/instances',
+  modelsRoot: '~/MossStudio/models',
 }
 
 function statusTone(host: ManagedHost): 'accent' | 'red' | 'amber' | 'neutral' {
@@ -141,8 +141,8 @@ export function DevicesPage(): React.JSX.Element {
       port: String(host.port ?? 22),
       identityFile: host.identityFile ?? '',
       trainerRoot: host.trainerRoot,
-      instanceRoot: host.instanceRoot ?? '~/CloverMoss/instances',
-      modelsRoot: host.modelsRoot ?? '~/CloverMoss/models',
+      instanceRoot: host.instanceRoot ?? '~/MossStudio/instances',
+      modelsRoot: host.modelsRoot ?? '~/MossStudio/models',
     })
     setHostOpen(true)
   }

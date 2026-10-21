@@ -103,7 +103,7 @@ function handle<T>(channel: string, schema: ZodType | null, fn: (input: any) => 
 
 export function registerIpc(): void {
   handle(Ipc.appInfo, null, () => ({
-    name: 'CloverMoss Launcher',
+    name: 'MossStudio',
     version: app.getVersion(),
     electron: process.versions.electron ?? '',
     chrome: process.versions.chrome ?? '',
