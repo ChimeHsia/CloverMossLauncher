@@ -83,6 +83,8 @@ function projectSnapshot(input: {
   cfg: number
   instanceId: string
   backgroundPath?: string
+  seriesId: string
+  page: number
 }): string {
   return JSON.stringify(input)
 }
@@ -133,13 +135,15 @@ export function StudioPage(): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [projectId, setProjectId] = useState<string | null>(null)
   const [projectName, setProjectName] = useState('未命名 Project')
+  const [seriesId, setSeriesId] = useState('')
+  const [page, setPage] = useState(1)
   const [projectSaving, setProjectSaving] = useState(false)
   const [backend, setBackend] = useState<BackendInfo | null>(null)
   const lastSaved = useRef('')
   const skipAutosave = useRef(false)
   const snapshot = useMemo(
-    () => projectSnapshot({ name: projectName, draft, prompt, negative, seed, steps, cfg, instanceId, backgroundPath: background?.path }),
-    [projectName, draft, prompt, negative, seed, steps, cfg, instanceId, background?.path],
+    () => projectSnapshot({ name: projectName, draft, prompt, negative, seed, steps, cfg, instanceId, backgroundPath: background?.path, seriesId, page }),
+    [projectName, draft, prompt, negative, seed, steps, cfg, instanceId, background?.path, seriesId, page],
   )
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -180,6 +184,11 @@ export function StudioPage(): React.JSX.Element {
   }, [projectId, snapshot])
 
   const selected = draft.items.find((item) => item.id === selectedId) ?? null
+  const seriesProjects = seriesId
+    ? projects.filter((item) => item.seriesId === seriesId).sort((a, b) => (a.page ?? 1) - (b.page ?? 1))
+    : []
+  const nextSeriesPage = seriesProjects.find((item) => (item.page ?? 1) === page + 1)
+  const previousSeriesPage = seriesProjects.find((item) => (item.page ?? 1) === page - 1)
 
   function toDraftPoint(event: React.PointerEvent): [number, number] {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -347,12 +356,14 @@ export function StudioPage(): React.JSX.Element {
         cfg,
         instanceId: instanceId || undefined,
         backgroundPath: background?.path,
+        seriesId: seriesId || undefined,
+        page,
       })
       setProjectId(saved.id)
       setProjectName(saved.name)
       lastSaved.current = projectSnapshot({
         name: saved.name, draft, prompt, negative, seed, steps, cfg, instanceId,
-        backgroundPath: background?.path,
+        backgroundPath: background?.path, seriesId, page,
       })
       setProjects(await electronStudioClient.listProjects())
       if (!auto) toast.push('Project 已保存', 'success')
@@ -371,6 +382,8 @@ export function StudioPage(): React.JSX.Element {
       skipAutosave.current = true
       setProjectId(project.id)
       setProjectName(project.name)
+      setSeriesId(project.seriesId ?? '')
+      setPage(project.page ?? 1)
       setPrompt(project.prompt)
       setStudioPrompt(project.prompt)
       setNegative(project.negative)
@@ -389,7 +402,7 @@ export function StudioPage(): React.JSX.Element {
       lastSaved.current = projectSnapshot({
         name: project.name, draft: nextDraft, prompt: project.prompt, negative: project.negative,
         seed: project.seed, steps: project.steps, cfg: project.cfg, instanceId: project.instanceId ?? '',
-        backgroundPath: project.backgroundPath,
+        backgroundPath: project.backgroundPath, seriesId: project.seriesId ?? '', page: project.page ?? 1,
       })
       setTimeout(() => { skipAutosave.current = false }, 600)
       toast.push('Project 已打开', 'success')
@@ -401,6 +414,8 @@ export function StudioPage(): React.JSX.Element {
   function newProject(): void {
     setProjectId(null)
     setProjectName('未命名 Project')
+    setSeriesId('')
+    setPage(1)
     setPrompt('')
     setStudioPrompt('')
     const draft = createDraft(1024, 1024)
@@ -408,6 +423,40 @@ export function StudioPage(): React.JSX.Element {
     setStudioDraft(draft)
     setSelectedId(null)
     lastSaved.current = ''
+  }
+
+  async function newPage(): Promise<void> {
+    const nextSeries = seriesId || `series-${crypto.randomUUID().slice(0, 8)}`
+    setProjectSaving(true)
+    try {
+      const saved = await electronStudioClient.saveProject({
+        name: `${projectName.replace(/ · 第\d+页$/, '')} · 第${page + 1}页`,
+        width: draft.width,
+        height: draft.height,
+        summary: draft.summary,
+        layers: draft.items.map((item) => ({
+          id: item.id,
+          kind: item.label,
+          caption: item.caption,
+          text: item.text,
+          bbox: item.bbox,
+          visible: item.visible !== false,
+          locked: item.locked === true,
+          opacity: item.opacity ?? 1,
+        })),
+        prompt, negative, seed, steps, cfg, instanceId: instanceId || undefined,
+        backgroundPath: background?.path,
+        seriesId: nextSeries,
+        page: page + 1,
+      })
+      setProjects(await electronStudioClient.listProjects())
+      await openProject(saved.id)
+      toast.push(`已创建系列第 ${saved.page ?? page + 1} 页`, 'success')
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setProjectSaving(false)
+    }
   }
 
   async function generate(): Promise<void> {
@@ -486,7 +535,7 @@ export function StudioPage(): React.JSX.Element {
           className="min-w-[180px]"
         >
           <option value="">未打开</option>
-          {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {projects.map((item) => <option key={item.id} value={item.id}>{item.name}{item.page ? ` · 第${item.page}页` : ''}</option>)}
         </Select>
         <Input
           value={projectName}
@@ -494,6 +543,26 @@ export function StudioPage(): React.JSX.Element {
           placeholder="Project 名称"
           className="min-w-[160px] flex-1"
         />
+        <Input
+          value={seriesId}
+          onChange={(event) => setSeriesId(event.target.value)}
+          placeholder="系列 ID（可选）"
+          className="w-[130px]"
+        />
+        <span className="text-[9.5px] text-[var(--color-text-tertiary)]">第 {page} 页</span>
+        <Button
+          tone="ghost"
+          onClick={() => { if (previousSeriesPage) void openProject(previousSeriesPage.id) }}
+          disabled={!previousSeriesPage}
+        >
+          上一页
+        </Button>
+        <Button
+          tone="ghost"
+          onClick={() => { if (nextSeriesPage) void openProject(nextSeriesPage.id); else void newPage() }}
+        >
+          {nextSeriesPage ? '下一页' : '+ 新页'}
+        </Button>
         <Button tone="ghost" onClick={newProject}>新建</Button>
         <Button tone="secondary" onClick={() => void saveProjectNow()} disabled={projectSaving}>
           <span className="inline-flex items-center gap-1.5">{projectSaving ? null : <Save className="size-3" />}保存</span>

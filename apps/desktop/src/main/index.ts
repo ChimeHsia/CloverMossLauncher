@@ -929,6 +929,30 @@ exit 0
     return
   }
 
+  if (scenario === 'project-series') {
+    const base = {
+      width: 1024,
+      height: 1024,
+      summary: { caption: 'series', meta: ['test'], canvas: 'single' as const },
+      layers: [],
+      prompt: 'page prompt',
+      negative: '',
+      seed: 42,
+      steps: 8,
+      cfg: 1,
+      seriesId: `series-test-${Date.now()}`,
+    }
+    const first = saveProject({ ...base, name: 'Page 1', page: 1 })
+    const second = saveProject({ ...base, name: 'Page 2', page: 2 })
+    const summaries = listProjects().filter((item) => item.seriesId === base.seriesId).sort((a, b) => (a.page ?? 1) - (b.page ?? 1))
+    const loaded = getProject(second.id)
+    deleteProject(first.id)
+    deleteProject(second.id)
+    console.log(JSON.stringify({ scenario: 'project-series', pages: summaries.map((item) => item.page), secondPage: loaded?.page, series: loaded?.seriesId === base.seriesId }, null, 2))
+    app.exit(summaries.length === 2 && summaries[0]?.page === 1 && summaries[1]?.page === 2 && loaded?.page === 2 ? 0 : 1)
+    return
+  }
+
   if (scenario === 'queue-persist') {
     const row = {
       id: `queue-test-${Date.now()}`,

@@ -671,6 +671,8 @@ export interface ProjectDocument {
   cfg: number
   instanceId?: string
   backgroundPath?: string
+  seriesId?: string
+  page?: number
   createdAt: string
   updatedAt: string
 }
@@ -681,5 +683,7 @@ export interface ProjectSummary {
   width: number
   height: number
   layerCount: number
+  seriesId?: string
+  page?: number
   updatedAt: string
 }

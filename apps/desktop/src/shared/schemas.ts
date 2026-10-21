@@ -274,6 +274,8 @@ export const schemas = {
     cfg: z.number().min(0).max(20),
     instanceId: z.string().max(160).optional(),
     backgroundPath: z.string().max(4096).optional(),
+    seriesId: z.string().max(120).optional(),
+    page: z.number().int().min(1).max(9999).optional(),
   }),
 
   caseSave: z.object({
